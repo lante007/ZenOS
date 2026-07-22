@@ -1,0 +1,18 @@
+# Environment and credentials — NEVER commit these
+.env
+service-account.json
+*.pem
+*.key
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Output files
+output/
+*.csv
+batch-summary-*.json
+
+# OS
+.DS_Store
+Thumbs.db
