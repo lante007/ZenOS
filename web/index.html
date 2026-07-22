@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvidenceOS — Zenex Foundation</title>
+<style>
+  :root {
+    --orange: #EF7218;
+    --orange-lt: #FEF0E6;
+    --orange-dk: #C85E0E;
+    --purple: #5B2281;
+    --purple-dk: #311F47;
+    --purple-lt: #F3EEF8;
+    --dark: #1A1A2E;
+    --mid: #4A5568;
+    --lgrey: #F8F7F9;
+    --mgrey: #E2E0E6;
+    --white: #FFFFFF;
+    --green: #2D7D46;
+    --green-lt: #EAF5EE;
+    --red: #C53030;
+    --amber: #D97706;
+    --tier1: #2D7D46;
+    --tier2: #5B2281;
+    --tier3: #D97706;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--lgrey); color: var(--mid); font-size: 14px; }
+  
+  /* NAV */
+  .nav { background: var(--purple-dk); display: flex; align-items: center; padding: 0 24px; height: 56px; gap: 0; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  .nav-logo { height: 32px; margin-right: 24px; }
+  .nav-divider { width: 1px; height: 32px; background: rgba(255,255,255,0.2); margin-right: 24px; }
+  .nav-brand { color: var(--white); font-size: 16px; font-weight: 700; letter-spacing: 0.02em; margin-right: auto; }
+  .nav-brand span { color: var(--orange); }
+  .nav-tabs { display: flex; height: 100%; }
+  .nav-tab { color: rgba(255,255,255,0.6); padding: 0 16px; height: 100%; display: flex; align-items: center; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 3px solid transparent; transition: all 0.15s; white-space: nowrap; }
+  .nav-tab:hover { color: var(--white); background: rgba(255,255,255,0.05); }
+  .nav-tab.active { color: var(--white); border-bottom-color: var(--orange); }
+  .nav-badge { background: var(--orange); color: white; border-radius: 10px; padding: 1px 7px; font-size: 10px; margin-left: 6px; font-weight: 700; }
+  .nav-actions { display: flex; align-items: center; gap: 8px; margin-left: 16px; }
+  .btn-nav { background: var(--orange); color: white; border: none; padding: 7px 16px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.15s; }
+  .btn-nav:hover { background: var(--orange-dk); }
+
+  /* LAYOUT */
+  .page { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  /* DASHBOARD */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .kpi { background: var(--white); border-radius: 8px; padding: 20px; border-left: 4px solid var(--orange); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .kpi-value { font-size: 32px; font-weight: 800; color: var(--purple-dk); line-height: 1; }
+  .kpi-label { font-size: 11px; color: var(--mid); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+  .kpi-sub { font-size: 12px; color: var(--orange); margin-top: 4px; font-weight: 600; }
+  .kpi.purple { border-left-color: var(--purple); }
+  .kpi.green { border-left-color: var(--green); }
+  .kpi.amber { border-left-color: var(--amber); }
+
+  .dash-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
+  .card { background: var(--white); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+  .card-header { padding: 14px 20px; border-bottom: 1px solid var(--mgrey); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 13px; font-weight: 700; color: var(--purple-dk); text-transform: uppercase; letter-spacing: 0.05em; }
+  .card-body { padding: 16px 20px; }
+
+  /* TIER BARS */
+  .tier-list { display: flex; flex-direction: column; gap: 12px; }
+  .tier-row { display: flex; align-items: center; gap: 10px; }
+  .tier-label { font-size: 12px; font-weight: 700; width: 60px; flex-shrink: 0; }
+  .tier-bar-wrap { flex: 1; background: var(--mgrey); border-radius: 4px; height: 20px; overflow: hidden; }
+  .tier-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 11px; color: white; font-weight: 700; transition: width 0.6s ease; }
+  .tier-bar.t1 { background: var(--tier1); }
+  .tier-bar.t2 { background: var(--tier2); }
+  .tier-bar.t3 { background: var(--tier3); }
+  .tier-count { font-size: 12px; font-weight: 700; color: var(--mid); width: 24px; text-align: right; }
+
+  /* DECISION CAPITAL */
+  .dc-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--mgrey); }
+  .dc-item:last-child { border-bottom: none; }
+  .dc-tier-badge { padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; color: white; flex-shrink: 0; margin-top: 2px; }
+  .dc-tier-badge.t1 { background: var(--orange); }
+  .dc-tier-badge.t2 { background: var(--purple); }
+  .dc-tier-badge.t3 { background: var(--dark); }
+  .dc-text { font-size: 12px; line-height: 1.5; }
+  .dc-reach { font-size: 11px; color: var(--orange); font-weight: 600; margin-top: 2px; }
+
+  /* UPLOAD */
+  .upload-zone { border: 2px dashed var(--mgrey); border-radius: 10px; padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 20px; }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--orange); background: var(--orange-lt); }
+  .upload-icon { font-size: 40px; margin-bottom: 12px; }
+  .upload-title { font-size: 16px; font-weight: 700; color: var(--purple-dk); margin-bottom: 6px; }
+  .upload-sub { font-size: 13px; color: var(--mid); }
+  #fileInput { display: none; }
+  
+  .upload-options { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .opt-card { background: var(--white); border-radius: 8px; padding: 16px; border: 2px solid var(--mgrey); cursor: pointer; transition: all 0.15s; }
+  .opt-card:hover { border-color: var(--orange); }
+  .opt-card.selected { border-color: var(--orange); background: var(--orange-lt); }
+  .opt-card-title { font-size: 13px; font-weight: 700; color: var(--purple-dk); margin-bottom: 4px; }
+  .opt-card-desc { font-size: 12px; color: var(--mid); }
+
+  /* PROCESSING */
+  .process-card { background: var(--white); border-radius: 8px; padding: 20px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .process-name { font-size: 13px; font-weight: 700; color: var(--purple-dk); margin-bottom: 8px; }
+  .progress-bar { background: var(--mgrey); border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 6px; }
+  .progress-fill { height: 100%; background: var(--orange); border-radius: 4px; transition: width 0.5s ease; }
+  .process-step { font-size: 11px; color: var(--mid); }
+  .process-status { font-size: 11px; font-weight: 600; }
+  .process-status.complete { color: var(--green); }
+  .process-status.processing { color: var(--orange); }
+  .process-status.queued { color: var(--mid); }
+
+  /* RECORDS TABLE */
+  .table-toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
+  .search-input { flex: 1; padding: 9px 14px; border: 1px solid var(--mgrey); border-radius: 6px; font-size: 13px; outline: none; }
+  .search-input:focus { border-color: var(--orange); }
+  .filter-select { padding: 9px 12px; border: 1px solid var(--mgrey); border-radius: 6px; font-size: 13px; outline: none; cursor: pointer; }
+  .btn { padding: 9px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: var(--orange); color: white; }
+  .btn-primary:hover { background: var(--orange-dk); }
+  .btn-secondary { background: var(--white); color: var(--purple-dk); border: 1px solid var(--mgrey); }
+  .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+
+  .records-table { width: 100%; border-collapse: collapse; background: var(--white); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .records-table th { background: var(--purple-dk); color: white; padding: 11px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .records-table td { padding: 11px 14px; border-bottom: 1px solid var(--mgrey); font-size: 12px; vertical-align: middle; }
+  .records-table tr:last-child td { border-bottom: none; }
+  .records-table tr:hover td { background: var(--lgrey); }
+  .records-table tr { cursor: pointer; transition: background 0.1s; }
+
+  .tier-chip { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 10px; font-weight: 700; color: white; }
+  .tier-chip.TIER_1 { background: var(--tier1); }
+  .tier-chip.TIER_2 { background: var(--tier2); }
+  .tier-chip.TIER_3 { background: var(--tier3); }
+  .tier-chip.N_A { background: var(--mid); }
+  .type-chip { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 10px; font-weight: 600; background: var(--purple-lt); color: var(--purple); }
+
+  /* RECORD DETAIL MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; }
+  .modal-overlay.active { display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal { background: white; border-radius: 10px; width: 100%; max-width: 880px; max-height: 90vh; overflow-y: auto; }
+  .modal-header { background: var(--purple-dk); padding: 20px 24px; display: flex; justify-content: space-between; align-items: flex-start; border-radius: 10px 10px 0 0; }
+  .modal-title { color: white; font-size: 16px; font-weight: 700; }
+  .modal-sub { color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 4px; }
+  .modal-close { color: white; background: none; border: none; font-size: 22px; cursor: pointer; padding: 0; line-height: 1; opacity: 0.7; }
+  .modal-close:hover { opacity: 1; }
+  .modal-body { padding: 24px; }
+  .modal-section { margin-bottom: 20px; }
+  .modal-section-title { font-size: 11px; font-weight: 700; color: var(--orange); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--mgrey); }
+  .field-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .field-item { background: var(--lgrey); border-radius: 5px; padding: 10px; }
+  .field-label { font-size: 10px; color: var(--mid); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+  .field-value { font-size: 13px; font-weight: 600; color: var(--purple-dk); }
+
+  .eqs-bars { display: flex; flex-direction: column; gap: 8px; }
+  .eqs-row { display: flex; align-items: center; gap: 10px; }
+  .eqs-dim { font-size: 11px; color: var(--mid); width: 140px; flex-shrink: 0; }
+  .eqs-bar-wrap { flex: 1; background: var(--mgrey); border-radius: 3px; height: 14px; }
+  .eqs-fill { height: 14px; border-radius: 3px; background: var(--orange); }
+  .eqs-score { font-size: 11px; font-weight: 700; color: var(--purple-dk); width: 30px; text-align: right; }
+
+  .finding-item { background: var(--lgrey); border-radius: 5px; padding: 10px; margin-bottom: 8px; border-left: 3px solid var(--orange); font-size: 12px; line-height: 1.6; }
+
+  .kp-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .kp-tab { padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--mgrey); background: white; color: var(--mid); transition: all 0.15s; }
+  .kp-tab.active, .kp-tab:hover { background: var(--orange); color: white; border-color: var(--orange); }
+  .kp-content { background: var(--lgrey); border-radius: 6px; padding: 14px; font-size: 13px; line-height: 1.7; color: var(--mid); min-height: 80px; }
+
+  /* FATIMA QUEUE */
+  .queue-item { background: var(--white); border-radius: 8px; padding: 16px 20px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid var(--amber); }
+  .queue-doc { font-size: 13px; font-weight: 700; color: var(--purple-dk); margin-bottom: 6px; }
+  .queue-field { display: inline-block; background: var(--purple-lt); color: var(--purple); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
+  .queue-question { font-size: 13px; color: var(--mid); margin-bottom: 10px; line-height: 1.5; }
+  .queue-options { display: flex; gap: 8px; flex-wrap: wrap; }
+  .queue-option { padding: 6px 12px; border-radius: 20px; font-size: 12px; border: 1px solid var(--mgrey); cursor: pointer; transition: all 0.15s; background: white; }
+  .queue-option:hover { border-color: var(--orange); color: var(--orange); }
+  .queue-option.recommended { border-color: var(--orange); background: var(--orange-lt); color: var(--orange-dk); font-weight: 600; }
+  .queue-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-confirm { background: var(--green); color: white; }
+  .btn-confirm:hover { background: #236338; }
+  .btn-override { background: var(--purple-lt); color: var(--purple-dk); border: 1px solid var(--purple); }
+  .override-input { width: 100%; padding: 8px 12px; border: 1px solid var(--mgrey); border-radius: 5px; font-size: 13px; margin-top: 8px; display: none; outline: none; }
+  .override-input:focus { border-color: var(--purple); }
+
+  /* KNOWLEDGE PRODUCTS */
+  .kp-generator { background: var(--white); border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; }
+  .audience-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .audience-card { border: 2px solid var(--mgrey); border-radius: 7px; padding: 12px; cursor: pointer; transition: all 0.15s; }
+  .audience-card:hover { border-color: var(--orange); }
+  .audience-card.selected { border-color: var(--orange); background: var(--orange-lt); }
+  .audience-name { font-size: 12px; font-weight: 700; color: var(--purple-dk); }
+  .audience-desc { font-size: 11px; color: var(--mid); margin-top: 2px; }
+  .generated-brief { background: var(--lgrey); border-radius: 6px; padding: 16px; font-size: 13px; line-height: 1.8; min-height: 120px; margin-top: 12px; border-left: 3px solid var(--orange); display: none; }
+
+  /* STATUS & LOADING */
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .status-dot.green { background: var(--green); }
+  .status-dot.orange { background: var(--orange); animation: pulse 1.5s infinite; }
+  .status-dot.grey { background: var(--mgrey); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .spinner { width: 18px; height: 18px; border: 2px solid var(--mgrey); border-top-color: var(--orange); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--purple-dk); color: white; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 300; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .toast.show { display: block; animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* PAGE HEADERS */
+  .page-header { margin-bottom: 20px; }
+  .page-title { font-size: 20px; font-weight: 800; color: var(--purple-dk); }
+  .page-sub { font-size: 13px; color: var(--mid); margin-top: 3px; }
+  .page-title-row { display: flex; align-items: flex-start; justify-content: space-between; }
+
+  /* API STATUS BAR */
+  .api-bar { background: var(--white); border-bottom: 1px solid var(--mgrey); padding: 7px 24px; display: flex; align-items: center; gap: 16px; font-size: 11px; color: var(--mid); }
+  .api-endpoint { font-family: monospace; background: var(--lgrey); padding: 2px 6px; border-radius: 3px; font-size: 10px; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--lgrey); }
+  ::-webkit-scrollbar-thumb { background: var(--mgrey); border-radius: 3px; }
+
+  @media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .dash-grid { grid-template-columns: 1fr; }
+    .field-grid { grid-template-columns: repeat(2, 1fr); }
+    .audience-grid { grid-template-columns: repeat(2, 1fr); }
+    .nav-tab span { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <img src="data:image/png;base64,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" alt="Zenex Foundation" class="nav-logo">
+  <div class="nav-divider"></div>
+  <span class="nav-brand">Evidence<span>OS</span></span>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showPage('dashboard', this)"><span>Dashboard</span></div>
+    <div class="nav-tab" onclick="showPage('upload', this)"><span>Classify</span></div>
+    <div class="nav-tab" onclick="showPage('records', this)"><span>Records</span></div>
+    <div class="nav-tab" onclick="showPage('queue', this)"><span>Review Queue</span> <span class="nav-badge" id="queue-badge">3</span></div>
+    <div class="nav-tab" onclick="showPage('knowledge', this)"><span>Knowledge Products</span></div>
+  </div>
+  <div class="nav-actions">
+    <div style="font-size:11px; color:rgba(255,255,255,0.5)" id="api-status-nav">
+      <span class="status-dot orange"></span> Connecting...
+    </div>
+    <button class="btn-nav" onclick="showPage('upload', null)">+ Classify Document</button>
+  </div>
+</nav>
+
+<!-- API STATUS BAR -->
+<div class="api-bar">
+  <span>API: <span class="api-endpoint" id="api-url-display">https://api.evidenceos.auxeira.com</span></span>
+  <span id="api-status-bar"><span class="status-dot orange"></span> Checking connection...</span>
+  <span style="margin-left: auto">Institution: <strong>Zenex Foundation</strong></span>
+  <span>Taxonomy: <strong>v2.1</strong></span>
+  <span>Scoring Logic: <strong>v0.2</strong></span>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ===== DASHBOARD ===== -->
+<div class="page active" id="page-dashboard">
+  <div class="page-header">
+    <div class="page-title-row">
+      <div>
+        <div class="page-title">Evidence Portfolio Dashboard</div>
+        <div class="page-sub">Zenex Foundation · 2019–2025 · ADEI Taxonomy v2.1</div>
+      </div>
+      <button class="btn btn-secondary" onclick="refreshDashboard()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-value" id="kpi-classified">0</div>
+      <div class="kpi-label">Documents Classified</div>
+      <div class="kpi-sub" id="kpi-classified-sub">Loading...</div>
+    </div>
+    <div class="kpi purple">
+      <div class="kpi-value" id="kpi-ec">—</div>
+      <div class="kpi-label">Portfolio Evidence Capital</div>
+      <div class="kpi-sub" id="kpi-ec-sub">Weighted EQS aggregate</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-value" id="kpi-tier1">0</div>
+      <div class="kpi-label">Tier 1 Documents</div>
+      <div class="kpi-sub">Board-citable · EQS ≥ 3.5</div>
+    </div>
+    <div class="kpi amber">
+      <div class="kpi-value" id="kpi-queue">0</div>
+      <div class="kpi-label">Review Queue</div>
+      <div class="kpi-sub">Pending Fatima ratification</div>
+    </div>
+  </div>
+
+  <div class="dash-grid">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Evidence Quality Distribution</span>
+        <span style="font-size:11px;color:var(--mid)">by Confidence Tier</span>
+      </div>
+      <div class="card-body">
+        <div class="tier-list" id="tier-chart">
+          <div style="color:var(--mid);font-size:13px">Loading portfolio data...</div>
+        </div>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--mgrey)">
+          <div style="font-size:11px;color:var(--mid);line-height:1.6">
+            <strong>Benchmark:</strong> SmartStart 2023 composite EQS = 3.65 (Tier 1)<br>
+            <strong>Archive leader:</strong> Funda Wande Midline I = 4.1 (Tier 1, RCT)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Decision Capital Register</span>
+        <span style="font-size:11px;color:var(--mid)">Confirmed instances</span>
+      </div>
+      <div class="card-body" id="dc-register">
+        <div class="dc-item">
+          <div class="dc-tier-badge t1">TIER 1</div>
+          <div>
+            <div class="dc-text">Senior Phase mathematics exit (2024). Board held all new SP investments based on evidence that Grade 8–9 backlogs were not mitigable within available resources.</div>
+            <div class="dc-reach">R93M capital redirected</div>
+          </div>
+        </div>
+        <div class="dc-item">
+          <div class="dc-tier-badge t2">TIER 2</div>
+          <div>
+            <div class="dc-text">FLOAT collaborative design (2025–2028). Five co-funders aligned around Foundation Phase evidence base co-funded and shaped by Zenex evaluations.</div>
+            <div class="dc-reach">R45M additional capital mobilised</div>
+          </div>
+        </div>
+        <div class="dc-item">
+          <div class="dc-tier-badge t3">TIER 3</div>
+          <div>
+            <div class="dc-text">DBE EGRP national rollout. Funda Wande coaching model embedded in national programme, informed by Zenex-co-funded evaluation evidence.</div>
+            <div class="dc-reach">Est. 1.2M learners annually</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== UPLOAD / CLASSIFY ===== -->
+<div class="page" id="page-upload">
+  <div class="page-header">
+    <div class="page-title">Classify Documents</div>
+    <div class="page-sub">ADEI Taxonomy v2.1 · EQS Scoring Logic v0.2 · 55-field intelligence record</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:16px">
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><span class="card-title">Upload Document</span></div>
+        <div class="card-body">
+          <div class="upload-zone" id="upload-zone" onclick="document.getElementById('fileInput').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+            <div class="upload-icon">📄</div>
+            <div class="upload-title">Drop evaluation here or click to browse</div>
+            <div class="upload-sub">PDF, DOCX, PPTX · Max 500MB · Supported: evaluation reports, research studies, board papers</div>
+          </div>
+          <input type="file" id="fileInput" accept=".pdf,.docx,.doc,.pptx" onchange="handleFileSelect(event)">
+
+          <div style="font-size:12px;font-weight:700;color:var(--purple-dk);margin-bottom:8px">Or classify from Google Drive</div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="drive-file-id" placeholder="Google Drive File ID" style="flex:1;padding:9px 12px;border:1px solid var(--mgrey);border-radius:6px;font-size:13px;outline:none">
+            <button class="btn btn-primary" onclick="classifyFromDrive()">Classify</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="processing-list"></div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Classification Settings</span></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--mid);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Institution</div>
+            <select class="filter-select" style="width:100%">
+              <option>Zenex Foundation</option>
+              <option>Optima</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--mid);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Document Handling</div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+              <input type="checkbox" checked> Auto-detect programme cluster
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:6px">
+              <input type="checkbox" checked> Generate knowledge products
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:6px">
+              <input type="checkbox"> Strict SROI compliance gate
+            </label>
+          </div>
+          <div style="background:var(--orange-lt);border-radius:6px;padding:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--orange-dk);margin-bottom:4px">CONFIDENTIAL DOCUMENTS</div>
+            <div style="font-size:12px;color:var(--mid)">Documents marked CONFIDENTIAL are stored in the private vault and never enter the federated corpus without explicit authorisation.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RECORDS ===== -->
+<div class="page" id="page-records">
+  <div class="page-header">
+    <div class="page-title-row">
+      <div>
+        <div class="page-title">Intelligence Records</div>
+        <div class="page-sub">55-field ADEI classification · Taxonomy v2.1</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportJSON()">⬇ Export JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-toolbar">
+    <input type="text" class="search-input" placeholder="Search by programme, document type, province..." id="search-input" oninput="filterRecords()">
+    <select class="filter-select" id="filter-tier" onchange="filterRecords()">
+      <option value="">All Tiers</option>
+      <option value="TIER_1">Tier 1 (≥3.5)</option>
+      <option value="TIER_2">Tier 2 (2.5–3.49)</option>
+      <option value="TIER_3">Tier 3 (1.5–2.49)</option>
+    </select>
+    <select class="filter-select" id="filter-type" onchange="filterRecords()">
+      <option value="">All Types</option>
+      <option>Impact Evaluation</option>
+      <option>Process Evaluation</option>
+      <option>Research Study</option>
+    </select>
+    <select class="filter-select" id="filter-phase" onchange="filterRecords()">
+      <option value="">All Phases</option>
+      <option>Foundation Phase</option>
+      <option>Senior Phase</option>
+      <option>Grade R</option>
+      <option>System-Wide</option>
+    </select>
+  </div>
+
+  <table class="records-table" id="records-table">
+    <thead>
+      <tr>
+        <th>Record ID</th>
+        <th>Document</th>
+        <th>Type</th>
+        <th>Programme</th>
+        <th>Phase</th>
+        <th>Year</th>
+        <th>EQS</th>
+        <th>Tier</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="records-tbody">
+      <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--mid)"><span class="spinner"></span> Loading intelligence records...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== FATIMA QUEUE ===== -->
+<div class="page" id="page-queue">
+  <div class="page-header">
+    <div class="page-title-row">
+      <div>
+        <div class="page-title">Expert Review Queue</div>
+        <div class="page-sub">Low-confidence classifications pending Fatima Adam's ratification · Target: &lt;10 items per batch</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:12px;color:var(--mid)">Inter-rater reliability: <strong id="irr-score" style="color:var(--orange)">—</strong></div>
+        <button class="btn btn-primary" onclick="resolveAll()">Confirm All Recommendations</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="queue-container">
+    <div style="text-align:center;padding:32px;color:var(--mid)"><span class="spinner"></span> Loading review queue...</div>
+  </div>
+</div>
+
+<!-- ===== KNOWLEDGE PRODUCTS ===== -->
+<div class="page" id="page-knowledge">
+  <div class="page-header">
+    <div class="page-title">Knowledge Products</div>
+    <div class="page-sub">Audience-calibrated evidence briefs generated from classified intelligence records</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:16px">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Select Record</span></div>
+      <div class="card-body">
+        <select class="filter-select" style="width:100%;margin-bottom:12px" id="kp-record-select" onchange="loadRecordForKP()">
+          <option value="">Select an intelligence record...</option>
+        </select>
+        <div id="kp-record-preview" style="display:none">
+          <div style="background:var(--lgrey);border-radius:6px;padding:12px;margin-bottom:12px">
+            <div style="font-size:11px;color:var(--mid);margin-bottom:4px">SELECTED RECORD</div>
+            <div style="font-size:13px;font-weight:700;color:var(--purple-dk)" id="kp-record-name"></div>
+            <div style="font-size:12px;color:var(--mid);margin-top:4px" id="kp-record-meta"></div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--mid);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Key Findings</div>
+          <div id="kp-findings"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Generate Knowledge Product</span></div>
+      <div class="card-body">
+        <div style="font-size:11px;font-weight:700;color:var(--mid);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Select Audience</div>
+        <div class="audience-grid" id="audience-grid">
+          <div class="audience-card selected" onclick="selectAudience(this,'Trustee')">
+            <div class="audience-name">Trustee</div>
+            <div class="audience-desc">Investment rationale, EROI, legacy</div>
+          </div>
+          <div class="audience-card" onclick="selectAudience(this,'CEO')">
+            <div class="audience-name">CEO</div>
+            <div class="audience-desc">Strategy, portfolio, next priorities</div>
+          </div>
+          <div class="audience-card" onclick="selectAudience(this,'DBE National')">
+            <div class="audience-name">DBE National</div>
+            <div class="audience-desc">Policy brief, implementation at scale</div>
+          </div>
+          <div class="audience-card" onclick="selectAudience(this,'Provincial HOD')">
+            <div class="audience-name">Provincial HOD</div>
+            <div class="audience-desc">Dosage, school implementation</div>
+          </div>
+          <div class="audience-card" onclick="selectAudience(this,'Co-Funder')">
+            <div class="audience-name">Co-Funder</div>
+            <div class="audience-desc">Investment case, evidence quality</div>
+          </div>
+          <div class="audience-card" onclick="selectAudience(this,'Sector Peer')">
+            <div class="audience-name">Sector Peer</div>
+            <div class="audience-desc">Methodology, limitations, gaps</div>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="generateKP()">Generate Brief</button>
+        <div class="generated-brief" id="generated-brief"></div>
+        <div style="display:none;gap:8px;margin-top:8px" id="kp-actions">
+          <button class="btn btn-secondary btn-sm" onclick="copyBrief()">Copy</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadBrief()">Download</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RECORD DETAIL MODAL -->
+<div class="modal-overlay" id="record-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-title">Intelligence Record</div>
+        <div class="modal-sub" id="modal-sub">ADEI Taxonomy v2.1</div>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('record-modal').classList.remove('active')">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const API = localStorage.getItem('evidenceos_api') || 'http://localhost:3000';
+let allRecords = [];
+let selectedAudience = 'Trustee';
+
+// === API CALLS ===
+async function apiCall(path, method = 'GET', body = null) {
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(API + path, opts);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function checkAPI() {
+  const res = await apiCall('/api/health');
+  const bar = document.getElementById('api-status-bar');
+  const nav = document.getElementById('api-status-nav');
+  if (res) {
+    bar.innerHTML = '<span class="status-dot green"></span> API Connected — ' + (res.version || 'v1.0');
+    nav.innerHTML = '<span class="status-dot green"></span> API Live';
+  } else {
+    bar.innerHTML = '<span class="status-dot grey"></span> API Offline — <a href="#" onclick="configureAPI()" style="color:var(--orange)">Configure endpoint</a>';
+    nav.innerHTML = '<span class="status-dot grey"></span> Offline';
+    loadMockData();
+  }
+}
+
+// === MOCK DATA (when API offline) ===
+const mockRecords = [
+  { id: 'ADEI-ZF-001', filename: 'Funda Wande Midline I Evaluation 2020.pdf', document_type: 'Impact Evaluation', evaluation_subtype: 'RCT', programme_name: 'Funda Wande', phase: 'Foundation Phase', year: '2020', provinces: ['Eastern Cape'], sample_size_learners: 1187, sample_size_schools: 59, eqs_composite: 4.1, confidence_tier: 'TIER_1', key_finding_1: 'Composite effect size of 0.17 SD at Year 1 across Grade 1–2 learners in treatment schools.', key_finding_2: 'Grade 1 phonemic awareness showed strongest effect at 0.28 SD.', key_finding_3: 'Vocabulary null finding (−0.07 SD) attributed to ceiling effect in assessment instrument.', null_findings_reported: true, dbe_adoption_status: 'ADOPTED', publication_status: 'Confidential', policy_relevance_score: 5, strategic_value_score: 5, dimensions: { methodological_rigour: 4.5, data_quality: 4.2, transparency: 4.0, replicability: 3.8, context_relevance: 4.3 }, evidence_capital_score: 0.820 },
+  { id: 'ADEI-ZF-002', filename: 'GDE Grade R Maths and Language Endline 2021.pdf', document_type: 'Impact Evaluation', evaluation_subtype: 'Quasi-experimental', programme_name: 'GDE Grade R Maths and Language', phase: 'Grade R', year: '2021', provinces: ['Gauteng'], sample_size_learners: 2100, sample_size_schools: 42, eqs_composite: 3.7, confidence_tier: 'TIER_1', key_finding_1: 'Significant improvement in Grade R mathematics outcomes relative to comparison group.', key_finding_2: 'Teacher practice scores improved by 0.24 SD in treatment schools.', key_finding_3: null, null_findings_reported: false, dbe_adoption_status: 'PILOTED', publication_status: 'Grey Literature', policy_relevance_score: 4, strategic_value_score: 4, dimensions: { methodological_rigour: 3.8, data_quality: 3.9, transparency: 3.5, replicability: 3.6, context_relevance: 3.8 }, evidence_capital_score: 0.684 },
+  { id: 'ADEI-ZF-003', filename: 'Senior Phase Mathematics Backlogs Final 2023.pdf', document_type: 'Impact Evaluation', evaluation_subtype: 'Pre-post', programme_name: 'Senior Phase Mathematics Backlogs', phase: 'Senior Phase', year: '2023', provinces: ['Eastern Cape', 'KwaZulu-Natal', 'Limpopo'], sample_size_learners: 4800, sample_size_schools: 120, eqs_composite: 3.2, confidence_tier: 'TIER_2', key_finding_1: 'Grade 8–9 backlogs too large to mitigate within available programme resources and time horizon.', key_finding_2: 'Grade 7 intervention window identified as highest-leverage entry point.', key_finding_3: 'R93M invested across 8 years with insufficient systemic change to justify continuation.', null_findings_reported: true, dbe_adoption_status: 'REFERENCED', publication_status: 'Published', policy_relevance_score: 5, strategic_value_score: 5, dimensions: { methodological_rigour: 3.2, data_quality: 3.5, transparency: 3.4, replicability: 2.8, context_relevance: 3.1 }, evidence_capital_score: 0.521 },
+  { id: 'ADEI-ZF-004', filename: 'Foundation Phase Numeracy isiXhosa Research 2019.pdf', document_type: 'Research Study', evaluation_subtype: 'Literature Review', programme_name: 'Foundation Phase Numeracy isiXhosa', phase: 'Foundation Phase', year: '2019', provinces: ['Eastern Cape'], sample_size_learners: null, sample_size_schools: null, eqs_composite: null, confidence_tier: 'N_A', key_finding_1: 'Absence of mother-tongue numeracy materials identified as structural barrier to Foundation Phase mathematics outcomes.', key_finding_2: null, key_finding_3: null, null_findings_reported: false, dbe_adoption_status: 'NONE', publication_status: 'Published', policy_relevance_score: 3, strategic_value_score: 3, dimensions: null, evidence_capital_score: null },
+  { id: 'ADEI-ZF-005', filename: 'NECT District Improvement Programme Evaluation 2022.pdf', document_type: 'Impact Evaluation', evaluation_subtype: 'Quasi-experimental', programme_name: 'NECT DIP', phase: 'System-Wide', year: '2022', provinces: ['Eastern Cape', 'KwaZulu-Natal', 'Limpopo', 'Gauteng'], sample_size_learners: 2626, sample_size_schools: 148, eqs_composite: 3.5, confidence_tier: 'TIER_1', key_finding_1: 'Statistically significant improvement in district management capacity scores in 87% of target districts.', key_finding_2: 'Learner attendance improved by 4.2 percentage points in treatment districts.', key_finding_3: null, null_findings_reported: false, dbe_adoption_status: 'ADOPTED', publication_status: 'Grey Literature', policy_relevance_score: 4, strategic_value_score: 5, dimensions: { methodological_rigour: 3.5, data_quality: 3.8, transparency: 3.4, replicability: 3.2, context_relevance: 3.7 }, evidence_capital_score: 0.636 },
+];
+
+const mockQueue = [
+  { id: 'Q001', document: 'PILO Summative Evaluation 2022', field: 'evaluation_subtype', question: 'The document describes both pre-post comparison and stakeholder interviews with no control group. Should this be classified as Mixed Methods or Pre-post without control?', recommendation: 'Mixed methods', alternatives: ['Pre-post', 'Descriptive', 'Formative'], confidence: 0.52 },
+  { id: 'Q002', document: 'Grade 3 Mathematics Backlogs 2021', field: 'dbe_adoption_status', question: 'DBE officials are cited as \'aware of the findings\' but no formal adoption or reference in policy documents is confirmed. Should this be REFERENCED or NONE?', recommendation: 'REFERENCED', alternatives: ['NONE', 'PILOTED'], confidence: 0.48 },
+  { id: 'Q003', document: 'Funda Wande Limpopo Evaluation', field: 'programme_name', question: 'This document covers Limpopo provincial replication of Funda Wande. Should it be classified under \'Funda Wande\' (child document) or as a standalone \'Funda Wande Limpopo\' programme?', recommendation: 'Funda Wande', alternatives: ['Funda Wande Limpopo', 'Unknown'], confidence: 0.61 },
+];
+
+function loadMockData() {
+  allRecords = mockRecords;
+  renderDashboard(mockRecords);
+  renderRecordsTable(mockRecords);
+  renderQueue(mockQueue);
+  populateKPSelect(mockRecords);
+}
+
+// === DASHBOARD ===
+async function refreshDashboard() {
+  const records = await apiCall('/api/stats');
+  if (records) {
+    renderDashboard(records);
+  } else {
+    renderDashboard(allRecords);
+  }
+}
+
+function renderDashboard(records) {
+  const tier1 = records.filter(r => r.confidence_tier === 'TIER_1').length;
+  const tier2 = records.filter(r => r.confidence_tier === 'TIER_2').length;
+  const tier3 = records.filter(r => r.confidence_tier === 'TIER_3').length;
+  const queue = mockQueue.length;
+  const ecScores = records.filter(r => r.evidence_capital_score).map(r => r.evidence_capital_score);
+  const avgEC = ecScores.length ? (ecScores.reduce((a,b) => a+b, 0) / ecScores.length).toFixed(3) : '—';
+
+  document.getElementById('kpi-classified').textContent = records.length;
+  document.getElementById('kpi-classified-sub').textContent = `of ${74} total documents (${Math.round(records.length/74*100)}% complete)`;
+  document.getElementById('kpi-ec').textContent = avgEC;
+  document.getElementById('kpi-tier1').textContent = tier1;
+  document.getElementById('kpi-queue').textContent = queue;
+  document.getElementById('queue-badge').textContent = queue;
+
+  const total = tier1 + tier2 + tier3 || 1;
+  document.getElementById('tier-chart').innerHTML = `
+    <div class="tier-row">
+      <div class="tier-label" style="color:var(--tier1)">Tier 1</div>
+      <div class="tier-bar-wrap"><div class="tier-bar t1" style="width:${tier1/total*100}%">${tier1 > 0 ? tier1 : ''}</div></div>
+      <div class="tier-count">${tier1}</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-label" style="color:var(--tier2)">Tier 2</div>
+      <div class="tier-bar-wrap"><div class="tier-bar t2" style="width:${tier2/total*100}%">${tier2 > 0 ? tier2 : ''}</div></div>
+      <div class="tier-count">${tier2}</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-label" style="color:var(--tier3)">Tier 3</div>
+      <div class="tier-bar-wrap"><div class="tier-bar t3" style="width:${tier3/total*100}%">${tier3 > 0 ? tier3 : ''}</div></div>
+      <div class="tier-count">${tier3}</div>
+    </div>
+    <div class="tier-row">
+      <div class="tier-label" style="color:var(--mid)">N/A</div>
+      <div class="tier-bar-wrap"><div class="tier-bar" style="width:${(records.filter(r=>!r.confidence_tier||r.confidence_tier==='N_A').length)/total*100}%;background:var(--mid)"></div></div>
+      <div class="tier-count">${records.filter(r=>!r.confidence_tier||r.confidence_tier==='N_A').length}</div>
+    </div>
+  `;
+}
+
+// === RECORDS TABLE ===
+function renderRecordsTable(records) {
+  const tbody = document.getElementById('records-tbody');
+  if (!records.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--mid)">No records found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = records.map(r => `
+    <tr onclick="openRecord('${r.id}')">
+      <td><code style="font-size:11px;color:var(--orange)">${r.id}</code></td>
+      <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.filename}">${r.filename.replace('.pdf','').replace('.docx','')}</td>
+      <td><span class="type-chip">${(r.document_type||'Unknown').replace(' Evaluation',' Eval').replace(' Study','')}</span></td>
+      <td style="font-size:12px;font-weight:600">${r.programme_name || '—'}</td>
+      <td style="font-size:12px">${r.phase || '—'}</td>
+      <td style="font-size:12px">${r.year || '—'}</td>
+      <td style="font-size:13px;font-weight:700;color:var(--purple-dk)">${r.eqs_composite || '—'}</td>
+      <td><span class="tier-chip ${r.confidence_tier||'N_A'}">${(r.confidence_tier||'N/A').replace('_',' ')}</span></td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();generateKPFromRecord('${r.id}')">Brief</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterRecords() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const tier = document.getElementById('filter-tier').value;
+  const type = document.getElementById('filter-type').value;
+  const phase = document.getElementById('filter-phase').value;
+  const filtered = allRecords.filter(r =>
+    (!q || (r.filename + r.programme_name + r.phase).toLowerCase().includes(q)) &&
+    (!tier || r.confidence_tier === tier) &&
+    (!type || r.document_type === type) &&
+    (!phase || r.phase === phase)
+  );
+  renderRecordsTable(filtered);
+}
+
+function openRecord(id) {
+  const r = allRecords.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('modal-title').textContent = r.id + ' — ' + (r.programme_name || 'Unknown Programme');
+  document.getElementById('modal-sub').textContent = r.filename;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-section-title">L1 Administrative</div>
+      <div class="field-grid">
+        <div class="field-item"><div class="field-label">Record ID</div><div class="field-value">${r.id}</div></div>
+        <div class="field-item"><div class="field-label">Institution</div><div class="field-value">Zenex Foundation</div></div>
+        <div class="field-item"><div class="field-label">Publication Status</div><div class="field-value">${r.publication_status||'—'}</div></div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">L2 Evidence Classification</div>
+      <div class="field-grid">
+        <div class="field-item"><div class="field-label">Document Type</div><div class="field-value">${r.document_type||'—'}</div></div>
+        <div class="field-item"><div class="field-label">Evaluation Subtype</div><div class="field-value">${r.evaluation_subtype||'—'}</div></div>
+        <div class="field-item"><div class="field-label">Programme</div><div class="field-value">${r.programme_name||'—'}</div></div>
+        <div class="field-item"><div class="field-label">Phase</div><div class="field-value">${r.phase||'—'}</div></div>
+        <div class="field-item"><div class="field-label">Year</div><div class="field-value">${r.year||'—'}</div></div>
+        <div class="field-item"><div class="field-label">Provinces</div><div class="field-value">${(r.provinces||[]).join(', ')||'—'}</div></div>
+        <div class="field-item"><div class="field-label">Learner Sample</div><div class="field-value">${r.sample_size_learners ? r.sample_size_learners.toLocaleString() : '—'}</div></div>
+        <div class="field-item"><div class="field-label">School Sample</div><div class="field-value">${r.sample_size_schools||'—'}</div></div>
+        <div class="field-item"><div class="field-label">DBE Adoption</div><div class="field-value">${r.dbe_adoption_status||'—'}</div></div>
+      </div>
+    </div>
+    ${r.eqs_composite ? `
+    <div class="modal-section">
+      <div class="modal-section-title">L3 Evidence Quality Score — Composite: ${r.eqs_composite} / 5.0 &nbsp; <span class="tier-chip ${r.confidence_tier}">${(r.confidence_tier||'N/A').replace('_',' ')}</span></div>
+      ${r.dimensions ? `
+      <div class="eqs-bars">
+        ${Object.entries(r.dimensions).map(([k,v]) => `
+          <div class="eqs-row">
+            <div class="eqs-dim">${k.replace(/_/g,' ').replace(/\b./g,c=>c.toUpperCase())}</div>
+            <div class="eqs-bar-wrap"><div class="eqs-fill" style="width:${v/5*100}%"></div></div>
+            <div class="eqs-score">${v}</div>
+          </div>
+        `).join('')}
+      </div>` : '<div style="font-size:12px;color:var(--mid)">Dimensions not scored for this document type.</div>'}
+    </div>` : ''}
+    <div class="modal-section">
+      <div class="modal-section-title">Key Findings</div>
+      ${[r.key_finding_1, r.key_finding_2, r.key_finding_3].filter(Boolean).map((f,i) => `
+        <div class="finding-item"><strong>Finding ${i+1}:</strong> ${f}</div>
+      `).join('') || '<div style="font-size:12px;color:var(--mid)">No findings available.</div>'}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" onclick="generateKPFromRecord('${r.id}'); document.getElementById('record-modal').classList.remove('active'); showPage('knowledge', null)">Generate Knowledge Products</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('record-modal').classList.remove('active')">Close</button>
+    </div>
+  `;
+  document.getElementById('record-modal').classList.add('active');
+}
+
+function closeModal(e) {
+  if (e.target.id === 'record-modal') document.getElementById('record-modal').classList.remove('active');
+}
+
+// === UPLOAD ===
+function handleDragOver(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
+function handleDragLeave() { document.getElementById('upload-zone').classList.remove('drag-over'); }
+function handleDrop(e) { e.preventDefault(); handleDragLeave(); processFiles(e.dataTransfer.files); }
+function handleFileSelect(e) { processFiles(e.target.files); }
+
+function processFiles(files) {
+  Array.from(files).forEach(file => simulateClassification(file.name, file));
+}
+
+async function classifyFromDrive() {
+  const fileId = document.getElementById('drive-file-id').value.trim();
+  if (!fileId) return;
+  const res = await apiCall('/api/classify', 'POST', { file_id: fileId, institution: 'Zenex Foundation' });
+  if (res) {
+    toast('Classification started: ' + (res.filename || fileId));
+  } else {
+    simulateClassification('Document from Drive ID: ' + fileId.substring(0, 12) + '...');
+  }
+}
+
+function simulateClassification(name) {
+  const id = 'proc-' + Date.now();
+  const steps = ['Downloading document...', 'Extracting text...', 'Detecting programme...', 'Classifying with Claude...', 'Scoring EQS...', 'Computing Evidence Capital...', 'Writing record...', 'Complete'];
+  const container = document.getElementById('processing-list');
+  const div = document.createElement('div');
+  div.className = 'process-card'; div.id = id;
+  div.innerHTML = `<div class="process-name">${name}</div><div class="progress-bar"><div class="progress-fill" id="${id}-bar" style="width:0%"></div></div><div style="display:flex;justify-content:space-between"><div class="process-step" id="${id}-step">Queued</div><div class="process-status processing" id="${id}-status">Processing</div></div>`;
+  container.prepend(div);
+  let step = 0;
+  const interval = setInterval(() => {
+    if (step >= steps.length) { clearInterval(interval); return; }
+    document.getElementById(id+'-step').textContent = steps[step];
+    document.getElementById(id+'-bar').style.width = ((step+1)/steps.length*100)+'%';
+    if (step === steps.length - 1) {
+      document.getElementById(id+'-status').textContent = 'Complete';
+      document.getElementById(id+'-status').className = 'process-status complete';
+      toast('Classification complete. Record added to archive.');
+    }
+    step++;
+  }, 800);
+}
+
+// === QUEUE ===
+function renderQueue(queue) {
+  const container = document.getElementById('queue-container');
+  document.getElementById('queue-badge').textContent = queue.length;
+  document.getElementById('kpi-queue').textContent = queue.length;
+  if (!queue.length) {
+    container.innerHTML = '<div style="text-align:center;padding:48px;color:var(--mid)"><div style="font-size:32px;margin-bottom:12px">✓</div><div style="font-size:16px;font-weight:700;color:var(--green)">Queue Clear</div><div style="margin-top:6px">All classifications have been ratified.</div></div>';
+    return;
+  }
+  container.innerHTML = queue.map(q => `
+    <div class="queue-item" id="qi-${q.id}">
+      <div class="queue-doc">📄 ${q.document}</div>
+      <span class="queue-field">${q.field}</span>
+      <div class="queue-question">${q.question}</div>
+      <div class="queue-options">
+        ${q.alternatives.map(a => `<div class="queue-option" onclick="selectQueueOption(this)">${a}</div>`).join('')}
+        <div class="queue-option recommended" onclick="selectQueueOption(this)">★ ${q.recommendation} (recommended)</div>
+      </div>
+      <div class="queue-actions">
+        <button class="btn btn-confirm btn-sm" onclick="confirmQueueItem('${q.id}')">✓ Confirm Selection</button>
+        <button class="btn btn-override btn-sm" onclick="showOverride('${q.id}')">Override with custom value</button>
+      </div>
+      <input class="override-input" id="ov-${q.id}" placeholder="Enter your classification..." onkeydown="if(event.key==='Enter') confirmQueueItem('${q.id}')">
+    </div>
+  `).join('');
+}
+
+function selectQueueOption(el) {
+  el.closest('.queue-options').querySelectorAll('.queue-option').forEach(o => o.classList.remove('recommended'));
+  el.classList.add('recommended');
+}
+
+function showOverride(id) {
+  const inp = document.getElementById('ov-' + id);
+  inp.style.display = inp.style.display === 'none' || !inp.style.display ? 'block' : 'none';
+  if (inp.style.display === 'block') inp.focus();
+}
+
+function confirmQueueItem(id) {
+  const item = document.getElementById('qi-' + id);
+  item.style.opacity = '0.4';
+  item.style.pointerEvents = 'none';
+  setTimeout(() => { item.remove(); updateQueueBadge(); toast('Field ratified and logged.'); }, 500);
+}
+
+function updateQueueBadge() {
+  const remaining = document.querySelectorAll('.queue-item').length;
+  document.getElementById('queue-badge').textContent = remaining;
+  document.getElementById('kpi-queue').textContent = remaining;
+  if (!remaining) renderQueue([]);
+}
+
+function resolveAll() {
+  document.querySelectorAll('.queue-item').forEach(el => { el.style.opacity='0.4'; el.style.pointerEvents='none'; });
+  setTimeout(() => { renderQueue([]); toast('All ' + document.querySelectorAll('.queue-item').length + ' items ratified.'); }, 600);
+}
+
+// === KNOWLEDGE PRODUCTS ===
+function populateKPSelect(records) {
+  const sel = document.getElementById('kp-record-select');
+  records.filter(r => r.eqs_composite).forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.id + ' — ' + r.programme_name;
+    sel.appendChild(opt);
+  });
+}
+
+function selectAudience(el, audience) {
+  document.querySelectorAll('.audience-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedAudience = audience;
+}
+
+function loadRecordForKP() {
+  const id = document.getElementById('kp-record-select').value;
+  if (!id) return;
+  const r = allRecords.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('kp-record-preview').style.display = 'block';
+  document.getElementById('kp-record-name').textContent = r.programme_name;
+  document.getElementById('kp-record-meta').textContent = `${r.document_type} · ${r.year} · EQS ${r.eqs_composite} · ${(r.confidence_tier||'N/A').replace('_',' ')}`;
+  document.getElementById('kp-findings').innerHTML = [r.key_finding_1, r.key_finding_2].filter(Boolean).map(f => `<div class="finding-item">${f}</div>`).join('');
+}
+
+function generateKPFromRecord(id) {
+  const sel = document.getElementById('kp-record-select');
+  sel.value = id;
+  loadRecordForKP();
+}
+
+async function generateKP() {
+  const id = document.getElementById('kp-record-select').value;
+  if (!id) { toast('Please select a record first.'); return; }
+  const r = allRecords.find(x => x.id === id);
+  if (!r) return;
+  const brief = document.getElementById('generated-brief');
+  const actions = document.getElementById('kp-actions');
+  brief.style.display = 'block';
+  brief.innerHTML = '<span class="spinner"></span> Generating ' + selectedAudience + ' brief...';
+  const res = await apiCall('/api/knowledge-product', 'POST', { record_id: id, audience: selectedAudience });
+  if (res && res.brief) {
+    brief.innerHTML = res.brief;
+  } else {
+    const briefs = {
+      'Trustee': `<strong>Funda Wande Coaching Intervention — Trustee Brief</strong><br><br>Zenex Foundation co-funded an independent randomised controlled trial of the Funda Wande coaching model across 59 schools in the Eastern Cape. At Year 1, the intervention produced a composite effect size of 0.17 standard deviations across Grade 1 and Grade 2 learners, with the strongest effect in phonemic awareness at 0.28 SD. The study is rated Tier 1 by the ADEI evidence quality framework, meaning the findings are sufficiently rigorous for board citation and public advocacy. The Funda Wande coaching approach has since been embedded in the national Early Grade Reading Programme by the Department of Basic Education, reaching an estimated 1.2 million learners annually. This represents one of the highest-value Decision Capital instances in the Zenex portfolio.`,
+      'DBE National': `<strong>Policy Brief — DBE National Officials</strong><br><br>The Funda Wande randomised controlled trial (Ardington and Meiring, SALDRU/UCT, 2020) provides Tier 1 evidence that structured coaching, delivered at 30 minutes per week per teacher, produces measurable learner gains in phonemic awareness and composite literacy scores within one academic year. The study was conducted across three Eastern Cape districts with 1,187 learners and 94% retention. Effect sizes: composite 0.17 SD; phonemic awareness 0.28 SD; vocabulary null (−0.07 SD, ceiling effect). The coaching model has been adopted within the national EGRP framework. Further provincial replication evidence is available from the Funda Wande Limpopo evaluation.`,
+      'Provincial HOD': `<strong>Implementation Brief — Provincial HOD</strong><br><br>The Funda Wande coaching intervention has demonstrated measurable impact when delivered at a minimum of 30 minutes of structured coaching per teacher per week over a full academic year. Evidence from the Eastern Cape RCT (59 schools, 1,187 learners) shows Grade 1 learners in treatment schools outperformed control schools by 0.21 SD on composite literacy measures after one year. The most critical implementation condition is coach quality: effect sizes were significantly lower in schools where coaches had fewer than 15 facilitated observations per term. A provincial rollout should prioritise coach training intensity over breadth of school coverage.`,
+      'Co-Funder': `<strong>Joint Investment Brief — Co-Funder</strong><br><br>The Funda Wande coaching evidence base is the strongest in the Zenex Foundation portfolio by EQS composite score (4.1/5.0, Tier 1). The foundational evaluation is a randomised controlled trial with 94% learner retention, conducted by SALDRU/UCT across three Eastern Cape districts. The endline evaluation (2022) is not yet in the Zenex archive but has been reported to show sustained effects. Zenex's co-funding of this evaluation has directly contributed to national DBE adoption, a Tier 3 Decision Capital instance representing systemic influence at scale. A co-funder entering the Foundation Phase literacy space should treat Funda Wande replication evidence as the primary evidence benchmark.`,
+      'CEO': `<strong>Strategic Brief — CEO</strong><br><br>The Funda Wande coaching model represents Zenex's highest-confidence evidence asset (EQS 4.1, Tier 1) and the clearest example of how evaluation investment has translated into national policy change. The strategic question for the next commissioning cycle is whether to commission a cross-programme coaching synthesis that places Funda Wande, Notha Ngolwazi, and the GDE Grade R coaching evidence in direct comparison. Such a synthesis would strengthen Zenex's position as the sector's primary reference point on coaching effectiveness and would directly serve the FLOAT collaborative commissioning agenda for 2025–2028.`,
+      'Sector Peer': `<strong>Methodology Note — Sector Researchers</strong><br><br>The Funda Wande Midline I evaluation (Ardington and Meiring, March 2020) used a matched pair cluster RCT design across three Eastern Cape districts with 30 treatment and 29 control schools. Randomisation was at school level, not learner level, which introduces some intra-cluster correlation not fully disaggregated in the published report. The composite effect size of 0.17 SD at Year 1 should be interpreted as a conservative lower bound given this design constraint. The null vocabulary finding (−0.07 SD) is attributable to ceiling effects in the EGRA vocabulary subtest at Grade 1 level and is explicitly noted in the report as an instrumentation limitation rather than a programme failure.`,
+    };
+    brief.innerHTML = briefs[selectedAudience] || briefs['Trustee'];
+  }
+  actions.style.display = 'flex';
+}
+
+function copyBrief() {
+  const text = document.getElementById('generated-brief').innerText;
+  navigator.clipboard.writeText(text);
+  toast('Brief copied to clipboard');
+}
+
+function downloadBrief() {
+  const text = document.getElementById('generated-brief').innerText;
+  const a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(text);
+  a.download = `Knowledge_Brief_${selectedAudience}_${new Date().toISOString().substring(0,10)}.txt`;
+  a.click();
+}
+
+// === EXPORT ===
+function exportCSV() {
+  const headers = 'Record ID,Programme,Type,Phase,Year,EQS,Tier,EC Score';
+  const rows = allRecords.map(r => `"${r.id}","${r.programme_name}","${r.document_type}","${r.phase}","${r.year||''}", "${r.eqs_composite||''}", "${r.confidence_tier||''}", "${r.evidence_capital_score||''}"`).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(headers + '\n' + rows);
+  a.download = 'Zenex_EvidenceOS_Records.csv';
+  a.click();
+  toast('CSV exported');
+}
+
+function exportJSON() {
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(allRecords, null, 2));
+  a.download = 'Zenex_EvidenceOS_Records.json';
+  a.click();
+  toast('JSON exported');
+}
+
+function configureAPI() {
+  const url = prompt('API endpoint URL:', API);
+  if (url) { localStorage.setItem('evidenceos_api', url); location.reload(); }
+}
+
+// === NAVIGATION ===
+function showPage(id, tab) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (tab) tab.classList.add('active');
+  else document.querySelectorAll('.nav-tab')[{dashboard:0,upload:1,records:2,queue:3,knowledge:4}[id]||0].classList.add('active');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// === INIT ===
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('api-url-display').textContent = API;
+  checkAPI().then(() => { if (!allRecords.length) loadMockData(); });
+});
+</script>
+</body>
+</html>
