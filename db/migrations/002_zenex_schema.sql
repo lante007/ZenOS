@@ -199,6 +199,8 @@ CREATE TABLE IF NOT EXISTS zenex.ingestion_jobs (
   step_detail           TEXT,
   claude_input_tokens   INTEGER,
   claude_output_tokens  INTEGER,
+  claude_input_words    INTEGER,
+  claude_output_words   INTEGER,
   claude_latency_ms     INTEGER,
   error_message         TEXT,
   started_at            TIMESTAMPTZ,

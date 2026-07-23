@@ -5,8 +5,10 @@
  * Auxeira EvidenceOS v1.0
  *
  * Usage:
- *   node adei-ingest.js --folder-id <id>          # Full batch
- *   node adei-ingest.js --file-id <id>            # Single document
+ *   node adei-ingest.js --s3-prefix raw/documents/ # Full S3 batch
+ *   node adei-ingest.js --s3-key <key>             # Single S3 document
+ *   node adei-ingest.js --folder-id <id>           # Legacy Drive batch
+ *   node adei-ingest.js --file-id <id>             # Legacy Drive document
  *   node adei-ingest.js --file-id <id> --dry-run  # No DB write
  *   node adei-ingest.js --folder-id <id> --verbose
  *
@@ -23,7 +25,6 @@
 
 require('dotenv').config();
 const { program } = require('commander');
-const { listFolderFiles, downloadFile } = require('./src/drive-connector');
 const { extractText, isSupportedType } = require('./src/text-extractor');
 const { detectProgramme } = require('./src/programme-detector');
 const { classifyDocument } = require('./src/claude-classifier');
@@ -33,8 +34,11 @@ const path = require('path');
 const crypto = require('crypto');
 
 program
-  .option('--folder-id <id>', 'Google Drive folder ID for batch processing')
-  .option('--file-id <id>', 'Single Google Drive file ID')
+  .option('--s3-prefix <prefix>', 'S3 prefix for batch processing')
+  .option('--s3-key <key>', 'Single S3 object key')
+  .option('--tenant <slug>', 'Tenant slug for S3 bucket selection', process.env.EVIDENCEOS_TENANT || 'zenex')
+  .option('--folder-id <id>', 'Legacy Google Drive folder ID for batch processing')
+  .option('--file-id <id>', 'Legacy single Google Drive file ID')
   .option('--institution <name>', 'Client institution name', 'Zenex Foundation')
   .option('--mode <mode>', 'single | batch', 'batch')
   .option('--dry-run', 'Classify without writing to database', false)
@@ -43,6 +47,10 @@ program
   .parse(process.argv);
 
 const opts = program.opts();
+const connector = (opts.s3Prefix || opts.s3Key)
+  ? require('./src/s3-connector')
+  : require('./src/drive-connector');
+
 const log = (msg, level = 'INFO') => {
   const ts = new Date().toISOString().substring(11, 19);
   if (level === 'DEBUG' && !opts.verbose) return;
@@ -105,6 +113,7 @@ async function resolveField(field, claudeValue, claudeConf, text, filename, prog
 // ─── Process a single document ─────────────────────────────────────────
 async function processDocument(file, opts, batchId, outputDir, processedHashes) {
   const { id: fileId, name: filename, mimeType, size } = file;
+  const fileSlug = crypto.createHash('sha1').update(fileId).digest('hex').substring(0, 10).toUpperCase();
   const step = (n, msg) => log(`[${n}/8] ${filename.substring(0, 50)}: ${msg}`);
 
   const result = {
@@ -126,7 +135,7 @@ async function processDocument(file, opts, batchId, outputDir, processedHashes) 
 
     // STEP 2: Download and rights check
     step(2, 'Download and rights check');
-    const buffer = await downloadFile(fileId, mimeType);
+    const buffer = await connector.downloadFile(fileId, mimeType, { tenant: opts.tenant });
 
     // STEP 3: Extract and clean text
     step(3, 'Text extraction and data cleaning');
@@ -165,6 +174,7 @@ async function processDocument(file, opts, batchId, outputDir, processedHashes) 
       programme: detection.programme,
       role: detection.role,
       phase: detection.phase,
+      institution: opts.institution,
     });
 
     result.api_usage = usage;
@@ -203,10 +213,12 @@ async function processDocument(file, opts, batchId, outputDir, processedHashes) 
     // STEP 8: Write output
     step(8, 'Writing output');
     if (!opts.dryRun) {
-      const outputFile = path.join(outputDir, `${fileId}.json`);
-      fs.writeFileSync(outputFile, JSON.stringify({
-        adei_record_id: `ADEI-${opts.institution.substring(0,2).toUpperCase()}-${fileId.substring(0,6)}`,
+      const outputFile = path.join(outputDir, `${fileSlug}.json`);
+      const record = {
+        adei_record_id: `ADEI-${opts.institution.substring(0,2).toUpperCase()}-${fileSlug}`,
+        tenant_id: opts.tenant,
         file_id: fileId,
+        s3_key: file.key || (opts.s3Key ? fileId : null),
         filename,
         batch_id: batchId,
         institution: opts.institution,
@@ -224,7 +236,17 @@ async function processDocument(file, opts, batchId, outputDir, processedHashes) 
         taxonomy_version: 'v2.1',
         scoring_logic_version: 'v0.2',
         status: 'PENDING_REVIEW',
-      }, null, 2));
+      };
+      fs.writeFileSync(outputFile, JSON.stringify(record, null, 2));
+
+      if (opts.s3Prefix || opts.s3Key) {
+        await connector.uploadJson({
+          tenant: opts.tenant,
+          key: `processed/records/${record.adei_record_id}.json`,
+          data: record,
+          metadata: { tenant: opts.tenant, record_id: record.adei_record_id },
+        });
+      }
     }
 
     result.status = fatimaQueue.length > 0 ? 'pending_fatima' : 'complete';
@@ -246,8 +268,8 @@ async function main() {
   console.log('  Evidence intelligence infrastructure for philanthropy');
   console.log('══════════════════════════════════════════════════════\n');
 
-  if (!opts.folderId && !opts.fileId) {
-    console.error('Error: provide --folder-id or --file-id');
+  if (!opts.folderId && !opts.fileId && !opts.s3Prefix && !opts.s3Key) {
+    console.error('Error: provide --s3-prefix, --s3-key, --folder-id, or --file-id');
     process.exit(1);
   }
 
@@ -262,19 +284,21 @@ async function main() {
 
   log(`Batch ID: ${batchId}`);
   log(`Institution: ${opts.institution}`);
+  log(`Tenant: ${opts.tenant}`);
   log(`Dry run: ${opts.dryRun}`);
   log(`Output: ${outputDir}\n`);
 
   // Get files to process
   let files = [];
-  if (opts.fileId) {
-    const { getFileMetadata } = require('./src/drive-connector');
-    const meta = await getFileMetadata(opts.fileId);
+  if (opts.s3Key || opts.fileId) {
+    const sourceId = opts.s3Key || opts.fileId;
+    const meta = await connector.getFileMetadata(sourceId, { tenant: opts.tenant });
     files = [meta];
     log(`Single file mode: ${meta.name}`);
   } else {
-    log(`Scanning folder: ${opts.folderId}`);
-    files = await listFolderFiles(opts.folderId);
+    const source = opts.s3Prefix || opts.folderId;
+    log(`Scanning ${opts.s3Prefix ? 'S3 prefix' : 'Drive folder'}: ${source}`);
+    files = await connector.listFolderFiles(source, { tenant: opts.tenant });
 
     // PRE-SCAN: Sort by processing order (parents first)
     const { detectProgramme: dp } = require('./src/programme-detector');

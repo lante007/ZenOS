@@ -10,7 +10,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const CLASSIFICATION_PROMPT = `You are the ADEI Evidence Intelligence classification engine for Auxeira. 
-You are classifying evaluation and research documents for Zenex Foundation, a South African education philanthropy.
+You are classifying evaluation and research documents for {{INSTITUTION}}, a client organisation using EvidenceOS.
 
 TAXONOMY v2.1 — Classify this document across these fields.
 Return ONLY valid JSON, no preamble, no markdown.
@@ -56,14 +56,17 @@ Return ONLY valid JSON, no preamble, no markdown.
 }
 
 CLASSIFICATION RULES (non-negotiable):
-1. Process evaluations NEVER receive a causal attribution.
-2. Null findings are classified at the SAME confidence as positive findings (Protocol Amendment 1).
-3. Cost data ONLY marked AUDITED if explicitly from audited financial statements.
-4. If omitted variable bias detected, note in methodology_description.
-5. Non-significant tested variables must be reported in key_findings (Protocol Amendment 5).
+PA1. Null findings are classified at the SAME confidence tier as positive findings.
+PA2. Process evaluations NEVER receive causal attribution.
+PA3. Cost data is AUDITED only when explicitly from audited financial records; otherwise use PROXY or ABSENT.
+PA4. Confidence tiers must be disaggregated by unit of analysis where the document supports this.
+PA5. Non-significant tested variables must be explicitly reported in key_findings.
+PA6. Decision relevance is judged by asymmetry: assumption-challenging findings outrank confirming findings.
+If omitted variable bias is detected, note it in methodology_description.
 
 DOCUMENT TO CLASSIFY:
 Filename: {{FILENAME}}
+Institution: {{INSTITUTION}}
 Programme (pre-detected): {{PROGRAMME}}
 Role (pre-detected): {{ROLE}}
 Phase (pre-detected): {{PHASE}}
@@ -74,13 +77,15 @@ DOCUMENT TEXT:
 /**
  * Classify a document using Claude Sonnet
  */
-async function classifyDocument({ filename, text, programme, role, phase }) {
+async function classifyDocument({ filename, text, programme, role, phase, institution }) {
+  const inputText = text.substring(0, 12000);
   const prompt = CLASSIFICATION_PROMPT
+    .replaceAll('{{INSTITUTION}}', institution || 'the client organisation')
     .replace('{{FILENAME}}', filename)
     .replace('{{PROGRAMME}}', programme || 'Unknown')
     .replace('{{ROLE}}', role || 'standalone')
     .replace('{{PHASE}}', phase || 'Unknown')
-    .replace('{{TEXT}}', text.substring(0, 12000));
+    .replace('{{TEXT}}', inputText);
 
   const startTime = Date.now();
 
@@ -109,6 +114,8 @@ async function classifyDocument({ filename, text, programme, role, phase }) {
       model: 'claude-sonnet-4-6',
       input_tokens: message.usage.input_tokens,
       output_tokens: message.usage.output_tokens,
+      input_words: prompt.split(/\s+/).filter(Boolean).length,
+      output_words: rawContent.split(/\s+/).filter(Boolean).length,
       latency_ms: latencyMs,
       bedrock_agent: false,
     },
@@ -128,7 +135,7 @@ async function generateKnowledgeProduct({ record, audience, programmeContext }) 
     'Sector Peer': 'Write a 200-word methodology note for sector researchers. Focus on the evaluation design, key findings, and limitations.',
   };
 
-  const prompt = `You are producing a knowledge product for Zenex Foundation.
+  const prompt = `You are producing a knowledge product for ${record.institution || 'the client organisation'}.
   
 Programme: ${record.programme_name}
 Document type: ${record.document_type}

@@ -7,19 +7,24 @@
     "start": "node server.js",
     "dev": "node server.js",
     "ingest": "node adei-ingest.js",
-    "test": "node adei-ingest.js --file-id 1LMWbo9vSgSRwEhpydUA72Wp3gXrkuxSc --verbose --dry-run"
+    "check": "node -c server.js && find api src -name '*.js' -maxdepth 4 -print | sort | xargs -n 1 node -c && node -c adei-ingest.js",
+    "test": "npm run check"
   },
   "dependencies": {
-    "googleapis": "^140.0.0",
-    "pdf-parse": "^1.1.1",
-    "mammoth": "^1.7.0",
     "@anthropic-ai/sdk": "^0.26.0",
     "@aws-sdk/client-bedrock-runtime": "^3.600.0",
-    "pg": "^8.12.0",
-    "dotenv": "^16.4.5",
+    "@aws-sdk/client-s3": "^3.1093.0",
+    "@aws-sdk/client-sqs": "^3.1093.0",
     "commander": "^12.1.0",
-    "express": "^4.19.0",
     "cors": "^2.8.5",
-    "multer": "^1.4.5"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.0",
+    "googleapis": "^140.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "jwks-rsa": "^4.1.0",
+    "mammoth": "^1.7.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.12.0"
   }
 }

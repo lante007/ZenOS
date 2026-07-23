@@ -141,8 +141,8 @@ else
   # Generate a secure password if not set
   if [ -z "$DB_PASSWORD" ]; then
     DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
-    echo "  ⚠ DB_PASSWORD not set. Generated: $DB_PASSWORD"
-    echo "  ⚠ Save this password — add it to Ona Secrets as DB_PASSWORD"
+    GENERATED_DB_PASSWORD="true"
+    echo "  ⚠ DB_PASSWORD not set. Generated a password and will store it in Secrets Manager."
   fi
 
   aws rds create-db-instance \
@@ -171,6 +171,19 @@ else
     --output text)
   
   echo "  ✓ RDS ready at: $RDS_ENDPOINT"
+fi
+
+if [ -n "$GENERATED_DB_PASSWORD" ]; then
+  aws secretsmanager create-secret \
+    --name "evidenceos/db/master-password" \
+    --description "EvidenceOS RDS master credentials" \
+    --secret-string "{\"username\":\"evidenceos_admin\",\"password\":\"${DB_PASSWORD}\",\"dbname\":\"evidenceos\",\"host\":\"${RDS_ENDPOINT}\"}" \
+    --region "$REGION" 2>/dev/null || \
+  aws secretsmanager update-secret \
+    --secret-id "evidenceos/db/master-password" \
+    --secret-string "{\"username\":\"evidenceos_admin\",\"password\":\"${DB_PASSWORD}\",\"dbname\":\"evidenceos\",\"host\":\"${RDS_ENDPOINT}\"}" \
+    --region "$REGION" >/dev/null
+  echo "  ✓ Generated DB credentials stored in Secrets Manager: evidenceos/db/master-password"
 fi
 
 # ── 4. COGNITO USER POOL — ZENEX ──────────────────────────────
@@ -245,20 +258,22 @@ COGNITO_CLIENT_ID=$(aws cognito-idp create-user-pool-client \
 
 echo "  ✓ Cognito app client: $COGNITO_CLIENT_ID"
 
-# Create Organisation Lead user for Zenex (Fatima)
-aws cognito-idp admin-create-user \
-  --user-pool-id "$COGNITO_POOL_ID" \
-  --username "fatima@zenex.org.za" \
-  --user-attributes \
-    Name=email,Value="fatima@zenex.org.za" \
-    Name=given_name,Value="Fatima" \
-    Name=family_name,Value="Adam" \
-    "Name=custom:role,Value=ORGANISATION_LEAD" \
-    "Name=custom:tenant_id,Value=zenex" \
-  --temporary-password "ZenexEvidence2026!" \
-  --message-action SUPPRESS 2>/dev/null || true
-
-echo "  ✓ Test user created: fatima@zenex.org.za / ZenexEvidence2026!"
+if [ -n "$ZENEX_TEMP_PASSWORD" ]; then
+  aws cognito-idp admin-create-user \
+    --user-pool-id "$COGNITO_POOL_ID" \
+    --username "fatima@zenex.org.za" \
+    --user-attributes \
+      Name=email,Value="fatima@zenex.org.za" \
+      Name=given_name,Value="Fatima" \
+      Name=family_name,Value="Adam" \
+      "Name=custom:role,Value=ORGANISATION_LEAD" \
+      "Name=custom:tenant_id,Value=zenex" \
+    --temporary-password "$ZENEX_TEMP_PASSWORD" \
+    --message-action SUPPRESS 2>/dev/null || true
+  echo "  ✓ Organisation Lead user created: fatima@zenex.org.za"
+else
+  echo "  ⚠ Skipping Cognito test user. Set ZENEX_TEMP_PASSWORD in secrets to create it."
+fi
 
 # ── 5. CLOUDFRONT — ZENEX FRONTEND ────────────────────────────
 echo "[5/8] Creating CloudFront distribution for zenex.auxeira.com..."
@@ -410,7 +425,8 @@ cat > "$OUTPUTS_FILE" << OUTPUTS
   "route53_hosted_zone": "${HOSTED_ZONE_ID:-NOT_FOUND}",
   "secrets_manager_key": "evidenceos/zenex/config",
   "test_user_email": "fatima@zenex.org.za",
-  "test_user_password": "ZenexEvidence2026!",
+  "test_user_created": "$([ -n "$ZENEX_TEMP_PASSWORD" ] && echo true || echo false)",
+  "db_secret_name": "evidenceos/db/master-password",
   "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 OUTPUTS

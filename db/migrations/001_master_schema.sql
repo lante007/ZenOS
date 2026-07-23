@@ -5,6 +5,7 @@
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE SCHEMA IF NOT EXISTS master;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS master.tenants (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
