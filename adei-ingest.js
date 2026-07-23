@@ -7,10 +7,8 @@
  * Usage:
  *   node adei-ingest.js --s3-prefix raw/documents/ # Full S3 batch
  *   node adei-ingest.js --s3-key <key>             # Single S3 document
- *   node adei-ingest.js --folder-id <id>           # Legacy Drive batch
- *   node adei-ingest.js --file-id <id>             # Legacy Drive document
- *   node adei-ingest.js --file-id <id> --dry-run  # No DB write
- *   node adei-ingest.js --folder-id <id> --verbose
+ *   node adei-ingest.js --s3-key <key> --dry-run   # No DB write
+ *   node adei-ingest.js --s3-prefix raw/documents/ --verbose
  *
  * Pipeline (8 steps, never stops mid-batch):
  *   1. Pre-scan and cluster mapping
@@ -25,6 +23,7 @@
 
 require('dotenv').config();
 const { program } = require('commander');
+const connector = require('./src/s3-connector');
 const { extractText, isSupportedType } = require('./src/text-extractor');
 const { detectProgramme } = require('./src/programme-detector');
 const { classifyDocument } = require('./src/claude-classifier');
@@ -37,8 +36,6 @@ program
   .option('--s3-prefix <prefix>', 'S3 prefix for batch processing')
   .option('--s3-key <key>', 'Single S3 object key')
   .option('--tenant <slug>', 'Tenant slug for S3 bucket selection', process.env.EVIDENCEOS_TENANT || 'zenex')
-  .option('--folder-id <id>', 'Legacy Google Drive folder ID for batch processing')
-  .option('--file-id <id>', 'Legacy single Google Drive file ID')
   .option('--institution <name>', 'Client institution name', 'Zenex Foundation')
   .option('--mode <mode>', 'single | batch', 'batch')
   .option('--dry-run', 'Classify without writing to database', false)
@@ -47,10 +44,6 @@ program
   .parse(process.argv);
 
 const opts = program.opts();
-const connector = (opts.s3Prefix || opts.s3Key)
-  ? require('./src/s3-connector')
-  : require('./src/drive-connector');
-
 const log = (msg, level = 'INFO') => {
   const ts = new Date().toISOString().substring(11, 19);
   if (level === 'DEBUG' && !opts.verbose) return;
@@ -268,8 +261,8 @@ async function main() {
   console.log('  Evidence intelligence infrastructure for philanthropy');
   console.log('══════════════════════════════════════════════════════\n');
 
-  if (!opts.folderId && !opts.fileId && !opts.s3Prefix && !opts.s3Key) {
-    console.error('Error: provide --s3-prefix, --s3-key, --folder-id, or --file-id');
+  if (!opts.s3Prefix && !opts.s3Key) {
+    console.error('Error: provide --s3-prefix or --s3-key');
     process.exit(1);
   }
 
@@ -290,15 +283,13 @@ async function main() {
 
   // Get files to process
   let files = [];
-  if (opts.s3Key || opts.fileId) {
-    const sourceId = opts.s3Key || opts.fileId;
-    const meta = await connector.getFileMetadata(sourceId, { tenant: opts.tenant });
+  if (opts.s3Key) {
+    const meta = await connector.getFileMetadata(opts.s3Key, { tenant: opts.tenant });
     files = [meta];
     log(`Single file mode: ${meta.name}`);
   } else {
-    const source = opts.s3Prefix || opts.folderId;
-    log(`Scanning ${opts.s3Prefix ? 'S3 prefix' : 'Drive folder'}: ${source}`);
-    files = await connector.listFolderFiles(source, { tenant: opts.tenant });
+    log(`Scanning S3 prefix: ${opts.s3Prefix}`);
+    files = await connector.listFolderFiles(opts.s3Prefix, { tenant: opts.tenant });
 
     // PRE-SCAN: Sort by processing order (parents first)
     const { detectProgramme: dp } = require('./src/programme-detector');
