@@ -7,6 +7,20 @@
 
 set -e  # Stop on any error
 
+if [ -f ".env" ]; then
+  eval "$(node <<'NODE'
+const fs = require('fs');
+const dotenv = require('dotenv');
+const parsed = dotenv.parse(fs.readFileSync('.env'));
+for (const [key, value] of Object.entries(parsed)) {
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+    console.log(`export ${key}=${JSON.stringify(value)}`);
+  }
+}
+NODE
+)"
+fi
+
 REGION="us-east-1"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 OUTPUTS_FILE="infra/outputs.json"
@@ -149,7 +163,7 @@ else
     --db-instance-identifier "evidenceos-db" \
     --db-instance-class "db.t3.micro" \
     --engine postgres \
-    --engine-version "15.4" \
+    --engine-version "15.18" \
     --master-username "evidenceos_admin" \
     --master-user-password "$DB_PASSWORD" \
     --allocated-storage 20 \

@@ -172,7 +172,7 @@ if [ "${DB_STATUS}" == "none" ] || [ "${DB_STATUS}" == "None" ]; then
     --db-instance-identifier "${DB_INSTANCE}" \
     --db-instance-class db.t3.medium \
     --engine postgres \
-    --engine-version "15.4" \
+    --engine-version "15.18" \
     --master-username "${DB_USER}" \
     --master-user-password "${DB_PASS}" \
     --allocated-storage 20 \
