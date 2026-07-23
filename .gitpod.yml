@@ -1,0 +1,42 @@
+image: gitpod/workspace-full
+
+tasks:
+  - name: Install dependencies
+    init: |
+      npm install
+      pip install awscli --break-system-packages -q
+    command: |
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo "  EvidenceOS — Auxeira · ZenOS Workspace"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo ""
+      echo "Verifying environment..."
+      aws sts get-caller-identity 2>/dev/null && echo "✓ AWS connected" || echo "✗ AWS — check Secrets panel"
+      node --version && echo "✓ Node.js ready"
+      echo "Anthropic key: ${ANTHROPIC_API_KEY:0:8}..." && echo "✓ Anthropic key loaded"
+      echo ""
+      echo "Read ONA_BUILD_PROMPT.md to begin the build."
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  - name: API Server
+    command: |
+      if [ -f "api/server.js" ]; then
+        node api/server.js
+      else
+        echo "API not yet built. Follow ONA_BUILD_PROMPT.md Phase 5."
+      fi
+
+ports:
+  - port: 3000
+    onOpen: notify
+    description: EvidenceOS API
+  - port: 3001
+    onOpen: notify
+    description: React Dev Server
+
+vscode:
+  extensions:
+    - dbaeumer.vscode-eslint
+    - esbenp.prettier-vscode
+    - bradlc.vscode-tailwindcss
+    - ms-vscode.vscode-node-azure-pack

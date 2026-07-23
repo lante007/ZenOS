@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvidenceOS | Auxeira  ·  Optima Trust</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0A1628;--navy-mid:#0F2040;--navy-light:#162A52;
+  --teal:#00B4D8;--teal-light:#E8F7FB;--teal-dim:rgba(0,180,216,0.15);
+  --green:#2D7D46;--green-light:#EAF5EE;
+  --amber:#D97706;--amber-light:#FEF3E2;
+  --red:#C53030;--red-light:#FFF5F5;
+  --white:#F5F2EE;--gray:#8A9BB5;--border:rgba(255,255,255,0.07);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--navy);color:var(--white);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6;min-height:100vh;}
+
+/* ── HEADER ─────────────────────────────────────────────── */
+header{background:var(--navy);border-bottom:1px solid rgba(0,180,216,0.2);padding:0 28px;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-mark{width:30px;height:30px;background:var(--teal);border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:700;color:var(--navy);}
+.logo-text{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:600;}
+.logo-sub{font-size:10px;color:var(--teal);letter-spacing:2px;text-transform:uppercase;}
+.org-badge{background:var(--navy-light);border:1px solid rgba(0,180,216,0.25);border-radius:20px;padding:4px 14px;font-size:12px;color:#B0D4E0;font-weight:500;}
+.demo-chip{background:rgba(212,119,6,0.15);border:1px solid rgba(212,119,6,0.3);border-radius:20px;padding:3px 12px;font-size:11px;color:#FBBF24;letter-spacing:0.5px;}
+
+/* ── LAYOUT ─────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 58px);}
+.sidebar{background:var(--navy-mid);border-right:1px solid var(--border);padding:20px 0;overflow-y:auto;}
+.sidebar-label{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:2px;font-weight:600;padding:0 20px;margin-bottom:6px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 20px;cursor:pointer;color:var(--gray);font-size:13px;transition:all 0.15s;border-left:2px solid transparent;}
+.nav-item:hover{color:var(--white);background:rgba(255,255,255,0.04);}
+.nav-item.active{color:var(--teal);background:rgba(0,180,216,0.08);border-left-color:var(--teal);}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.nav-section{padding:0;margin-bottom:20px;}
+
+/* Evidence health card */
+.health-card{margin:16px;background:linear-gradient(135deg,rgba(0,180,216,0.12),rgba(0,180,216,0.04));border:1px solid rgba(0,180,216,0.2);border-radius:10px;padding:14px;}
+.health-label{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--teal);margin-bottom:6px;font-weight:600;}
+.health-score{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:700;color:var(--teal);line-height:1;margin-bottom:3px;}
+.health-grade{font-size:11px;color:#B0D4E0;margin-bottom:10px;}
+.hb-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+.hb-label{font-size:10px;color:var(--gray);width:72px;flex-shrink:0;}
+.hb-track{flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;}
+.hb-fill{height:100%;border-radius:2px;background:var(--teal);}
+.hb-fill.gap{background:var(--red);}
+.hb-pct{font-size:10px;color:var(--gray);width:28px;text-align:right;}
+
+/* ── MAIN ───────────────────────────────────────────────── */
+.main{padding:28px;overflow-y:auto;max-height:calc(100vh - 58px);}
+.screen{display:none;}.screen.active{display:block;}
+.page-title{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:var(--white);margin-bottom:3px;}
+.page-sub{font-size:12px;color:var(--gray);margin-bottom:22px;}
+
+/* Cards */
+.card{background:var(--navy-mid);border:1px solid var(--border);border-radius:10px;padding:22px;margin-bottom:14px;}
+.card-title{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--white);margin-bottom:3px;}
+.card-meta{font-size:11px;color:var(--gray);}
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
+
+/* Tags */
+.tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:500;margin:2px;}
+.tag-teal{background:rgba(0,180,216,0.12);color:var(--teal);border:1px solid rgba(0,180,216,0.25);}
+.tag-green{background:var(--green-light);color:var(--green);border:1px solid rgba(45,125,70,0.25);}
+.tag-amber{background:var(--amber-light);color:var(--amber);border:1px solid rgba(212,119,6,0.25);}
+.tag-red{background:var(--red-light);color:var(--red);border:1px solid rgba(192,80,48,0.25);}
+.tag-gray{background:rgba(138,155,181,0.1);color:var(--gray);border:1px solid rgba(138,155,181,0.2);}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all 0.2s;}
+.btn-teal{background:var(--teal);color:var(--navy);}
+.btn-teal:hover{background:#00C8F0;}
+.btn-outline{background:transparent;color:var(--teal);border:1px solid rgba(0,180,216,0.35);}
+.btn-outline:hover{background:rgba(0,180,216,0.08);}
+.btn-ghost{background:rgba(255,255,255,0.05);color:var(--white);}
+.btn-ghost:hover{background:rgba(255,255,255,0.09);}
+
+/* Grid */
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+.stat-card{background:var(--navy-mid);border:1px solid var(--border);border-radius:10px;padding:18px;}
+.stat-value{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:700;color:var(--teal);line-height:1;margin-bottom:3px;}
+.stat-label{font-size:11px;color:var(--gray);}
+.stat-change{font-size:10px;color:#6EC98A;margin-top:3px;}
+.stat-change.bad{color:#F87171;}
+
+/* Evidence document items */
+.doc-item{display:flex;align-items:flex-start;gap:14px;padding:14px;background:var(--navy-mid);border:1px solid var(--border);border-radius:8px;margin-bottom:9px;cursor:pointer;transition:all 0.15s;}
+.doc-item:hover{border-color:rgba(0,180,216,0.3);}
+.doc-item.selected{border-color:var(--teal);background:rgba(0,180,216,0.07);}
+.doc-icon{width:38px;height:46px;background:rgba(0,180,216,0.12);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.doc-info{flex:1;}
+.doc-title{font-size:13px;font-weight:600;color:var(--white);margin-bottom:3px;}
+.doc-meta{font-size:11px;color:var(--gray);}
+.doc-summary{font-size:11px;color:var(--gray);line-height:1.5;margin-top:7px;padding-top:7px;border-top:1px solid var(--border);}
+.checkbox{width:17px;height:17px;border:1.5px solid rgba(0,180,216,0.35);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:all 0.15s;margin-top:2px;}
+.checkbox.checked{background:var(--teal);border-color:var(--teal);color:var(--navy);font-size:10px;font-weight:700;}
+
+/* Confidence badge */
+.conf-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;}
+.conf-t1{background:rgba(45,125,70,0.15);color:#6EC98A;border:1px solid rgba(45,125,70,0.25);}
+.conf-t2{background:rgba(212,119,6,0.15);color:#FBBF24;border:1px solid rgba(212,119,6,0.25);}
+.conf-t3{background:rgba(192,80,48,0.12);color:#F87171;border:1px solid rgba(192,80,48,0.2);}
+
+/* Alert / nudge */
+.alert{background:linear-gradient(135deg,rgba(0,180,216,0.08),rgba(0,180,216,0.03));border:1px solid rgba(0,180,216,0.2);border-radius:8px;padding:14px 16px;margin-bottom:14px;}
+.alert-label{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--teal);font-weight:600;margin-bottom:4px;}
+.nudge-row{display:flex;gap:12px;align-items:flex-start;padding:10px;background:rgba(0,0,0,0.15);border-radius:7px;margin-bottom:7px;border:1px solid var(--border);}
+.nudge-row.active{border-color:rgba(0,180,216,0.25);}
+
+/* Synthesis */
+.synth-label{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--teal);font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+.synth-label::after{content:'';flex:1;height:1px;background:rgba(0,180,216,0.15);}
+.finding{display:flex;gap:10px;padding:11px;background:rgba(255,255,255,0.03);border-left:3px solid var(--teal);border-radius:0 6px 6px 0;margin-bottom:7px;font-size:12px;color:var(--white);line-height:1.55;}
+.gap-row{display:flex;gap:10px;padding:11px;background:rgba(192,80,48,0.07);border-left:3px solid var(--red);border-radius:0 6px 6px 0;margin-bottom:7px;font-size:12px;color:#FFB3B3;line-height:1.55;}
+
+/* Audience tabs */
+.aud-tabs{display:flex;gap:7px;margin-bottom:18px;flex-wrap:wrap;}
+.aud-tab{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.1);color:var(--gray);background:transparent;transition:all 0.2s;}
+.aud-tab:hover{border-color:rgba(0,180,216,0.3);color:var(--teal);}
+.aud-tab.active{background:var(--teal);color:var(--navy);border-color:var(--teal);}
+
+/* Knowledge product */
+.kp{background:var(--navy);border:1px solid var(--border);border-radius:10px;padding:22px;display:none;animation:fadeIn 0.35s ease;}
+.kp.visible{display:block;}
+.kp-org{font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:2px;font-weight:600;margin-bottom:3px;}
+.kp-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:var(--white);margin-bottom:3px;}
+.kp-aud{font-size:11px;color:var(--gray);margin-bottom:18px;}
+.kp-section-title{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--teal);font-weight:600;margin-bottom:7px;}
+.kp-body{font-size:12px;color:var(--white);line-height:1.7;}
+.kp-body p{margin-bottom:9px;}
+.stat-row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0;}
+.kp-stat{background:rgba(0,180,216,0.07);border:1px solid rgba(0,180,216,0.18);border-radius:7px;padding:12px;text-align:center;}
+.kp-stat-val{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--teal);line-height:1;margin-bottom:3px;}
+.kp-stat-lbl{font-size:10px;color:var(--gray);}
+.source-box{background:rgba(0,180,216,0.05);border:1px solid rgba(0,180,216,0.15);border-radius:6px;padding:10px 12px;font-size:11px;color:var(--gray);margin-top:14px;}
+.export-bar{background:rgba(0,180,216,0.04);border-top:1px solid rgba(0,180,216,0.12);padding:12px 22px;margin:16px -22px -22px;border-radius:0 0 10px 10px;display:flex;gap:10px;justify-content:flex-end;}
+
+/* Provenance */
+.prov-chain{display:flex;flex-direction:column;}
+.prov-step{display:flex;gap:14px;position:relative;}
+.prov-step::before{content:'';position:absolute;left:14px;top:30px;bottom:-1px;width:1.5px;background:rgba(0,180,216,0.18);}
+.prov-step:last-child::before{display:none;}
+.prov-dot{width:29px;height:29px;border-radius:50%;background:rgba(0,180,216,0.12);border:1.5px solid var(--teal);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--teal);font-weight:600;flex-shrink:0;z-index:1;}
+.prov-content{padding:3px 0 22px;}
+.prov-title{font-size:12px;font-weight:600;color:var(--white);margin-bottom:3px;}
+.prov-detail{font-size:11px;color:var(--gray);line-height:1.55;}
+.prov-source{background:rgba(45,125,70,0.08);border:1px solid rgba(45,125,70,0.22);border-radius:5px;padding:10px;margin-top:7px;font-size:11px;color:#A8D5B5;line-height:1.5;}
+
+/* Portfolio optimizer */
+.slider-wrap{margin-bottom:24px;}
+.slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.slider-title{font-size:13px;font-weight:600;color:var(--teal);}
+.slider-amount{background:rgba(0,180,216,0.12);border-radius:20px;padding:3px 12px;font-weight:600;color:var(--teal);font-size:13px;}
+input[type=range]{cursor:pointer;-webkit-appearance:none;width:100%;height:4px;background:rgba(0,180,216,0.18);border-radius:2px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--teal);border:2px solid var(--navy);cursor:pointer;box-shadow:0 0 0 3px rgba(0,180,216,0.18);}
+.slider-ticks{display:flex;justify-content:space-between;font-size:9px;color:var(--gray);margin-top:3px;}
+.slider-note{font-size:11px;color:var(--gray);margin-top:5px;}
+
+.counterfactual{background:rgba(192,80,48,0.07);border:1px solid rgba(192,80,48,0.22);border-radius:8px;padding:14px 16px;margin-top:14px;}
+.cf-label{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#F87171;font-weight:600;margin-bottom:6px;}
+
+/* Animations */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.loading{display:none;align-items:center;gap:10px;padding:18px;font-size:13px;color:var(--teal);}
+.loading.visible{display:flex;}
+.spinner{width:18px;height:18px;border:2px solid rgba(0,180,216,0.18);border-top-color:var(--teal);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.synth-out{display:none;animation:fadeIn 0.4s ease;}
+.synth-out.visible{display:block;}
+
+.divider{height:1px;background:var(--border);margin:18px 0;}
+.demo-banner{background:linear-gradient(90deg,rgba(0,180,216,0.09),rgba(0,180,216,0.03));border:1px solid rgba(0,180,216,0.18);border-radius:7px;padding:10px 14px;font-size:11px;color:#B0D4E0;margin-bottom:20px;display:flex;align-items:center;gap:9px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">E</div>
+    <div>
+      <div class="logo-text">EvidenceOS</div>
+      <div class="logo-sub">by Auxeira</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="org-badge">Optima Trust · Foundation Phase Intelligence Lab</div>
+    <div class="demo-chip">▶ LIVE DEMO</div>
+  </div>
+</header>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="nav-section" style="margin-top:8px;">
+      <div class="sidebar-label">Evidence Intelligence</div>
+      <div class="nav-item active" onclick="show('dashboard')"><span class="nav-icon">⬛</span> Learning Dashboard</div>
+      <div class="nav-item" onclick="show('library')"><span class="nav-icon">📁</span> Evidence Library</div>
+      <div class="nav-item" onclick="show('synthesis')"><span class="nav-icon">⚡</span> Strategic Synthesis</div>
+      <div class="nav-item" onclick="show('translation')"><span class="nav-icon">📄</span> Evidence Translation</div>
+      <div class="nav-item" onclick="show('provenance')"><span class="nav-icon">🔍</span> Provenance Record</div>
+      <div class="nav-item" onclick="show('optimizer')"><span class="nav-icon">📈</span> Portfolio Optimizer</div>
+    </div>
+
+    <div class="health-card">
+      <div class="health-label">Evidence Health Score</div>
+      <div class="health-score">68</div>
+      <div class="health-grade">B · Strong core, translation gaps</div>
+      <div>
+        <div class="hb-row"><div class="hb-label">FP Literacy</div><div class="hb-track"><div class="hb-fill" style="width:82%"></div></div><div class="hb-pct">82%</div></div>
+        <div class="hb-row"><div class="hb-label">Teacher Dev</div><div class="hb-track"><div class="hb-fill" style="width:74%"></div></div><div class="hb-pct">74%</div></div>
+        <div class="hb-row"><div class="hb-label">HOD briefs</div><div class="hb-track"><div class="hb-fill gap" style="width:28%"></div></div><div class="hb-pct" style="color:#F87171">28%</div></div>
+        <div class="hb-row"><div class="hb-label">Trustee EROI</div><div class="hb-track"><div class="hb-fill gap" style="width:18%"></div></div><div class="hb-pct" style="color:#F87171">18%</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ── SCREEN 1: DASHBOARD ─────────────────────────── -->
+    <div class="screen active" id="sc-dashboard">
+      <div class="demo-banner">📋 Optima Trust · Foundation Phase Evidence Portfolio · Classified documents: 1 (demo) · Portfolio build begins: Phase 1</div>
+      <div class="page-title">Good afternoon, Optima Trust</div>
+      <div class="page-sub">Your evidence intelligence infrastructure is active · 1 classified document · 3 audiences not yet reached</div>
+
+      <div class="grid-3">
+        <div class="stat-card">
+          <div class="stat-value">1</div>
+          <div class="stat-label">Document classified (demo)</div>
+          <div class="stat-change">EGRS coaching RCT · Tier 1 confidence</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">68</div>
+          <div class="stat-label">Evidence Health Score</div>
+          <div class="stat-change bad">HOD translation gap identified</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">R847</div>
+          <div class="stat-label">Per additional year of learning</div>
+          <div class="stat-change">EGRS primary South African proxy</div>
+        </div>
+      </div>
+
+      <div class="alert">
+        <div class="alert-label">🔔 Intelligence alert  ·  July 2026</div>
+        <p style="font-size:12px;color:var(--white);line-height:1.6;margin-bottom:12px;">The EGRS coaching evidence directly addresses the government-philanthropy gap Optima has identified as a strategic priority. <strong style="color:var(--teal)">Three audiences have not received a brief they can act on.</strong> The evidence window aligns with the August 2026 MTEF cycle.</p>
+        <button class="btn btn-teal" onclick="show('translation')" style="font-size:12px;padding:7px 16px;">Translate EGRS for priority audiences</button>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">The Learning Flywheel is active</div>
+            <div class="card-meta">EvidenceOS surfaces the right intelligence to the right person at the right moment</div>
+          </div>
+          <span class="tag tag-teal">Live</span>
+        </div>
+        <div class="nudge-row active">
+          <span style="font-size:17px;">🎯</span>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--teal);margin-bottom:3px;">Trustee reporting gap</div>
+            <div style="font-size:12px;color:var(--white);line-height:1.5;">"Optima's coaching evidence produces an EROI of 4.2× but no trustee brief frames this. The Finance, Investment and Risk Committee has not received a quantified return narrative. This is a governance gap."</div>
+            <div style="font-size:10px;color:var(--gray);margin-top:3px;">Evidence intelligence alert · 14 July 2026</div>
+          </div>
+        </div>
+        <div class="nudge-row">
+          <span style="font-size:17px;">📊</span>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:3px;">DBE evidence window open</div>
+            <div style="font-size:12px;color:var(--white);line-height:1.5;">"The EGRS coaching finding (0.4 standard deviations at 18 months) has not been translated for provincial HODs in Gauteng and KZN despite FUNRS confirming those provinces as highest-need."</div>
+            <div style="font-size:10px;color:var(--gray);margin-top:3px;">Audience gap · Provincial HOD brief pending</div>
+          </div>
+        </div>
+        <div class="nudge-row">
+          <span style="font-size:17px;">💡</span>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:3px;">Commissioning opportunity</div>
+            <div style="font-size:12px;color:var(--white);line-height:1.5;">"No Optima-commissioned evaluation has measured implementation fidelity as a distinct variable. Future TORs should require this. The EGRS showed it explains 67% of outcome variance."</div>
+            <div style="font-size:10px;color:var(--gray);margin-top:3px;">Evidence gap · Commissioning guidance triggered</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px;">Navigate</div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="show('library')">📁 Evidence Library</button>
+          <button class="btn btn-ghost" onclick="show('synthesis')">⚡ Strategic Synthesis</button>
+          <button class="btn btn-ghost" onclick="show('translation')">📄 Translate for audiences</button>
+          <button class="btn btn-ghost" onclick="show('optimizer')">📈 Portfolio Optimizer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCREEN 2: EVIDENCE LIBRARY ─────────────────── -->
+    <div class="screen" id="sc-library">
+      <div class="page-title">Evidence Library</div>
+      <div class="page-sub">1 classified document · Phase 1 will classify your full Foundation Phase portfolio</div>
+
+      <div class="doc-item selected" onclick="toggleDoc(this)">
+        <div class="doc-icon">📊</div>
+        <div class="doc-info">
+          <div class="doc-title">Early Grade Reading Study (EGRS)  ·  Coaching Intervention Impact Evaluation</div>
+          <div class="doc-meta">DBE · Wits University · HSRC · Georgetown · UNICEF-SA · 2015 to 2021 · 89 pages</div>
+          <div style="margin-top:7px;">
+            <span class="tag tag-teal">Foundation Phase</span>
+            <span class="tag tag-teal">Teacher coaching</span>
+            <span class="tag tag-green">RCT · Tier 1</span>
+            <span class="tag tag-teal">Setswana HL</span>
+            <span class="tag tag-teal">North West</span>
+            <span class="tag tag-amber">DBE embedded</span>
+          </div>
+          <div class="doc-summary">
+            <strong style="color:var(--teal);">EGRS Classification (EQS 4.2 · Tier 1 · High confidence):</strong>
+            South Africa's largest educational RCT. 230 schools, North West Province. Three-arm design: centralised training only; training + on-site coaching; parent intervention. Coaching arm produced 0.4 standard deviation improvement in Setswana oral reading fluency at 18 months. Cost per additional year of learning: R847 (RESEP 2020). DBE subsequently embedded the coaching model in the national Early Grade Reading Programme (EGRP). Largest direct attribution case study available in South African Foundation Phase evidence.
+          </div>
+        </div>
+        <div class="checkbox checked" id="egrs-check">✓</div>
+      </div>
+
+      <div class="doc-item" style="opacity:0.45;cursor:default;">
+        <div class="doc-icon" style="opacity:0.5;">📋</div>
+        <div class="doc-info">
+          <div class="doc-title" style="color:var(--gray);">Optima Foundation Phase portfolio  ·  awaiting Phase 1 classification</div>
+          <div class="doc-meta">All Optima-commissioned evaluations · 2008 to 2026 · Full archive</div>
+          <div style="margin-top:7px;"><span class="tag tag-gray">Pending classification</span><span class="tag tag-gray">Phase 1 begins on engagement</span></div>
+        </div>
+        <div class="checkbox"></div>
+      </div>
+
+      <div style="margin-top:18px;display:flex;gap:9px;">
+        <button class="btn btn-teal" onclick="show('synthesis')">⚡ Synthesise EGRS evidence</button>
+        <button class="btn btn-ghost">+ Upload document</button>
+      </div>
+    </div>
+
+    <!-- ── SCREEN 3: SYNTHESIS ─────────────────────────── -->
+    <div class="screen" id="sc-synthesis">
+      <div class="page-title">Strategic Synthesis</div>
+      <div class="page-sub">Cross-document patterns · gap analysis · strategic leverage points</div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:10px;">Document selected</div>
+        <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;">
+          <span class="tag tag-teal">📊 EGRS Coaching Impact Evaluation</span>
+          <div class="conf-badge conf-t1">● Tier 1 · EQS 4.2</div>
+          <button class="btn btn-ghost" style="margin-left:auto;font-size:11px;" onclick="show('library')">Change</button>
+        </div>
+      </div>
+
+      <button class="btn btn-teal" id="synth-btn" onclick="runSynth()" style="margin-bottom:18px;font-size:13px;padding:11px 26px;">⚡ Extract strategic intelligence</button>
+      <div class="loading" id="synth-loading"><div class="spinner"></div>EvidenceOS is classifying across all 55 fields  ·  extracting patterns, gaps, and strategic leverage points...</div>
+
+      <div class="synth-out" id="synth-result">
+        <div class="card">
+          <div style="margin-bottom:18px;">
+            <div class="synth-label">Key findings (confidence-rated)</div>
+            <div class="finding">
+              <span style="color:var(--teal);font-size:16px;flex-shrink:0;">●</span>
+              <div><strong>Coaching outperforms training alone by 0.4 standard deviations at 18 months.</strong> Teachers receiving on-site coaching showed significantly greater gains in Setswana oral reading fluency compared to centralised training only. Effect persists at Grade 4 follow-up (Wave 4, 2018). <span class="conf-badge conf-t1" style="margin-left:4px;">High confidence · RCT</span></div>
+            </div>
+            <div class="finding">
+              <span style="color:var(--teal);font-size:16px;flex-shrink:0;">●</span>
+              <div><strong>Implementation fidelity explains 67% of outcome variance.</strong> Schools where coaches delivered more than 8 sessions per term showed 2.3× the reading gains of schools with fewer sessions. Dosage is the critical variable  ·  not the coaching model itself. <span class="conf-badge conf-t1" style="margin-left:4px;">High confidence · RCT</span></div>
+            </div>
+            <div class="finding">
+              <span style="color:var(--teal);font-size:16px;flex-shrink:0;">●</span>
+              <div><strong>Cost per additional year of learning: R847.</strong> RESEP (Stellenbosch, 2020) calculated this as the most cost-effective Foundation Phase literacy intervention in the South African evidence base. Coaching model was subsequently embedded in the national EGRP. <span class="conf-badge conf-t2" style="margin-left:4px;">Moderate-High · SROI calculation</span></div>
+            </div>
+            <div class="finding">
+              <span style="color:var(--teal);font-size:16px;flex-shrink:0;">●</span>
+              <div><strong>Large classes benefit most.</strong> Coaching had largest impact in classes of 38 to 45 learners. In smaller classes, teachers may already be managing effectively without structured support. The implication: coaching resources should target high-density classrooms first. <span class="conf-badge conf-t2" style="margin-left:4px;">Moderate confidence · subgroup analysis</span></div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px;">
+            <div class="synth-label">Evidence gaps  ·  what this study did not measure</div>
+            <div class="gap-row">
+              <span style="font-size:15px;flex-shrink:0;">⚠</span>
+              <div>No province-level disaggregation provided. FUNRS 2025 confirms Gauteng and KZN as highest-need provinces. The EGRS North West findings cannot be directly transferred without a provincial adaptation study.</div>
+            </div>
+            <div class="gap-row">
+              <span style="font-size:15px;flex-shrink:0;">⚠</span>
+              <div>No cost-per-beneficiary data from audited financials. The R847 RESEP proxy is a derived estimate. A direct Optima-commissioned cost study would make the SROI calculation fully defensible for trustee reporting.</div>
+            </div>
+            <div class="gap-row">
+              <span style="font-size:15px;flex-shrink:0;">⚠</span>
+              <div>Mother-tongue instruction transition at Grade 4 was not measured. The January 2026 lekgotla has made this the national policy priority. This is the most significant evidence gap relative to the current policy moment.</div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:18px;">
+            <div class="synth-label">Strategic leverage points for Optima</div>
+            <div class="finding">
+              <span style="color:var(--amber);font-size:16px;flex-shrink:0;">★</span>
+              <div><strong>Highest leverage:</strong> Commission a coaching fidelity study in Gauteng or KZN using the EGRS protocol. This would be the first provincial replication study and would position Optima as the funder that connected the national evidence to the highest-need provinces.</div>
+            </div>
+            <div class="finding">
+              <span style="color:var(--amber);font-size:16px;flex-shrink:0;">★</span>
+              <div><strong>Policy window:</strong> The MTEF cycle opens in August. A brief translating the EGRS coaching finding for provincial HODs  ·  framed around the FUNRS district data  ·  arrives at exactly the right moment. Optima currently has no such product.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:9px;flex-wrap:wrap;">
+            <button class="btn btn-teal" onclick="show('translation')">Translate for audience</button>
+            <button class="btn btn-outline" onclick="show('provenance')">🔍 View provenance</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCREEN 4: EVIDENCE TRANSLATION ─────────────── -->
+    <div class="screen" id="sc-translation">
+      <div class="page-title">Evidence Translation Studio</div>
+      <div class="page-sub">Select your audience  ·  EvidenceOS translates the same evidence in their language</div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title" style="margin-bottom:3px;">Source: EGRS Coaching Impact Evaluation</div>
+        <div class="card-meta">Select an audience to translate the evidence for their decision context</div>
+      </div>
+
+      <div class="aud-tabs">
+        <button class="aud-tab active" onclick="showKP('hod',this)">Provincial HOD</button>
+        <button class="aud-tab" onclick="showKP('trustee',this)">Optima Trustee</button>
+        <button class="aud-tab" onclick="showKP('dbe',this)">DBE National</button>
+      </div>
+
+      <!-- HOD brief -->
+      <div class="kp visible" id="kp-hod">
+        <div class="kp-org">Optima Trust · Strategic Brief · Provincial Use Only</div>
+        <div class="kp-title">What the EGRS coaching evidence means for your province  ·  and what to do now</div>
+        <div class="kp-aud">Audience: Heads of Department · Gauteng · KwaZulu-Natal · Eastern Cape</div>
+        <div class="stat-row-3">
+          <div class="kp-stat"><div class="kp-stat-val">0.4 SD</div><div class="kp-stat-lbl">Reading gain from coaching at 18 months (EGRS RCT)</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">67%</div><div class="kp-stat-lbl">Of reading outcomes explained by coaching fidelity</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">R847</div><div class="kp-stat-lbl">Per additional year of learning generated (RESEP 2020)</div></div>
+        </div>
+        <div class="kp-section-title">What this means for your province</div>
+        <div class="kp-body">
+          <p>The EGRS is South Africa's largest randomised educational trial. Its finding is clear: teachers who receive structured on-site coaching, not centralised training alone, produce significantly better reading outcomes for Foundation Phase learners in home language. The coaching model has since been embedded in the national Early Grade Reading Programme.</p>
+          <p>FUNRS 2025 confirms that Gauteng and KZN face the most acute Foundation Phase reading gaps at district level. The EGRS coaching evidence provides the intervention model. The question for your province is how quickly that model can be implemented with fidelity in your highest-need districts.</p>
+        </div>
+        <div class="kp-section-title" style="margin-top:14px;">Three actions for district curriculum teams this term</div>
+        <div class="kp-body">
+          <p><strong style="color:var(--teal);">1. Coaching audit.</strong> Map which Foundation Phase teachers in your highest-FUNRS-risk districts are currently receiving on-site coaching. The EGRS shows fidelity  ·  more than 8 coaching sessions per term  ·  is the critical variable. Without it, the model does not produce the gains.</p>
+          <p><strong style="color:var(--teal);">2. Department Head role review.</strong> The EGRP tested Department Heads as internal coaches. Where subject advisor ratios are too low for external coaching, DHs are the scalable model. Redirect their time accordingly before the third term begins.</p>
+          <p><strong style="color:var(--teal);">3. Request EGRS district data.</strong> Contact the DBE EGRS project team for the Wave 4 Grade 4 follow-up data. It shows whether the coaching gains persist into the Intermediate Phase  ·  the answer is yes, and it strengthens the case for provincial budget reallocation.</p>
+        </div>
+        <div class="source-box"><strong style="color:var(--teal);">Source:</strong> EGRS I and II (DBE, Wits, HSRC, Georgetown, 2015 to 2021) · RESEP SROI analysis (Stellenbosch, 2020) · FUNRS Technical Report (November 2025) · EGRP Endline Evaluation (DBE, July 2024). Produced by Auxeira EvidenceOS for Optima Trust. Confidence: Tier 1 (High). Currency: Current (2024 to 2028 policy cycle).</div>
+        <div class="export-bar">
+          <button class="btn btn-outline" style="padding:6px 13px;">📧 Email to HOD (Gauteng)</button>
+          <button class="btn btn-teal" style="padding:6px 13px;">📄 Export as PDF</button>
+        </div>
+      </div>
+
+      <!-- Trustee brief -->
+      <div class="kp" id="kp-trustee">
+        <div class="kp-org">Optima Trust · Trustee Reporting · Finance, Investment and Risk Committee</div>
+        <div class="kp-title">Evidence Return on Investment: what Optima's coaching investment has produced</div>
+        <div class="kp-aud">Audience: Optima Board of Trustees · Anglo American Endowment Accountability</div>
+        <div class="stat-row-3">
+          <div class="kp-stat"><div class="kp-stat-val">R847</div><div class="kp-stat-lbl">Cost per additional year of learning  ·  primary SA benchmark</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">4.2×</div><div class="kp-stat-lbl">Illustrative EROI on coaching-aligned investment</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">Tier 1</div><div class="kp-stat-lbl">Highest confidence rating  ·  RCT design with DBE adoption</div></div>
+        </div>
+        <div class="kp-section-title">The return on Optima's evidence investment</div>
+        <div class="kp-body">
+          <p>The EGRS is the most rigorous evaluation in South African Foundation Phase education. Its coaching finding  ·  0.4 standard deviations at 18 months, R847 per additional year of learning  ·  provides the primary benchmark for calculating the social return on Optima's Foundation Phase investments.</p>
+          <p>Where Optima has funded coaching-aligned programmes, the EGRS evidence provides a Tier 1 defensible proxy for the return generated. The coaching model has been adopted nationally, which means Optima's investments in this approach have contributed to systemic change  ·  a Decision Capital gain that goes beyond the direct programme outcomes.</p>
+          <p>The EROI figure of 4.2× in this brief is illustrative, derived from the EGRS cost-effectiveness calculation applied to estimated Optima investment. Phase 1 of the EvidenceOS engagement will calculate the precise figure using Optima's audited financial data and the full classified portfolio.</p>
+        </div>
+        <div class="kp-section-title" style="margin-top:14px;">What the board can now say with confidence</div>
+        <div class="kp-body">
+          <p><strong style="color:var(--teal);">Confidence statement:</strong> "Optima's Foundation Phase investments in teacher coaching are aligned with the highest-quality evidence in the South African education system. The EGRS demonstrates that the approach generates R847 in measurable learning value per rand invested in coaching. Our portfolio is evidence-grounded, our approach is government-aligned, and our return is quantifiable."</p>
+        </div>
+        <div class="source-box"><strong style="color:var(--teal);">Source:</strong> EGRS RCT (DBE, 2015 to 2021) · RESEP cost-effectiveness analysis (Stellenbosch, 2020) · EGRP national adoption (DBE, 2021). EROI figure is illustrative. Precise calculation requires Phase 1 classification of full Optima portfolio against audited financial records. Produced by Auxeira EvidenceOS. Confidence: Tier 1 (RCT source). Currency: Current.</div>
+        <div class="export-bar">
+          <button class="btn btn-outline" style="padding:6px 13px;">📧 Share with trustees</button>
+          <button class="btn btn-teal" style="padding:6px 13px;">📄 Export as PDF</button>
+        </div>
+      </div>
+
+      <!-- DBE brief -->
+      <div class="kp" id="kp-dbe">
+        <div class="kp-org">Optima Trust · Policy Brief · National and Provincial Government</div>
+        <div class="kp-title">Coaching at scale: what the EGRS evidence tells DBE about the fastest path to the 2030 reading target</div>
+        <div class="kp-aud">Audience: DBE National · Provincial Curriculum Directors · District Management Teams</div>
+        <div class="stat-row-3">
+          <div class="kp-stat"><div class="kp-stat-val">230</div><div class="kp-stat-lbl">Schools in the RCT  ·  largest educational trial in SA history</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">0.4 SD</div><div class="kp-stat-lbl">Reading gain  ·  coaching vs training-only at 18 months</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">2021</div><div class="kp-stat-lbl">DBE embedded coaching model in national EGRP</div></div>
+        </div>
+        <div class="kp-section-title">The policy case for coaching at scale</div>
+        <div class="kp-body">
+          <p>The EGRS settled the central policy question in Foundation Phase literacy: coaching teachers in their classrooms produces significantly better reading outcomes than centralised training alone. This is not a theoretical finding. It is an RCT result from 230 schools, replicated across multiple cohorts, with a cost-effectiveness calculation that makes it the most defensible intervention in the South African evidence base.</p>
+          <p>The DBE recognised this by embedding the coaching model in the EGRP in 2021. The question for the 2026 policy cycle is how to scale fidelity, not whether the model works. Schools receiving fewer than 8 coaching sessions per term produce outcomes no better than the training-only control group. The intervention only works when it is delivered as designed.</p>
+        </div>
+        <div class="kp-section-title" style="margin-top:14px;">The January 2026 lekgotla gap</div>
+        <div class="kp-body">
+          <p>President Ramaphosa's lekgotla commitment to mother-tongue-based bilingual education creates a specific evidence gap: the EGRS measured Setswana home language outcomes, not the Grade 3 to 4 transition to English. The coaching evidence holds, but a dedicated EFAL transition coaching study is now the single most important evidence gap in the national literacy agenda. Optima is positioned to commission it.</p>
+        </div>
+        <div class="source-box"><strong style="color:var(--teal);">Source:</strong> EGRS I RCT (DBE, Wits, HSRC, Georgetown, 2015 to 2021) · EGRP Endline Evaluation Technical Report (DBE, July 2024) · FUNRS (November 2025) · January 2026 Basic Education Sector Lekgotla communiqué. Produced by Auxeira EvidenceOS for Optima Trust. Confidence: Tier 1. Currency: Current.</div>
+        <div class="export-bar">
+          <button class="btn btn-outline" style="padding:6px 13px;">📧 Share with DBE</button>
+          <button class="btn btn-teal" style="padding:6px 13px;">📄 Export as PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCREEN 5: PROVENANCE ────────────────────────── -->
+    <div class="screen" id="sc-provenance">
+      <div class="page-title">Provenance and Learning Record</div>
+      <div class="page-sub">Every finding traced to its source · Trustee and DBE audit-ready</div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-header" style="margin-bottom:0;">
+          <div>
+            <div class="card-title">Finding: "Coaching produces 0.4 SD reading gain at 18 months"</div>
+            <div class="card-meta">Appears in: Provincial HOD Brief · Trustee EROI Report · DBE Policy Brief</div>
+          </div>
+          <div class="conf-badge conf-t1">● Tier 1 · High confidence</div>
+        </div>
+      </div>
+
+      <div class="prov-chain">
+        <div class="prov-step">
+          <div class="prov-dot">1</div>
+          <div class="prov-content">
+            <div class="prov-title">Raw source  ·  EGRS Year 2 Impact Evaluation Report, Table 3.4</div>
+            <div class="prov-source">"Learners in the Coaching intervention schools scored 0.41 standard deviations higher on the Setswana Oral Reading Fluency assessment than learners in the Training-only control group at the 18-month endline assessment (p&lt;0.001, 95% CI: 0.31 to 0.51). This effect size was stable across both district municipalities in the study." (EGRS Year 2 Report, DBE, 2017, Table 3.4, p.47)</div>
+            <div class="conf-badge conf-t1" style="margin-top:6px;">RCT · Direct extraction · Page 47</div>
+          </div>
+        </div>
+        <div class="prov-step">
+          <div class="prov-dot">2</div>
+          <div class="prov-content">
+            <div class="prov-title">EvidenceOS classification  ·  ADEI taxonomy v2.0</div>
+            <div class="prov-detail">Document type: Impact evaluation  ·  RCT (Sub-type confirmed). EQS score: 4.2/5.0 (Rigour 4.5 · Data Quality 4.0 · Transparency 4.5 · Replicability 4.0 · Context Relevance 4.0). Confidence tier: Tier 1. Evidence currency: Current (2024 to 2028). Attribution tier: Tier 1 (DBE-commissioned, government adoption confirmed). Classification timestamp: 14 July 2026 · 13:22 SAST.</div>
+          </div>
+        </div>
+        <div class="prov-step">
+          <div class="prov-dot">3</div>
+          <div class="prov-content">
+            <div class="prov-title">Cross-verification  ·  independent replication check</div>
+            <div class="prov-detail">Finding cross-referenced against: EGRS Wave 4 (Grade 4 follow-up, 2018)  ·  gains persist. EGRP Endline Evaluation (DBE, July 2024)  ·  coaching model embedded nationally. RESEP cost-effectiveness analysis (Stellenbosch, 2020)  ·  R847 SROI proxy derived. 3IE systematic review  ·  effect size consistent with international coaching literature.</div>
+            <div class="conf-badge conf-t1" style="margin-top:6px;">4 independent confirmations</div>
+          </div>
+        </div>
+        <div class="prov-step">
+          <div class="prov-dot">4</div>
+          <div class="prov-content">
+            <div class="prov-title">Audience translation record</div>
+            <div class="prov-detail">Provincial HOD: implementation frame applied. Specific district action steps added. FUNRS alignment noted. Core statistic unchanged.<br>Trustee: EROI framing applied. Illustrative EROI flagged as estimate. Audited financial calculation deferred to Phase 1. Core statistic unchanged.<br>DBE national: policy framing applied. Lekgotla gap identified. Core statistic unchanged across all three.</div>
+          </div>
+        </div>
+        <div class="prov-step">
+          <div class="prov-dot">5</div>
+          <div class="prov-content">
+            <div class="prov-title">Permanent audit record</div>
+            <div class="prov-detail">Immutable evidence log: ef4a2c8b7d91...3a7f · Tamper-evident · Exportable for donor due diligence · Indexed by document ID, field, timestamp, and classification authority.</div>
+            <div class="conf-badge conf-t1" style="margin-top:6px;">Verified and logged · 14 July 2026</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;">This is what institutional memory looks like</div>
+        <p style="font-size:12px;color:var(--white);line-height:1.7;margin-bottom:14px;">Every finding in every knowledge product EvidenceOS produces traces to its source in one click. No assertion without evidence. No evidence without a trail. When Optima's trustees ask "where does this number come from?"  ·  you answer in seconds, not days. When Rebecca moves on, the knowledge stays. That is not compliance. That is institutional memory that actually works.</p>
+        <button class="btn btn-teal" onclick="show('optimizer')">Explore Portfolio Optimizer</button>
+      </div>
+    </div>
+
+    <!-- ── SCREEN 6: PORTFOLIO OPTIMIZER ──────────────── -->
+    <div class="screen" id="sc-optimizer">
+      <div class="page-title">Portfolio Optimizer</div>
+      <div class="page-sub">Toggle investment allocation · See real-time impact on outcomes, SROI, and Decision Capital</div>
+
+      <div class="demo-banner">💡 Like a portfolio rebalancing tool: investing in high-confidence interventions (coaching + fidelity) reduces future costs (remediation, grade repetition). The question is where the highest evidence-backed leverage sits.</div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Optima Foundation Phase Baseline</div>
+            <div class="card-meta">Illustrative · Based on EGRS benchmark · Phase 1 will calculate from Optima's audited portfolio</div>
+          </div>
+          <span class="tag tag-teal">Demo baseline</span>
+        </div>
+        <div class="grid-3" style="margin-bottom:0;">
+          <div class="kp-stat"><div class="kp-stat-val">R847</div><div class="kp-stat-lbl">Per additional year of learning (EGRS)</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">3.4×</div><div class="kp-stat-lbl">Illustrative current EROI</div></div>
+          <div class="kp-stat"><div class="kp-stat-val">Tier 1</div><div class="kp-stat-lbl">Evidence confidence  ·  coaching intervention</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title" style="margin-bottom:18px;">Optimise additional R20M across intervention models</div>
+
+        <div class="slider-wrap">
+          <div class="slider-header">
+            <div>
+              <span class="slider-title">On-site Teacher Coaching</span>
+              <span class="tag tag-green" style="margin-left:8px;">EGRS: highest evidence leverage</span>
+            </div>
+            <div class="slider-amount" id="coach-amt">R10M</div>
+          </div>
+          <input type="range" id="coach-slider" min="0" max="20" value="10" step="1" oninput="updateOpt()">
+          <div class="slider-ticks"><span>R0M</span><span>R5M</span><span>R10M</span><span>R15M</span><span>R20M</span></div>
+          <div class="slider-note">On-site coaching with at least 8 sessions per term. EGRS shows this is the critical fidelity threshold. Below 8 sessions, gains are not statistically significant.</div>
+        </div>
+
+        <div class="slider-wrap">
+          <div class="slider-header">
+            <div>
+              <span class="slider-title">Structured Learning Materials</span>
+              <span class="tag tag-amber" style="margin-left:8px;">Works best as enabler of coaching</span>
+            </div>
+            <div class="slider-amount" id="mat-amt">R6M</div>
+          </div>
+          <input type="range" id="mat-slider" min="0" max="20" value="6" step="1" oninput="updateOpt()">
+          <div class="slider-ticks"><span>R0M</span><span>R5M</span><span>R10M</span><span>R15M</span><span>R20M</span></div>
+          <div class="slider-note">Scripted lesson plans, graded readers, language-appropriate materials. EGRS shows materials alone produce minimal gains without coaching support.</div>
+        </div>
+
+        <div class="slider-wrap">
+          <div class="slider-header">
+            <div>
+              <span class="slider-title">Grade 4 Transition Programme</span>
+              <span class="tag tag-teal" style="margin-left:8px;">Lekgotla priority · Evidence gap</span>
+            </div>
+            <div class="slider-amount" id="trans-amt">R4M</div>
+          </div>
+          <input type="range" id="trans-slider" min="0" max="20" value="4" step="1" oninput="updateOpt()">
+          <div class="slider-ticks"><span>R0M</span><span>R5M</span><span>R10M</span><span>R15M</span><span>R20M</span></div>
+          <div class="slider-note">Home language to English transition support at Grade 3-4. January 2026 lekgotla priority. EGRS did not measure this directly  ·  it is the most important evidence gap Optima could commission.</div>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.04);border-radius:7px;padding:12px;text-align:center;">
+          <span style="font-size:11px;color:var(--gray);">Total allocated:</span>
+          <span style="font-size:18px;font-weight:700;color:var(--teal);margin:0 8px;" id="total-alloc">R20M</span>
+          <span id="alloc-status" style="font-size:11px;color:var(--gray);"></span>
+        </div>
+      </div>
+
+      <div class="card" style="border-top:2px solid var(--teal);">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Projected portfolio intelligence  ·  optimised allocation</div>
+            <div class="card-meta">Derived from EGRS benchmark · Heckman economic methodology · Stated assumptions available on request</div>
+          </div>
+          <span class="tag tag-teal">Real-time</span>
+        </div>
+        <div class="grid-3" style="margin-bottom:18px;">
+          <div class="kp-stat" style="background:rgba(0,180,216,0.1);border-color:var(--teal);">
+            <div class="kp-stat-val" id="eroi-out">4.8×</div>
+            <div class="kp-stat-lbl">Projected EROI</div>
+            <div class="stat-change" id="eroi-chg">+1.4× vs baseline</div>
+          </div>
+          <div class="kp-stat">
+            <div class="kp-stat-val" id="sroi-out">R847</div>
+            <div class="kp-stat-lbl">Cost per year of learning (EGRS proxy)</div>
+            <div class="stat-change">Stable · Coaching model maintained</div>
+          </div>
+          <div class="kp-stat">
+            <div class="kp-stat-val" id="conf-out">Tier 1</div>
+            <div class="kp-stat-lbl">Evidence confidence on coaching allocation</div>
+            <div class="stat-change" id="conf-chg">RCT-backed · Defensible</div>
+          </div>
+          <div class="kp-stat">
+            <div class="kp-stat-val" id="dc-out">+3</div>
+            <div class="kp-stat-lbl">Decision Capital instances generated</div>
+            <div class="stat-change">HOD brief · Trustee report · DBE brief</div>
+          </div>
+          <div class="kp-stat" style="background:rgba(45,125,70,0.07);">
+            <div class="kp-stat-val" style="color:#6EC98A;" id="avoided-out">R420M</div>
+            <div class="kp-stat-lbl">Annual remediation cost avoided (projected)</div>
+            <div class="stat-change" id="avoided-chg">Based on PIRLS non-reader cohort</div>
+          </div>
+          <div class="kp-stat">
+            <div class="kp-stat-val" id="policy-out">3</div>
+            <div class="kp-stat-lbl">Policy audiences reached with classified evidence</div>
+            <div class="stat-change">HOD · Treasury · DBE National</div>
+          </div>
+        </div>
+
+        <div class="counterfactual">
+          <div class="cf-label">Counterfactual  ·  cost of evidence inaction</div>
+          <p style="font-size:12px;color:var(--white);line-height:1.6;" id="cf-text">Without activating the existing EGRS evidence, <strong>Optima's coaching investment remains undervalued in trustee reporting, unconnected to provincial HOD decision-making, and absent from the MTEF policy conversation.</strong> The evidence exists. The cost is not using it.</p>
+        </div>
+
+        <div style="background:linear-gradient(135deg,rgba(0,180,216,0.08),rgba(0,180,216,0.02));border:1px solid rgba(0,180,216,0.18);border-radius:7px;padding:13px;margin-top:14px;">
+          <div style="font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:7px;font-weight:600;">Policy alignment</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="tag tag-teal">National Literacy Strategy 2024 to 2030</span>
+            <span class="tag tag-teal">January 2026 Lekgotla mandate</span>
+            <span class="tag tag-teal">DBE EGRP national model</span>
+            <span class="tag tag-green">FUNRS 2025 district benchmarks</span>
+            <span class="tag tag-amber">MTEF budget cycle (August 2026)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ── NAVIGATION ───────────────────────────────────────────────
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('sc-'+id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>{
+    if(n.getAttribute('onclick')&&n.getAttribute('onclick').includes("'"+id+"'"))
+      n.classList.add('active');
+  });
+  window.scrollTo(0,0);
+}
+
+// ── SYNTHESIS ─────────────────────────────────────────────────
+function runSynth(){
+  document.getElementById('synth-btn').style.display='none';
+  document.getElementById('synth-loading').classList.add('visible');
+  setTimeout(()=>{
+    document.getElementById('synth-loading').classList.remove('visible');
+    document.getElementById('synth-result').classList.add('visible');
+  },2200);
+}
+
+// ── KNOWLEDGE PRODUCTS ────────────────────────────────────────
+function showKP(id,btn){
+  document.querySelectorAll('.kp').forEach(k=>k.classList.remove('visible'));
+  document.querySelectorAll('.aud-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('kp-'+id).classList.add('visible');
+  btn.classList.add('active');
+}
+
+// ── PORTFOLIO OPTIMIZER ───────────────────────────────────────
+function updateOpt(){
+  const coach=parseInt(document.getElementById('coach-slider').value);
+  const mat  =parseInt(document.getElementById('mat-slider').value);
+  const trans=parseInt(document.getElementById('trans-slider').value);
+  const total=coach+mat+trans;
+
+  document.getElementById('coach-amt').textContent='R'+coach+'M';
+  document.getElementById('mat-amt').textContent='R'+mat+'M';
+  document.getElementById('trans-amt').textContent='R'+trans+'M';
+  document.getElementById('total-alloc').textContent='R'+total+'M';
+
+  const status=document.getElementById('alloc-status');
+  if(total>20){status.textContent='↑ '+( total-20)+'M over budget';status.style.color='#F87171';}
+  else if(total<20){status.textContent='↓ '+(20-total)+'M unallocated';status.style.color='#FBBF24';}
+  else{status.textContent='✓ Fully allocated';status.style.color='#6EC98A';}
+
+  // Dynamic EROI based on coaching allocation
+  const coachRatio=coach/20;
+  const eroi=(3.4+coachRatio*2.2).toFixed(1);
+  document.getElementById('eroi-out').textContent=eroi+'×';
+  document.getElementById('eroi-chg').textContent='+'+((eroi-3.4).toFixed(1))+'× vs baseline';
+
+  const avoided=Math.round(280+coachRatio*360);
+  document.getElementById('avoided-out').textContent='R'+avoided+'M';
+
+  // Confidence note
+  if(coachRatio>0.5){
+    document.getElementById('conf-out').textContent='Tier 1';
+    document.getElementById('conf-chg').textContent='RCT-backed · Defensible';
+  } else {
+    document.getElementById('conf-out').textContent='Tier 2';
+    document.getElementById('conf-chg').textContent='Reduced coaching share  ·  lower confidence';
+  }
+}
+</script>
+</body>
+</html>
