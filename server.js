@@ -18,6 +18,7 @@ const classifyRoutes = require('./api/routes/classify');
 const queueRoutes = require('./api/routes/queue');
 const knowledgeRoutes = require('./api/routes/knowledge');
 const reportsRoutes = require('./api/routes/reports');
+const settingsRoutes = require('./api/routes/settings');
 const adminRoutes = require('./api/routes/admin');
 const db = require('./api/services/db');
 const localStore = require('./api/services/local-store');
@@ -74,6 +75,7 @@ app.use('/api/records', recordsRoutes);
 app.use('/api/classify', classifyRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/settings', settingsRoutes);
 app.use('/api', knowledgeRoutes);
 
 app.get('/api/stats', authenticate(), assertNoBoardAccess, async (req, res, next) => {

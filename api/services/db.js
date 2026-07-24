@@ -312,6 +312,85 @@ async function createKnowledgeProduct(tenant, payload) {
   });
 }
 
+async function listUsers(tenant) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT id, email, full_name, role, last_login_at, is_active
+      FROM users
+      WHERE tenant_id = $1
+      ORDER BY full_name NULLS LAST, email
+    `, [tenant.slug]);
+    return res.rows;
+  });
+}
+
+async function createUser(tenant, user) {
+  return withTenant(tenant, async client => {
+    const existing = await client.query(`
+      SELECT id
+      FROM users
+      WHERE tenant_id = $1 AND lower(email) = lower($2)
+      LIMIT 1
+    `, [tenant.slug, user.email]);
+
+    if (existing.rows[0]) {
+      const res = await client.query(`
+        UPDATE users
+        SET full_name = $1, role = $2, cognito_sub = COALESCE($3, cognito_sub), is_active = true
+        WHERE id = $4 AND tenant_id = $5
+        RETURNING id, email, full_name, role, last_login_at, is_active
+      `, [
+        user.full_name,
+        user.role,
+        user.cognito_sub || null,
+        existing.rows[0].id,
+        tenant.slug,
+      ]);
+      return res.rows[0];
+    }
+
+    const res = await client.query(`
+      INSERT INTO users (tenant_id, cognito_sub, email, full_name, role, is_active)
+      VALUES ($1,$2,$3,$4,$5,true)
+      RETURNING id, email, full_name, role, last_login_at, is_active
+    `, [
+      tenant.slug,
+      user.cognito_sub || null,
+      user.email.toLowerCase(),
+      user.full_name,
+      user.role,
+    ]);
+    return res.rows[0];
+  });
+}
+
+async function updateUser(tenant, id, changes) {
+  return withTenant(tenant, async client => {
+    const fields = [];
+    const params = [];
+
+    if (Object.prototype.hasOwnProperty.call(changes, 'role')) {
+      params.push(changes.role);
+      fields.push(`role = $${params.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, 'is_active')) {
+      params.push(changes.is_active === true);
+      fields.push(`is_active = $${params.length}`);
+    }
+
+    if (!fields.length) throw new Error('No supported user fields supplied');
+
+    params.push(tenant.slug, id);
+    const res = await client.query(`
+      UPDATE users
+      SET ${fields.join(', ')}
+      WHERE tenant_id = $${params.length - 1} AND id = $${params.length}
+      RETURNING id, email, full_name, role, last_login_at, is_active
+    `, params);
+    return res.rows[0] || null;
+  });
+}
+
 module.exports = {
   getPool,
   withTenant,
@@ -321,4 +400,7 @@ module.exports = {
   listQueue,
   resolveQueueItem,
   createKnowledgeProduct,
+  listUsers,
+  createUser,
+  updateUser,
 };

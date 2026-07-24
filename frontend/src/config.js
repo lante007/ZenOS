@@ -9,5 +9,6 @@ export const tenantConfig = {
   apiUrl: env.VITE_API_URL || env.REACT_APP_API_URL || 'http://localhost:3001',
   cognitoDomain: env.VITE_COGNITO_DOMAIN || env.REACT_APP_COGNITO_DOMAIN || '',
   cognitoClientId: env.VITE_COGNITO_CLIENT_ID || env.REACT_APP_COGNITO_CLIENT_ID || '',
+  cognitoRegion: env.VITE_COGNITO_REGION || env.REACT_APP_COGNITO_REGION || 'us-east-1',
   cognitoRedirectUri: env.VITE_COGNITO_REDIRECT_URI || env.REACT_APP_COGNITO_REDIRECT_URI || `${window.location.origin}/dashboard`,
 };

@@ -440,6 +440,47 @@ function buildCognitoUrl() {
   return `${domain}/oauth2/authorize?${params.toString()}`;
 }
 
+async function cognitoRequest(target, body) {
+  const response = await fetch(`https://cognito-idp.${tenantConfig.cognitoRegion}.amazonaws.com/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-amz-json-1.1',
+      'X-Amz-Target': `AWSCognitoIdentityProviderService.${target}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || payload.__type || 'Cognito request failed');
+  }
+  return payload;
+}
+
+async function signInWithCognito(email, password) {
+  if (!tenantConfig.cognitoClientId) throw new Error('Cognito app client is not configured');
+  return cognitoRequest('InitiateAuth', {
+    AuthFlow: 'USER_PASSWORD_AUTH',
+    ClientId: tenantConfig.cognitoClientId,
+    AuthParameters: {
+      USERNAME: email,
+      PASSWORD: password,
+    },
+  });
+}
+
+async function completeNewPasswordChallenge(username, newPassword, session) {
+  if (!tenantConfig.cognitoClientId) throw new Error('Cognito app client is not configured');
+  return cognitoRequest('RespondToAuthChallenge', {
+    ClientId: tenantConfig.cognitoClientId,
+    ChallengeName: 'NEW_PASSWORD_REQUIRED',
+    Session: session,
+    ChallengeResponses: {
+      USERNAME: username,
+      NEW_PASSWORD: newPassword,
+    },
+  });
+}
+
 function LandingPage() {
   return (
     <main className="landing-shell">
@@ -464,7 +505,31 @@ function LandingPage() {
 }
 
 function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const cognitoUrl = buildCognitoUrl();
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const result = await signInWithCognito(email.trim().toLowerCase(), password);
+      if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+        sessionStorage.setItem('evidenceos_new_password_session', result.Session);
+        sessionStorage.setItem('evidenceos_new_password_username', email.trim().toLowerCase());
+        window.location.href = '/change-password';
+        return;
+      }
+      window.location.href = '/dashboard';
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="auth-shell">
@@ -479,35 +544,99 @@ function LoginPage() {
 
         <div className="auth-copy">
           <h2>Sign in to Evidence Intelligence</h2>
-          <p>Use your organisation email to continue through Zenex Foundation's secure Cognito sign-in.</p>
+          <p>Use your organisation email and password to access Zenex Foundation's secure EvidenceOS space.</p>
         </div>
 
-        <div className="auth-fields" aria-hidden="true">
-          <div className="auth-field">
-            <Mail size={18} />
-            <span>name@zenex.org.za</span>
-          </div>
-          <div className="auth-field">
-            <LockKeyhole size={18} />
-            <span>Password managed by Cognito</span>
-          </div>
-        </div>
-
-        {cognitoUrl ? (
-          <a className="primary-action auth-action" href={cognitoUrl}>
-            <span>Continue Securely</span>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            <span>Email</span>
+            <div className="auth-input">
+              <Mail size={18} />
+              <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="name@zenexfoundation.org.za" required />
+            </div>
+          </label>
+          <label>
+            <span>Password</span>
+            <div className="auth-input">
+              <LockKeyhole size={18} />
+              <input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Password" required />
+            </div>
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <button className="primary-action auth-action" type="submit" disabled={busy || !tenantConfig.cognitoClientId}>
+            <span>{busy ? 'Signing In' : 'Sign In'}</span>
             <ArrowRight size={18} strokeWidth={2.4} />
-          </a>
-        ) : (
-          <button className="primary-action auth-action" type="button" disabled>
-            Cognito Hosted UI Not Configured
           </button>
-        )}
+        </form>
 
-        <div className="auth-note">
-          <ShieldCheck size={16} />
-          <span>Tokens are handled in memory after sign-in and are never stored in localStorage.</span>
+        {cognitoUrl && (
+          <a className="secondary-link" href={cognitoUrl}>Use hosted sign-in</a>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function ChangePasswordPage() {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const username = sessionStorage.getItem('evidenceos_new_password_username') || '';
+  const session = sessionStorage.getItem('evidenceos_new_password_session') || '';
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    setBusy(true);
+    try {
+      await completeNewPasswordChallenge(username, password, session);
+      sessionStorage.removeItem('evidenceos_new_password_username');
+      sessionStorage.removeItem('evidenceos_new_password_session');
+      window.location.href = '/dashboard';
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel" aria-label="Set EvidenceOS password">
+        <div className="auth-identity">
+          <img src={tenantConfig.logoUrl} alt="Zenex Foundation" />
+          <div>
+            <p className="eyebrow">First sign-in</p>
+            <h1>Set your password</h1>
+          </div>
         </div>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            <span>New password</span>
+            <div className="auth-input">
+              <LockKeyhole size={18} />
+              <input value={password} onChange={event => setPassword(event.target.value)} type="password" minLength={12} required />
+            </div>
+          </label>
+          <label>
+            <span>Confirm password</span>
+            <div className="auth-input">
+              <ShieldCheck size={18} />
+              <input value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} type="password" minLength={12} required />
+            </div>
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <button className="primary-action auth-action" type="submit" disabled={busy || !username || !session}>
+            <span>{busy ? 'Saving' : 'Save Password'}</span>
+            <ArrowRight size={18} strokeWidth={2.4} />
+          </button>
+        </form>
       </section>
     </main>
   );
@@ -548,7 +677,7 @@ function DashboardNav({ active, queueBadge = queueCount() }) {
             <Sparkles size={18} />
             <span>Products</span>
           </a>
-          <a href="/dashboard">
+          <a className={active === 'settings' ? 'active' : ''} href="/settings">
             <Users size={18} />
             <span>Users</span>
           </a>
@@ -1266,6 +1395,197 @@ function KnowledgePage() {
   );
 }
 
+const userRoleOptions = [
+  { value: 'EVIDENCE_ANALYST', label: 'Evidence Analyst' },
+  { value: 'COMMUNICATIONS', label: 'Communications' },
+  { value: 'CEO_EXEC', label: 'CEO Executive View' },
+];
+
+function roleLabel(role) {
+  return userRoleOptions.find(option => option.value === role)?.label || role?.replaceAll('_', ' ') || 'Unassigned';
+}
+
+function SettingsPage() {
+  const [usersList, setUsersList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [toast, setToast] = useState('');
+  const [error, setError] = useState('');
+  const [invite, setInvite] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    role: 'EVIDENCE_ANALYST',
+  });
+
+  async function loadUsers() {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await apiRequest('/api/settings/users');
+      setUsersList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  async function submitInvite(event) {
+    event.preventDefault();
+    const fullName = `${invite.first_name} ${invite.last_name}`.trim();
+    setError('');
+    try {
+      await apiRequest('/api/settings/users/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: invite.email,
+          full_name: fullName,
+          role: invite.role,
+        }),
+      });
+      setToast(`Invite sent to ${invite.email}`);
+      setInvite({ first_name: '', last_name: '', email: '', role: 'EVIDENCE_ANALYST' });
+      setInviteOpen(false);
+      await loadUsers();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function updateUser(id, changes) {
+    setError('');
+    try {
+      await apiRequest(`/api/settings/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      });
+      await loadUsers();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <AppShell active="settings">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Settings</p>
+            <h1>Users</h1>
+          </div>
+          <button className="primary-action" type="button" onClick={() => setInviteOpen(true)}>
+            <Users size={18} />
+            <span>Invite User</span>
+          </button>
+        </header>
+
+        {toast && <div className="toast-message">{toast}</div>}
+        {error && <div className="error-banner">{error}</div>}
+
+        <section className="settings-tabs">
+          <button className="active" type="button">Users</button>
+        </section>
+
+        <section className="table-panel">
+          <table className="records-table users-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Last Login</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="6">Loading users...</td></tr>
+              ) : usersList.map(user => (
+                <tr key={user.id}>
+                  <td>{user.full_name || 'Not captured'}</td>
+                  <td>{user.email}</td>
+                  <td>{roleLabel(user.role)}</td>
+                  <td>{user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never'}</td>
+                  <td><span className={user.is_active ? 'status-pill active' : 'status-pill'}>{user.is_active ? 'Active' : 'Inactive'}</span></td>
+                  <td>
+                    <div className="row-actions">
+                      <select value={user.role} onChange={event => updateUser(user.id, { role: event.target.value })}>
+                        <option value="ORGANISATION_LEAD">Organisation Lead</option>
+                        {userRoleOptions.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <button className="secondary-action danger" type="button" disabled={!user.is_active} onClick={() => updateUser(user.id, { is_active: false })}>
+                        <X size={16} />
+                        <span>Deactivate</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+
+      {inviteOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="invite-modal" onSubmit={submitInvite} aria-label="Invite user">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Invite user</p>
+                <h2>Add a Zenex colleague</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setInviteOpen(false)} aria-label="Close invite modal">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="invite-grid">
+              <label>
+                <span>First name</span>
+                <input value={invite.first_name} onChange={event => setInvite({ ...invite, first_name: event.target.value })} required />
+              </label>
+              <label>
+                <span>Last name</span>
+                <input value={invite.last_name} onChange={event => setInvite({ ...invite, last_name: event.target.value })} required />
+              </label>
+              <label className="wide">
+                <span>Email</span>
+                <input value={invite.email} onChange={event => setInvite({ ...invite, email: event.target.value })} type="email" placeholder="name@zenexfoundation.org.za" required />
+              </label>
+              <label className="wide">
+                <span>Role</span>
+                <select value={invite.role} onChange={event => setInvite({ ...invite, role: event.target.value })}>
+                  {userRoleOptions.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => setInviteOpen(false)}>Cancel</button>
+              <button className="primary-action" type="submit">
+                <span>Send Invite</span>
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </AppShell>
+  );
+}
+
 function ExecPage() {
   const { records } = useLiveRecords();
   const [summary, setSummary] = useState(null);
@@ -1356,11 +1676,13 @@ function ExecPage() {
 
 function App() {
   if (window.location.pathname === '/login') return <LoginPage />;
+  if (window.location.pathname === '/change-password') return <ChangePasswordPage />;
   if (window.location.pathname === '/dashboard') return <DashboardPage />;
   if (window.location.pathname === '/records') return <RecordsPage />;
   if (window.location.pathname === '/classify') return <ClassifyPage />;
   if (window.location.pathname === '/queue') return <QueuePage />;
   if (window.location.pathname === '/knowledge') return <KnowledgePage />;
+  if (window.location.pathname === '/settings') return <SettingsPage />;
   if (window.location.pathname === '/exec') return <ExecPage />;
   return <LandingPage />;
 }
