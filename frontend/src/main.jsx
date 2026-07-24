@@ -1,12 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  AlertTriangle,
   ArrowRight,
   BarChart3,
+  Check,
   CheckCircle2,
   Clock3,
   Database,
   Download,
+  Edit3,
   Filter,
   FileCheck2,
   FileText,
@@ -59,6 +62,36 @@ const workQueue = [
   { title: 'Foundation Phase reading synthesis', owner: 'Evidence Analyst', state: 'Review' },
   { title: 'Learner outcome dashboard brief', owner: 'Communications', state: 'Draft' },
   { title: 'Quarterly trustee evidence pack', owner: 'Organisation Lead', state: 'Ready' },
+];
+
+const mockReviewQueue = [
+  {
+    id: 'QR-ZEN-001',
+    record: 'Foundation Phase Literacy',
+    fieldName: 'effect_size',
+    recommendation: '0.32 SD',
+    confidence: 0.58,
+    alternatives: ['0.28 SD', 'Positive direction only', 'Not enough evidence'],
+    rationale: 'Reported in learner assessment appendix but confidence is below direct acceptance threshold.',
+  },
+  {
+    id: 'QR-ZEN-002',
+    record: 'Numeracy Recovery',
+    fieldName: 'cost_data_source',
+    recommendation: 'Management budget summary',
+    confidence: 0.52,
+    alternatives: ['No audited cost data', 'Approved Proxy Library', 'Unknown'],
+    rationale: 'Protocol amendment PA3 requires audited financials or approved proxy before SROI use.',
+  },
+  {
+    id: 'QR-ZEN-003',
+    record: 'School Leadership Support',
+    fieldName: 'decision_relevance',
+    recommendation: 'Medium',
+    confidence: 0.61,
+    alternatives: ['High', 'Low', 'Commissioning only'],
+    rationale: 'Finding challenges a common assumption but evidence quality is mixed across source reports.',
+  },
 ];
 
 const pipelineSteps = [
@@ -390,7 +423,7 @@ function LoginPage() {
 }
 
 function queueCount() {
-  return workQueue.filter(item => item.state !== 'Ready').length;
+  return mockReviewQueue.length;
 }
 
 function DashboardNav({ active }) {
@@ -829,11 +862,95 @@ function ClassifyPage() {
   );
 }
 
+function QueuePage() {
+  const [items, setItems] = useState(mockReviewQueue);
+  const [overrideValues, setOverrideValues] = useState({});
+
+  function resolveItem(id, value, override = false) {
+    setItems(current => current.filter(item => item.id !== id));
+    setOverrideValues(current => ({ ...current, [id]: override ? value : '' }));
+  }
+
+  return (
+    <AppShell active="queue">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Expert review queue</p>
+            <h1>Classification Decisions</h1>
+          </div>
+          <div className="tenant-pill queue-pill">
+            <AlertTriangle size={16} />
+            <span>{items.length} pending</span>
+          </div>
+        </header>
+
+        <section className="review-list" aria-label="Expert review queue">
+          {items.length === 0 ? (
+            <article className="empty-panel">
+              <CheckCircle2 size={28} />
+              <h2>Queue clear</h2>
+              <p>All low-confidence fields have been confirmed or overridden.</p>
+            </article>
+          ) : items.map((item) => (
+            <article className="review-card" key={item.id}>
+              <div className="review-topline">
+                <div>
+                  <p className="eyebrow">{item.record}</p>
+                  <h2>{item.fieldName}</h2>
+                </div>
+                <strong>{Math.round(item.confidence * 100)}% confidence</strong>
+              </div>
+
+              <div className="recommendation-box">
+                <span>AI recommendation</span>
+                <strong>{item.recommendation}</strong>
+                <p>{item.rationale}</p>
+              </div>
+
+              <div className="alternatives-row">
+                {item.alternatives.map((alternative) => (
+                  <button type="button" key={alternative} onClick={() => setOverrideValues({ ...overrideValues, [item.id]: alternative })}>
+                    {alternative}
+                  </button>
+                ))}
+              </div>
+
+              <div className="override-row">
+                <input
+                  type="text"
+                  placeholder="Override value"
+                  value={overrideValues[item.id] || ''}
+                  onChange={(event) => setOverrideValues({ ...overrideValues, [item.id]: event.target.value })}
+                />
+                <button className="secondary-action" type="button" onClick={() => resolveItem(item.id, item.recommendation)}>
+                  <Check size={17} />
+                  <span>Confirm</span>
+                </button>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={!overrideValues[item.id]}
+                  onClick={() => resolveItem(item.id, overrideValues[item.id], true)}
+                >
+                  <Edit3 size={17} />
+                  <span>Override</span>
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      </section>
+    </AppShell>
+  );
+}
+
 function App() {
   if (window.location.pathname === '/login') return <LoginPage />;
   if (window.location.pathname === '/dashboard') return <DashboardPage />;
   if (window.location.pathname === '/records') return <RecordsPage />;
   if (window.location.pathname === '/classify') return <ClassifyPage />;
+  if (window.location.pathname === '/queue') return <QueuePage />;
   return <LandingPage />;
 }
 

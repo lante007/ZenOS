@@ -1076,6 +1076,156 @@ button:disabled {
   color: rgba(245, 242, 238, 0.58);
 }
 
+.queue-pill {
+  border-color: rgba(217, 119, 6, 0.34);
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.queue-pill svg {
+  color: #FBBF24;
+}
+
+.review-list {
+  display: grid;
+  gap: 14px;
+}
+
+.review-card,
+.empty-panel {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+    rgba(15, 32, 64, 0.72);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.22);
+}
+
+.review-card {
+  padding: 22px;
+}
+
+.review-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.review-topline h2 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.review-topline > strong {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.14);
+  color: #FBBF24;
+  white-space: nowrap;
+}
+
+.recommendation-box {
+  margin: 18px 0 14px;
+  padding: 16px;
+  border-left: 3px solid var(--primary);
+  background: rgba(10, 22, 40, 0.56);
+}
+
+.recommendation-box span,
+.recommendation-box strong,
+.recommendation-box p {
+  display: block;
+}
+
+.recommendation-box span {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.recommendation-box strong {
+  margin-top: 5px;
+  color: #ffffff;
+  font-size: 20px;
+}
+
+.recommendation-box p {
+  margin: 7px 0 0;
+  color: rgba(245, 242, 238, 0.58);
+}
+
+.alternatives-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.alternatives-row button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(245, 242, 238, 0.72);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.alternatives-row button:hover {
+  border-color: rgba(239, 114, 24, 0.48);
+  color: #ffffff;
+}
+
+.override-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.override-row input {
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  outline: 0;
+  background: rgba(10, 22, 40, 0.62);
+  color: var(--white);
+}
+
+.empty-panel {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 28px;
+  text-align: center;
+}
+
+.empty-panel svg {
+  color: #6EC98A;
+}
+
+.empty-panel h2 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 36px;
+  line-height: 1;
+}
+
+.empty-panel p {
+  margin: 0;
+  color: rgba(245, 242, 238, 0.58);
+}
+
 @media (max-width: 760px) {
   .landing-shell {
     padding: 16px;
@@ -1242,5 +1392,16 @@ button:disabled {
   .drive-fallback > div {
     grid-template-columns: 1fr;
     padding: 12px;
+  }
+
+  .review-topline,
+  .override-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .review-topline > strong,
+  .override-row .secondary-action {
+    justify-self: start;
   }
 }
