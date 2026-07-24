@@ -17,3 +17,5 @@ batch-summary-*.json
 # OS
 .DS_Store
 Thumbs.db
+
+frontend/.env.production
