@@ -4,11 +4,19 @@ const { Pool } = require('pg');
 
 let pool;
 
+function shouldUseSsl(connectionString) {
+  if (process.env.PGSSLMODE === 'disable') return false;
+  if (process.env.PGSSLMODE === 'require' || process.env.DATABASE_SSL === 'true') return true;
+  return /\.rds\.amazonaws\.com(?::|\/|$)/.test(connectionString || '');
+}
+
 function getPool() {
   if (!process.env.DATABASE_URL) return null;
   if (!pool) {
+    const connectionString = process.env.DATABASE_URL;
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
+      ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
       connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS || 5000),
       query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS || 10000),
     });
