@@ -18,6 +18,7 @@ const classifyRoutes = require('./api/routes/classify');
 const queueRoutes = require('./api/routes/queue');
 const knowledgeRoutes = require('./api/routes/knowledge');
 const adminRoutes = require('./api/routes/admin');
+const db = require('./api/services/db');
 const localStore = require('./api/services/local-store');
 
 const app = express();
@@ -31,20 +32,38 @@ app.use(express.static(path.join(__dirname, 'web')));
 
 app.use(tenantMiddleware);
 
-app.get('/api/health', (req, res) => {
-  const records = req.tenant?.is_admin_console ? 0 : localStore.listRecords(req.tenant).length;
-  const queue = req.tenant?.is_admin_console ? 0 : localStore.listQueue(req.tenant).length;
-  res.json({
-    status: 'ok',
-    version: '1.0.0',
-    tenant: req.tenant.slug,
-    organisation: req.tenant.name,
-    taxonomy_version: 'v2.1',
-    storage: req.tenant.s3_vault_bucket || null,
-    records,
-    queue,
-    timestamp: new Date().toISOString(),
-  });
+async function loadTenantRecordsAndQueue(tenant) {
+  if (tenant?.is_admin_console) return { records: [], queue: [] };
+  if (process.env.DATABASE_URL) {
+    const [records, queue] = await Promise.all([
+      db.listRecords(tenant, {}),
+      db.listQueue(tenant),
+    ]);
+    return { records: records || [], queue: queue || [] };
+  }
+  return {
+    records: localStore.listRecords(tenant),
+    queue: localStore.listQueue(tenant),
+  };
+}
+
+app.get('/api/health', async (req, res, next) => {
+  try {
+    const { records, queue } = await loadTenantRecordsAndQueue(req.tenant);
+    res.json({
+      status: 'ok',
+      version: '1.0.0',
+      tenant: req.tenant.slug,
+      organisation: req.tenant.name,
+      taxonomy_version: 'v2.1',
+      storage: req.tenant.s3_vault_bucket || null,
+      records: records.length,
+      queue: queue.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.use('/api/admin', authenticate(), adminRoutes);
@@ -55,42 +74,50 @@ app.use('/api/classify', classifyRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api', knowledgeRoutes);
 
-app.get('/api/stats', authenticate(), assertNoBoardAccess, (req, res) => {
-  const records = localStore.listRecords(req.tenant);
-  const tierCounts = records.reduce((acc, record) => {
-    const tier = record.confidence_tier || record.eqs_tier || 'N_A';
-    acc[tier] = (acc[tier] || 0) + 1;
-    return acc;
-  }, {});
+app.get('/api/stats', authenticate(), assertNoBoardAccess, async (req, res, next) => {
+  try {
+    const { records, queue } = await loadTenantRecordsAndQueue(req.tenant);
+    const tierCounts = records.reduce((acc, record) => {
+      const tier = record.confidence_tier || record.eqs_tier || 'N_A';
+      acc[tier] = (acc[tier] || 0) + 1;
+      return acc;
+    }, {});
 
-  res.json({
-    tenant: req.tenant.slug,
-    organisation: req.tenant.name,
-    records: records.length,
-    queue: localStore.listQueue(req.tenant).length,
-    tier_counts: tierCounts,
-  });
+    res.json({
+      tenant: req.tenant.slug,
+      organisation: req.tenant.name,
+      records: records.length,
+      queue: queue.length,
+      tier_counts: tierCounts,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.get('/api/exec-summary', authenticate(), assertNoBoardAccess, (req, res) => {
+app.get('/api/exec-summary', authenticate(), assertNoBoardAccess, async (req, res, next) => {
   if (req.user.role !== 'CEO_EXEC' && req.user.role !== 'ORGANISATION_LEAD') {
     return res.status(403).json({ error: 'Executive view only' });
   }
 
-  const records = localStore.listRecords(req.tenant);
-  const tierOne = records.filter(r => (r.confidence_tier || r.eqs_tier) === 'TIER_1');
-  res.json({
-    tenant: req.tenant.slug,
-    organisation: req.tenant.name,
-    evidence_health_score: records.length ? Math.round((tierOne.length / records.length) * 100) : 0,
-    tier_1_documents_this_week: tierOne.slice(0, 5).map(r => ({
-      id: r.id || r.adei_record_id,
-      programme_name: r.programme_name || r.programme,
-      key_finding_1: r.key_finding_1,
-    })),
-    queue_items_pending: localStore.listQueue(req.tenant).length,
-    generated_at: new Date().toISOString(),
-  });
+  try {
+    const { records, queue } = await loadTenantRecordsAndQueue(req.tenant);
+    const tierOne = records.filter(r => (r.confidence_tier || r.eqs_tier) === 'TIER_1');
+    res.json({
+      tenant: req.tenant.slug,
+      organisation: req.tenant.name,
+      evidence_health_score: records.length ? Math.round((tierOne.length / records.length) * 100) : 0,
+      tier_1_documents_this_week: tierOne.slice(0, 5).map(r => ({
+        id: r.id || r.adei_record_id,
+        programme_name: r.programme_name || r.programme,
+        key_finding_1: r.key_finding_1,
+      })),
+      queue_items_pending: queue.length,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.get('*', (_req, res) => {
