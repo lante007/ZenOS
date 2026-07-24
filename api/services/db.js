@@ -226,7 +226,22 @@ async function createRecord(tenant, record, document = {}) {
       record.status === 'PENDING_REVIEW' ? 'PENDING_REVIEW' : 'ACTIVE',
     ]);
 
-    await insertIngestionJob(tenant, documentId, record.api_usage, 'COMPLETE');
+    await client.query(`
+      INSERT INTO ingestion_jobs (
+        tenant_id, document_id, status, pipeline_step, step_detail,
+        claude_input_tokens, claude_output_tokens, claude_input_words,
+        claude_output_words, claude_latency_ms,
+        started_at, completed_at
+      ) VALUES ($1,$2,'COMPLETE',8,'Classification completed',$3,$4,$5,$6,$7,NOW(),NOW())
+    `, [
+      tenant.slug,
+      documentId || null,
+      record.api_usage?.input_tokens || null,
+      record.api_usage?.output_tokens || null,
+      record.api_usage?.input_words || null,
+      record.api_usage?.output_words || null,
+      record.api_usage?.latency_ms || null,
+    ]);
 
     for (const item of record.fatima_queue || []) {
       await client.query(`

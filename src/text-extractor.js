@@ -15,6 +15,7 @@ const SUPPORTED_TYPES = [
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/msword',
   'application/vnd.google-apps.document',
+  'text/plain',
 ];
 
 /**
@@ -24,7 +25,8 @@ function isSupportedType(mimeType) {
   return SUPPORTED_TYPES.includes(mimeType) ||
     mimeType.includes('wordprocessingml') ||
     mimeType.includes('presentationml') ||
-    mimeType.includes('pdf');
+    mimeType.includes('pdf') ||
+    mimeType.startsWith('text/');
 }
 
 /**
