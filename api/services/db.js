@@ -58,7 +58,7 @@ async function withTenant(tenant, fn) {
 
 async function listRecords(tenant, filters = {}) {
   return withTenant(tenant, async client => {
-    const where = ['tenant_id = $1'];
+    const where = ['r.tenant_id = $1'];
     const params = [tenant.slug];
 
     if (filters.tier) {
