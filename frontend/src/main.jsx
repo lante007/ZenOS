@@ -15,12 +15,14 @@ import {
   FileCheck2,
   FileText,
   Gauge,
+  KeyRound,
   Layers3,
   LockKeyhole,
   Mail,
   Search,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   UploadCloud,
   Users,
   X,
@@ -1089,6 +1091,79 @@ function KnowledgePage() {
   );
 }
 
+function ExecPage() {
+  const topFindings = mockRecords.flatMap(record => [
+    record.key_finding_1,
+    record.key_finding_2,
+  ]).filter(Boolean).slice(0, 5);
+
+  return (
+    <main className="exec-shell">
+      <section className="exec-header">
+        <div>
+          <img src={tenantConfig.logoUrl} alt="Zenex Foundation" />
+          <p className="eyebrow">Executive evidence link</p>
+          <h1>Weekly Evidence Summary</h1>
+        </div>
+        <div className="exec-auth-chip">
+          <KeyRound size={16} />
+          <span>Email-link access</span>
+        </div>
+      </section>
+
+      <section className="exec-score-card">
+        <div>
+          <p className="eyebrow">Evidence Health Score</p>
+          <strong>82</strong>
+          <span>Strong portfolio readiness with targeted evidence gaps.</span>
+        </div>
+        <Gauge size={68} />
+      </section>
+
+      <section className="exec-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Top 5 findings this quarter</p>
+            <h2>What leadership should know</h2>
+          </div>
+        </div>
+        <div className="exec-findings">
+          {topFindings.map((finding, index) => (
+            <article key={finding}>
+              <span>{index + 1}</span>
+              <p>{finding}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="exec-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Decision Capital</p>
+            <h2>Current leadership signal</h2>
+          </div>
+          <TrendingUp size={24} />
+        </div>
+        <div className="exec-decision-grid">
+          <article>
+            <strong>3</strong>
+            <span>Briefs ready for senior decision use</span>
+          </article>
+          <article>
+            <strong>2</strong>
+            <span>Evidence gaps worth commissioning next</span>
+          </article>
+          <article>
+            <strong>1</strong>
+            <span>Scale pathway supported with Tier 1 evidence</span>
+          </article>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   if (window.location.pathname === '/login') return <LoginPage />;
   if (window.location.pathname === '/dashboard') return <DashboardPage />;
@@ -1096,6 +1171,7 @@ function App() {
   if (window.location.pathname === '/classify') return <ClassifyPage />;
   if (window.location.pathname === '/queue') return <QueuePage />;
   if (window.location.pathname === '/knowledge') return <KnowledgePage />;
+  if (window.location.pathname === '/exec') return <ExecPage />;
   return <LandingPage />;
 }
 
