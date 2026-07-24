@@ -6,7 +6,13 @@ let pool;
 
 function getPool() {
   if (!process.env.DATABASE_URL) return null;
-  if (!pool) pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS || 5000),
+      query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS || 10000),
+    });
+  }
   return pool;
 }
 
