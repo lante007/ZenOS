@@ -18,7 +18,20 @@ async function tenantMiddleware(req, res, next) {
     const slug = req.headers['x-evidenceos-tenant'] || slugFromHost(host);
 
     if (slug === 'admin') {
-      req.tenant = { slug: 'admin', name: 'Auxeira Founder Console', is_admin_console: true };
+      let adminPoolId = process.env.ADMIN_COGNITO_POOL_ID || process.env.EVIDENCEOS_ADMIN_POOL_ID || null;
+      if (!adminPoolId) {
+        try {
+          adminPoolId = require('../../infra/outputs.json').admin_cognito_pool_id;
+        } catch {
+          adminPoolId = null;
+        }
+      }
+      req.tenant = {
+        slug: 'admin',
+        name: 'Auxeira Founder Console',
+        is_admin_console: true,
+        cognito_pool_id: adminPoolId,
+      };
       return next();
     }
 

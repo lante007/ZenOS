@@ -391,6 +391,91 @@ async function updateUser(tenant, id, changes) {
   });
 }
 
+async function createAuditLog(tenant, eventType, detail = {}, userId = null) {
+  return withTenant(tenant, async client => {
+    await client.query(`
+      INSERT INTO audit_log (event_type, user_id, tenant_id, detail)
+      VALUES ($1,$2,$3,$4)
+    `, [
+      eventType,
+      userId,
+      tenant.slug,
+      JSON.stringify(detail || {}),
+    ]);
+  });
+}
+
+async function masterTenants() {
+  const db = getPool();
+  if (!db) return [];
+  const res = await db.query('SELECT * FROM master.tenants ORDER BY slug');
+  return res.rows;
+}
+
+async function tenantCounts(row) {
+  const db = getPool();
+  if (!db) return { users: 0, documents: 0, records: 0, monthly_input_tokens: 0, monthly_output_tokens: 0 };
+  const schema = row.db_schema || row.slug;
+  assertSchema(schema);
+  try {
+    const res = await db.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM ${schema}.users) AS users,
+        (SELECT COUNT(*)::int FROM ${schema}.documents) AS documents,
+        (SELECT COUNT(*)::int FROM ${schema}.intelligence_records) AS records,
+        (SELECT COALESCE(SUM(claude_input_tokens), 0)::int FROM ${schema}.ingestion_jobs WHERE created_at >= date_trunc('month', NOW())) AS monthly_input_tokens,
+        (SELECT COALESCE(SUM(claude_output_tokens), 0)::int FROM ${schema}.ingestion_jobs WHERE created_at >= date_trunc('month', NOW())) AS monthly_output_tokens
+    `);
+    return res.rows[0];
+  } catch {
+    return { users: 0, documents: 0, records: 0, monthly_input_tokens: 0, monthly_output_tokens: 0 };
+  }
+}
+
+async function adminDashboard() {
+  const tenants = await masterTenants();
+  const counts = await Promise.all(tenants.map(tenantCounts));
+  const inputRate = Number(process.env.ANTHROPIC_INPUT_TOKEN_USD || 0.000003);
+  const outputRate = Number(process.env.ANTHROPIC_OUTPUT_TOKEN_USD || 0.000015);
+  const monthlySpend = counts.reduce((sum, count) => (
+    sum + (Number(count.monthly_input_tokens || 0) * inputRate) + (Number(count.monthly_output_tokens || 0) * outputRate)
+  ), 0);
+
+  return {
+    active_tenants: tenants.filter(tenant => tenant.is_active !== false).length,
+    documents_classified: counts.reduce((sum, count) => sum + Number(count.records || 0), 0),
+    total_users: counts.reduce((sum, count) => sum + Number(count.users || 0), 0),
+    anthropic_spend_month: Number(monthlySpend.toFixed(2)),
+  };
+}
+
+async function adminTenantSummaries() {
+  const tenants = await masterTenants();
+  const rows = await Promise.all(tenants.map(async tenant => {
+    const counts = await tenantCounts(tenant);
+    return {
+      slug: tenant.slug,
+      name: tenant.name,
+      status: tenant.is_active === false ? 'Suspended' : 'Active',
+      users: counts.users,
+      documents: counts.records,
+    };
+  }));
+  return rows;
+}
+
+async function suspendTenant(slug) {
+  const db = getPool();
+  if (!db) return null;
+  const res = await db.query(`
+    UPDATE master.tenants
+    SET is_active = false
+    WHERE slug = $1
+    RETURNING slug, name, is_active
+  `, [slug]);
+  return res.rows[0] || null;
+}
+
 module.exports = {
   getPool,
   withTenant,
@@ -403,4 +488,8 @@ module.exports = {
   listUsers,
   createUser,
   updateUser,
+  createAuditLog,
+  adminDashboard,
+  adminTenantSummaries,
+  suspendTenant,
 };

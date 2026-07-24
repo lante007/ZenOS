@@ -6,6 +6,7 @@ const fs = require('fs');
 const storage = require('../services/storage');
 const { classifyBuffer } = require('../services/pipeline');
 const { requireRoles } = require('../middleware/permissions');
+const db = require('../services/db');
 
 const router = express.Router();
 const upload = multer({ dest: '/tmp/adei-uploads/' });
@@ -31,6 +32,15 @@ router.post('/upload', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), up
       user: req.user,
       s3Document: uploaded,
     });
+
+    await db.createAuditLog(req.tenant, 'document_uploaded', {
+      s3_key: uploaded.key,
+      filename: req.file.originalname,
+    }, req.user.email || req.user.sub);
+    await db.createAuditLog(req.tenant, 'classification_triggered', {
+      s3_key: uploaded.key,
+      record_id: record.id,
+    }, req.user.email || req.user.sub);
 
     fs.unlinkSync(req.file.path);
     res.json({
@@ -64,6 +74,11 @@ router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (r
       user: req.user,
       s3Document: meta,
     });
+
+    await db.createAuditLog(req.tenant, 'classification_triggered', {
+      s3_key: key,
+      record_id: record.id,
+    }, req.user.email || req.user.sub);
 
     res.json({
       success: true,

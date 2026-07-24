@@ -133,6 +133,11 @@ router.post('/users/invite', async (req, res, next) => {
     });
 
     await sendWelcomeEmail({ tenant: req.tenant, email, fullName, temporaryPassword });
+    await db.createAuditLog(req.tenant, 'user_invited', {
+      email,
+      role,
+      invited_user_id: user.id,
+    }, req.user.email || req.user.sub);
 
     res.status(201).json({ user, email });
   } catch (err) {
@@ -164,6 +169,16 @@ router.patch('/users/:id', async (req, res, next) => {
           Username: updated.email,
         }));
       }
+      await db.createAuditLog(req.tenant, 'user_deactivated', {
+        email: updated.email,
+        user_id: updated.id,
+      }, req.user.email || req.user.sub);
+    } else if (changes.role) {
+      await db.createAuditLog(req.tenant, 'role_changed', {
+        email: updated.email,
+        user_id: updated.id,
+        role: changes.role,
+      }, req.user.email || req.user.sub);
     }
 
     res.json(updated);

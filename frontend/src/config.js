@@ -11,4 +11,6 @@ export const tenantConfig = {
   cognitoClientId: env.VITE_COGNITO_CLIENT_ID || env.REACT_APP_COGNITO_CLIENT_ID || '',
   cognitoRegion: env.VITE_COGNITO_REGION || env.REACT_APP_COGNITO_REGION || 'us-east-1',
   cognitoRedirectUri: env.VITE_COGNITO_REDIRECT_URI || env.REACT_APP_COGNITO_REDIRECT_URI || `${window.location.origin}/dashboard`,
+  adminCognitoDomain: env.VITE_ADMIN_COGNITO_DOMAIN || env.REACT_APP_ADMIN_COGNITO_DOMAIN || '',
+  adminCognitoClientId: env.VITE_ADMIN_COGNITO_CLIENT_ID || env.REACT_APP_ADMIN_COGNITO_CLIENT_ID || '',
 };

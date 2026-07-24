@@ -350,11 +350,23 @@ const mockRecords = [
 ];
 
 const API_BASE = tenantConfig.apiUrl.replace(/\/$/, '');
+let browserIdToken = '';
+
+function consumeIdTokenFromHash() {
+  if (!window.location.hash.includes('id_token=')) return '';
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  browserIdToken = params.get('id_token') || '';
+  window.history.replaceState(null, '', window.location.pathname);
+  return browserIdToken;
+}
+
+consumeIdTokenFromHash();
 
 async function apiRequest(path, options = {}) {
   const headers = {
     'x-evidenceos-tenant': tenantConfig.tenant,
     'x-evidenceos-role': options.role || 'ORGANISATION_LEAD',
+    ...(options.user ? { 'x-evidenceos-user': options.user } : {}),
     ...(options.headers || {}),
   };
   const response = await fetch(`${API_BASE}${path}`, {
@@ -481,6 +493,19 @@ async function completeNewPasswordChallenge(username, newPassword, session) {
   });
 }
 
+async function logLoginEvent(idToken) {
+  if (!idToken) return;
+  await fetch(`${API_BASE}/api/audit/login`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'x-evidenceos-tenant': tenantConfig.tenant,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ event_type: 'user_login' }),
+  }).catch(() => {});
+}
+
 function LandingPage() {
   return (
     <main className="landing-shell">
@@ -523,6 +548,7 @@ function LoginPage() {
         window.location.href = '/change-password';
         return;
       }
+      await logLoginEvent(result.AuthenticationResult?.IdToken);
       window.location.href = '/dashboard';
     } catch (err) {
       setError(err.message);
@@ -594,7 +620,8 @@ function ChangePasswordPage() {
     }
     setBusy(true);
     try {
-      await completeNewPasswordChallenge(username, password, session);
+      const result = await completeNewPasswordChallenge(username, password, session);
+      await logLoginEvent(result.AuthenticationResult?.IdToken);
       sessionStorage.removeItem('evidenceos_new_password_username');
       sessionStorage.removeItem('evidenceos_new_password_session');
       window.location.href = '/dashboard';
@@ -1405,6 +1432,264 @@ function roleLabel(role) {
   return userRoleOptions.find(option => option.value === role)?.label || role?.replaceAll('_', ' ') || 'Unassigned';
 }
 
+function adminApi(path, options = {}) {
+  const authHeaders = browserIdToken ? { Authorization: `Bearer ${browserIdToken}` } : {};
+  return apiRequest(`/api/admin${path}`, {
+    ...options,
+    role: 'AUXEIRA_FOUNDER',
+    user: 'emmanuel@auxeira.com',
+    headers: {
+      ...authHeaders,
+      ...(options.headers || {}),
+    },
+  });
+}
+
+function adminLoginUrl() {
+  if (!tenantConfig.adminCognitoDomain || !tenantConfig.adminCognitoClientId) return '';
+  const params = new URLSearchParams({
+    client_id: tenantConfig.adminCognitoClientId,
+    response_type: 'token',
+    scope: 'openid email profile',
+    redirect_uri: `${window.location.origin}/admin/dashboard`,
+  });
+  return `${tenantConfig.adminCognitoDomain.replace(/\/$/, '')}/login?${params.toString()}`;
+}
+
+function AdminShell({ active, children }) {
+  const loginUrl = adminLoginUrl();
+  return (
+    <main className="admin-shell">
+      <aside className="dashboard-sidebar" aria-label="Auxeira admin navigation">
+        <div className="sidebar-brand">
+          <span>Auxeira</span>
+          <strong>Founder Console</strong>
+        </div>
+        <nav className="sidebar-nav">
+          <a className={active === 'dashboard' ? 'active' : ''} href="/admin/dashboard">
+            <Gauge size={18} />
+            <span>Dashboard</span>
+          </a>
+          <a className={active === 'tenants' ? 'active' : ''} href="/admin/tenants">
+            <Database size={18} />
+            <span>Tenants</span>
+          </a>
+          <a className={active === 'support' ? 'active' : ''} href="/admin/support">
+            <KeyRound size={18} />
+            <span>Support</span>
+          </a>
+        </nav>
+        {loginUrl && !browserIdToken && (
+          <a className="admin-login-link" href={loginUrl}>
+            <LockKeyhole size={16} />
+            <span>Founder Sign In</span>
+          </a>
+        )}
+      </aside>
+      {children}
+    </main>
+  );
+}
+
+function AdminDashboardPage() {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    adminApi('/dashboard').then(setStats).catch(() => setStats(null));
+  }, []);
+  const tiles = [
+    ['Total active tenants', stats?.active_tenants ?? 0],
+    ['Total documents classified', stats?.documents_classified ?? 0],
+    ['Total users', stats?.total_users ?? 0],
+    ['Anthropic spend this month', `$${stats?.anthropic_spend_month ?? 0}`],
+  ];
+
+  return (
+    <AdminShell active="dashboard">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Founder console</p>
+            <h1>Admin Dashboard</h1>
+          </div>
+        </header>
+        <section className="kpi-grid">
+          {tiles.map(([label, value]) => (
+            <article className="metric-card" key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </article>
+          ))}
+        </section>
+      </section>
+    </AdminShell>
+  );
+}
+
+function AdminTenantsPage() {
+  const [tenants, setTenants] = useState([]);
+  const [selected, setSelected] = useState('zenex');
+  const [records, setRecords] = useState([]);
+
+  useEffect(() => {
+    adminApi('/tenants').then(data => {
+      setTenants(Array.isArray(data) ? data : []);
+      if (data?.[0]?.slug) setSelected(data[0].slug);
+    }).catch(() => setTenants([]));
+  }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    adminApi(`/tenants/${selected}/records`).then(data => {
+      setRecords(Array.isArray(data) ? data.map(normalizeRecord) : []);
+    }).catch(() => setRecords([]));
+  }, [selected]);
+
+  return (
+    <AdminShell active="tenants">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Admin</p>
+            <h1>Tenants</h1>
+          </div>
+        </header>
+
+        <section className="table-panel">
+          <table className="records-table users-table">
+            <thead>
+              <tr>
+                <th>Tenant name</th>
+                <th>Status</th>
+                <th>Users</th>
+                <th>Documents</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenants.map(tenant => (
+                <tr key={tenant.slug} onClick={() => setSelected(tenant.slug)}>
+                  <td>{tenant.name}</td>
+                  <td>{tenant.status}</td>
+                  <td>{tenant.users}</td>
+                  <td>{tenant.documents}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="admin-corpus">
+          <div className="panel-title">
+            <FileText size={20} />
+            <span>Read-only corpus · {selected}</span>
+          </div>
+          <div className="record-picker">
+            {records.slice(0, 8).map(record => (
+              <button type="button" key={record.adei_record_id}>
+                <strong>{record.programme_name}</strong>
+                <span>{record.eqs_tier} · {record.filename}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      </section>
+    </AdminShell>
+  );
+}
+
+function AdminSupportPage() {
+  const [tenants, setTenants] = useState([]);
+  const [tenant, setTenant] = useState('zenex');
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [records, setRecords] = useState([]);
+
+  useEffect(() => {
+    adminApi('/tenants').then(data => {
+      setTenants(Array.isArray(data) ? data : []);
+      if (data?.[0]?.slug) setTenant(data[0].slug);
+    }).catch(() => setTenants([]));
+  }, []);
+
+  async function viewCorpus() {
+    const data = await adminApi(`/tenants/${tenant}/records`);
+    setRecords(Array.isArray(data) ? data.map(normalizeRecord) : []);
+  }
+
+  async function resetPassword() {
+    await adminApi('/support/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant, email }),
+    });
+    setMessage(`Password reset started for ${email}`);
+  }
+
+  async function suspendTenantAction() {
+    await adminApi('/support/suspend-tenant', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant }),
+    });
+    setMessage(`${tenant} suspended`);
+  }
+
+  return (
+    <AdminShell active="support">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Admin</p>
+            <h1>Support</h1>
+          </div>
+        </header>
+
+        {message && <div className="toast-message">{message}</div>}
+        <section className="support-panel">
+          <label>
+            <span>Tenant</span>
+            <select value={tenant} onChange={event => setTenant(event.target.value)}>
+              {tenants.map(item => (
+                <option key={item.slug} value={item.slug}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+          <button className="secondary-action" type="button" onClick={viewCorpus}>
+            <FileText size={17} />
+            <span>View Corpus</span>
+          </button>
+          <label>
+            <span>User email</span>
+            <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="user@example.com" />
+          </label>
+          <button className="secondary-action" type="button" disabled={!email} onClick={resetPassword}>
+            <KeyRound size={17} />
+            <span>Reset Password</span>
+          </button>
+          <button className="secondary-action danger" type="button" onClick={suspendTenantAction}>
+            <AlertTriangle size={17} />
+            <span>Suspend Tenant</span>
+          </button>
+        </section>
+
+        <section className="admin-corpus">
+          <div className="panel-title">
+            <Database size={20} />
+            <span>Corpus preview</span>
+          </div>
+          <div className="record-picker">
+            {records.slice(0, 8).map(record => (
+              <button type="button" key={record.adei_record_id}>
+                <strong>{record.programme_name}</strong>
+                <span>{record.eqs_tier} · {record.filename}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      </section>
+    </AdminShell>
+  );
+}
+
 function SettingsPage() {
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1675,6 +1960,9 @@ function ExecPage() {
 }
 
 function App() {
+  if (window.location.pathname === '/admin/dashboard') return <AdminDashboardPage />;
+  if (window.location.pathname === '/admin/tenants') return <AdminTenantsPage />;
+  if (window.location.pathname === '/admin/support') return <AdminSupportPage />;
   if (window.location.pathname === '/login') return <LoginPage />;
   if (window.location.pathname === '/change-password') return <ChangePasswordPage />;
   if (window.location.pathname === '/dashboard') return <DashboardPage />;

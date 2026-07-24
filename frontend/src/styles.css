@@ -1646,6 +1646,64 @@ button:disabled {
   border-top: 1px solid var(--border);
 }
 
+.admin-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  background:
+    linear-gradient(90deg, rgba(49, 31, 71, 0.64), transparent 28%),
+    linear-gradient(180deg, #0A1628 0%, #111C31 100%);
+}
+
+.admin-corpus,
+.support-panel {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  background: rgba(10, 22, 40, 0.48);
+}
+
+.admin-login-link {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 18px 10px 0;
+  padding: 0 12px;
+  border: 1px solid rgba(239, 114, 24, 0.28);
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.admin-corpus {
+  padding: 18px;
+}
+
+.support-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1fr) auto auto;
+  align-items: end;
+  gap: 12px;
+  padding: 18px;
+}
+
+.support-panel label {
+  display: grid;
+  gap: 7px;
+  color: rgba(245, 242, 238, 0.66);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.support-panel input,
+.support-panel select {
+  min-height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(10, 22, 40, 0.68);
+  color: #ffffff;
+  padding: 0 10px;
+  font: inherit;
+}
+
 @media (max-width: 760px) {
   .landing-shell {
     padding: 16px;
@@ -1706,6 +1764,14 @@ button:disabled {
   }
 
   .dashboard-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .support-panel {
     grid-template-columns: 1fr;
   }
 
