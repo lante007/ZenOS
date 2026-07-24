@@ -6,6 +6,7 @@ import {
   BarChart3,
   Check,
   CheckCircle2,
+  ClipboardCopy,
   Clock3,
   Database,
   Download,
@@ -92,6 +93,15 @@ const mockReviewQueue = [
     alternatives: ['High', 'Low', 'Commissioning only'],
     rationale: 'Finding challenges a common assumption but evidence quality is mixed across source reports.',
   },
+];
+
+const knowledgeAudiences = [
+  { id: 'TRUSTEE', label: 'Trustee', focus: 'Governance, risk, and portfolio value' },
+  { id: 'CEO', label: 'CEO', focus: 'Strategic decisions and institutional learning' },
+  { id: 'DBE_NATIONAL', label: 'DBE National', focus: 'Policy alignment and scalable implications' },
+  { id: 'PROVINCIAL_HOD', label: 'Provincial HOD', focus: 'Implementation action and district relevance' },
+  { id: 'CO_FUNDER', label: 'Co-Funder', focus: 'Investment rationale and evidence confidence' },
+  { id: 'SECTOR_PEER', label: 'Sector Peer', focus: 'Practice learning and replication conditions' },
 ];
 
 const pipelineSteps = [
@@ -945,12 +955,147 @@ function QueuePage() {
   );
 }
 
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function KnowledgePage() {
+  const eligibleRecords = mockRecords.filter(record => ['Tier 1', 'Tier 2'].includes(record.eqs_tier));
+  const [recordId, setRecordId] = useState(eligibleRecords[0]?.adei_record_id || '');
+  const [audience, setAudience] = useState(knowledgeAudiences[0].id);
+  const [brief, setBrief] = useState('');
+
+  const selectedRecord = eligibleRecords.find(record => record.adei_record_id === recordId) || eligibleRecords[0];
+  const selectedAudience = knowledgeAudiences.find(item => item.id === audience) || knowledgeAudiences[0];
+
+  function generateBrief() {
+    const output = [
+      `${selectedAudience.label} Brief: ${selectedRecord.programme_name}`,
+      '',
+      `Evidence confidence: ${selectedRecord.eqs_tier} | EQS ${selectedRecord.eqs_composite}`,
+      '',
+      `Core finding: ${selectedRecord.key_finding_1}`,
+      '',
+      `Decision implication: ${selectedRecord.decision_relevance}`,
+      '',
+      `Why this matters for ${selectedAudience.label}: ${selectedAudience.focus}.`,
+      '',
+      `Caveat: ${selectedRecord.limitations}`,
+      '',
+      `Recommended next action: ${selectedRecord.evidence_gap}`,
+    ].join('\n');
+    setBrief(output);
+  }
+
+  async function copyBrief() {
+    if (!brief) return;
+    await navigator.clipboard?.writeText(brief);
+  }
+
+  return (
+    <AppShell active="knowledge">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Knowledge products</p>
+            <h1>Generate Audience Brief</h1>
+          </div>
+          <button className="primary-action" type="button" onClick={generateBrief}>
+            <Sparkles size={18} />
+            <span>Generate Brief</span>
+          </button>
+        </header>
+
+        <section className="knowledge-grid">
+          <article className="selector-panel">
+            <div className="panel-title">
+              <FileText size={20} />
+              <span>Record selector</span>
+            </div>
+            <div className="record-picker">
+              {eligibleRecords.map((record) => (
+                <button
+                  className={record.adei_record_id === recordId ? 'selected' : ''}
+                  type="button"
+                  key={record.adei_record_id}
+                  onClick={() => {
+                    setRecordId(record.adei_record_id);
+                    setBrief('');
+                  }}
+                >
+                  <strong>{record.programme_name}</strong>
+                  <span>{record.eqs_tier} · EQS {record.eqs_composite} · {record.province}</span>
+                </button>
+              ))}
+            </div>
+          </article>
+
+          <article className="audience-panel">
+            <div className="panel-title">
+              <Users size={20} />
+              <span>Audience</span>
+            </div>
+            <div className="audience-grid">
+              {knowledgeAudiences.map((item) => (
+                <button
+                  className={item.id === audience ? 'selected' : ''}
+                  type="button"
+                  key={item.id}
+                  onClick={() => {
+                    setAudience(item.id);
+                    setBrief('');
+                  }}
+                >
+                  <strong>{item.label}</strong>
+                  <span>{item.focus}</span>
+                </button>
+              ))}
+            </div>
+          </article>
+        </section>
+
+        <section className="brief-panel" aria-label="Generated knowledge product">
+          <div className="brief-header">
+            <div>
+              <p className="eyebrow">{selectedAudience.label} output</p>
+              <h2>{selectedRecord.programme_name}</h2>
+            </div>
+            <div className="brief-actions">
+              <button className="secondary-action" type="button" disabled={!brief} onClick={copyBrief}>
+                <ClipboardCopy size={17} />
+                <span>Copy</span>
+              </button>
+              <button className="secondary-action" type="button" disabled={!brief} onClick={() => downloadText(`${selectedRecord.adei_record_id}-${audience}.txt`, brief)}>
+                <Download size={17} />
+                <span>Download</span>
+              </button>
+            </div>
+          </div>
+
+          <pre className={brief ? 'brief-body filled' : 'brief-body'}>
+            {brief || 'Select a record and audience, then generate a brief.'}
+          </pre>
+        </section>
+      </section>
+    </AppShell>
+  );
+}
+
 function App() {
   if (window.location.pathname === '/login') return <LoginPage />;
   if (window.location.pathname === '/dashboard') return <DashboardPage />;
   if (window.location.pathname === '/records') return <RecordsPage />;
   if (window.location.pathname === '/classify') return <ClassifyPage />;
   if (window.location.pathname === '/queue') return <QueuePage />;
+  if (window.location.pathname === '/knowledge') return <KnowledgePage />;
   return <LandingPage />;
 }
 

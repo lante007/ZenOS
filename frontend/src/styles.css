@@ -1226,6 +1226,114 @@ button:disabled {
   color: rgba(245, 242, 238, 0.58);
 }
 
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.85fr) minmax(520px, 1.15fr);
+  gap: 18px;
+}
+
+.selector-panel,
+.audience-panel,
+.brief-panel {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+    rgba(15, 32, 64, 0.72);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.22);
+  padding: 22px;
+}
+
+.record-picker,
+.audience-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.audience-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.record-picker button,
+.audience-grid button {
+  min-height: 78px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 22, 40, 0.52);
+  color: rgba(245, 242, 238, 0.68);
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-picker button.selected,
+.audience-grid button.selected {
+  border-color: rgba(239, 114, 24, 0.54);
+  background: rgba(239, 114, 24, 0.12);
+}
+
+.record-picker strong,
+.audience-grid strong,
+.record-picker span,
+.audience-grid span {
+  display: block;
+}
+
+.record-picker strong,
+.audience-grid strong {
+  color: #ffffff;
+  font-size: 15px;
+}
+
+.record-picker span,
+.audience-grid span {
+  margin-top: 6px;
+  color: rgba(245, 242, 238, 0.54);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.brief-panel {
+  margin-top: 18px;
+}
+
+.brief-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.brief-header h2 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.brief-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.brief-body {
+  min-height: 280px;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 22, 40, 0.62);
+  color: rgba(245, 242, 238, 0.5);
+  white-space: pre-wrap;
+  font-family: "DM Sans", system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+.brief-body.filled {
+  color: rgba(245, 242, 238, 0.82);
+}
+
 @media (max-width: 760px) {
   .landing-shell {
     padding: 16px;
@@ -1363,6 +1471,8 @@ button:disabled {
 
   .records-toolbar,
   .classify-grid,
+  .knowledge-grid,
+  .audience-grid,
   .filter-grid,
   .field-grid {
     grid-template-columns: 1fr;
@@ -1403,5 +1513,13 @@ button:disabled {
   .review-topline > strong,
   .override-row .secondary-action {
     justify-self: start;
+  }
+
+  .brief-header {
+    display: grid;
+  }
+
+  .brief-actions {
+    justify-content: flex-start;
   }
 }
