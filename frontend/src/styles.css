@@ -1,0 +1,194 @@
+:root {
+  --navy: #0A1628;
+  --navy-mid: #0F2040;
+  --navy-light: #162A52;
+  --white: #F5F2EE;
+  --gray: #8A9BB5;
+  --green: #2D7D46;
+  --amber: #D97706;
+  --red: #C53030;
+  --primary: #EF7218;
+  --secondary: #311F47;
+  --border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+  color: var(--white);
+  background: var(--navy);
+  font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(135deg, rgba(49, 31, 71, 0.82), rgba(10, 22, 40, 0.96) 48%, rgba(15, 32, 64, 0.98)),
+    var(--navy);
+  color: var(--white);
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.landing-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+.landing-band {
+  width: min(1080px, 100%);
+  min-height: min(720px, calc(100vh - 56px));
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  align-items: center;
+  justify-items: center;
+  border: 1px solid rgba(239, 114, 24, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+    rgba(10, 22, 40, 0.68);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.landing-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(239, 114, 24, 0.12), transparent 24%, transparent 74%, rgba(49, 31, 71, 0.22)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0, rgba(255, 255, 255, 0.035) 1px, transparent 1px, transparent 78px);
+  pointer-events: none;
+}
+
+.landing-band::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9vh;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(239, 114, 24, 0.62), transparent);
+}
+
+.landing-mark,
+.landing-copy,
+.powered-line {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-mark {
+  align-self: end;
+  width: min(440px, 72vw);
+  display: flex;
+  justify-content: center;
+  margin-bottom: 34px;
+}
+
+.landing-mark img {
+  display: block;
+  max-width: 100%;
+  max-height: 126px;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.3));
+}
+
+.landing-copy {
+  text-align: center;
+  width: min(820px, 100%);
+  padding: 0 24px;
+}
+
+.landing-copy h1 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(44px, 8vw, 84px);
+  font-weight: 600;
+  line-height: 0.96;
+  letter-spacing: 0;
+  color: var(--white);
+}
+
+.landing-copy p {
+  margin: 18px auto 34px;
+  max-width: 580px;
+  color: rgba(245, 242, 238, 0.72);
+  font-size: clamp(15px, 2vw, 18px);
+}
+
+.primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 114, 24, 0.85);
+  background: var(--primary);
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 13px;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.primary-action:hover {
+  transform: translateY(-1px);
+  background: #d9630f;
+  border-color: #f08c3b;
+}
+
+.powered-line {
+  align-self: end;
+  margin-bottom: 34px;
+  color: rgba(245, 242, 238, 0.42);
+  font-size: 11px;
+  letter-spacing: 0.4px;
+}
+
+@media (max-width: 760px) {
+  .landing-shell {
+    padding: 16px;
+    place-items: stretch;
+  }
+
+  .landing-band {
+    min-height: calc(100vh - 32px);
+  }
+
+  .landing-copy {
+    padding: 0 18px;
+  }
+
+  .landing-copy h1 {
+    font-size: clamp(39px, 15vw, 60px);
+  }
+
+  .landing-mark {
+    margin-bottom: 26px;
+  }
+
+  .landing-mark img {
+    max-height: 96px;
+  }
+}
