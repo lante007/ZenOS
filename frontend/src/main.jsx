@@ -4,8 +4,11 @@ import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
+  Clock3,
+  Database,
   Download,
   Filter,
+  FileCheck2,
   FileText,
   Gauge,
   Layers3,
@@ -56,6 +59,17 @@ const workQueue = [
   { title: 'Foundation Phase reading synthesis', owner: 'Evidence Analyst', state: 'Review' },
   { title: 'Learner outcome dashboard brief', owner: 'Communications', state: 'Draft' },
   { title: 'Quarterly trustee evidence pack', owner: 'Organisation Lead', state: 'Ready' },
+];
+
+const pipelineSteps = [
+  'Secure upload to tenant S3 bucket',
+  'Extract text from source document',
+  'Detect programme and document metadata',
+  'Run ADEI 55-field classification',
+  'Apply six protocol amendments',
+  'Calculate Evidence Quality Score',
+  'Create expert queue items',
+  'Save record and publish to library',
 ];
 
 const adeiFieldLabels = [
@@ -693,10 +707,133 @@ function RecordsPage() {
   );
 }
 
+function ClassifyPage() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [driveFileId, setDriveFileId] = useState('');
+  const [activeStep, setActiveStep] = useState(-1);
+
+  function startPipeline() {
+    setActiveStep(0);
+    pipelineSteps.forEach((_, index) => {
+      window.setTimeout(() => setActiveStep(index), index * 360);
+    });
+    window.setTimeout(() => setActiveStep(pipelineSteps.length), pipelineSteps.length * 360);
+  }
+
+  function handleFile(file) {
+    if (!file) return;
+    setSelectedFile(file);
+    setActiveStep(-1);
+  }
+
+  const isComplete = activeStep >= pipelineSteps.length;
+  const canStart = selectedFile || driveFileId.trim();
+
+  return (
+    <AppShell active="classify">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Classify evidence</p>
+            <h1>Upload Document</h1>
+          </div>
+          <div className="tenant-pill">
+            <Database size={16} />
+            <span>auxeira-evidenceos-{tenantConfig.tenant}/raw/documents</span>
+          </div>
+        </header>
+
+        <section className="classify-grid">
+          <article className="upload-panel">
+            <div
+              className="drop-zone"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                handleFile(event.dataTransfer.files[0]);
+              }}
+            >
+              <UploadCloud size={42} />
+              <h2>Drop PDF, Word, or PowerPoint files here</h2>
+              <p>Uploads are routed to the Zenex private S3 storage area before classification starts.</p>
+              <label className="secondary-action file-picker">
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx"
+                  onChange={(event) => handleFile(event.target.files[0])}
+                />
+                <FileText size={17} />
+                <span>Choose File</span>
+              </label>
+            </div>
+
+            <div className="selected-file">
+              <FileCheck2 size={18} />
+              <div>
+                <strong>{selectedFile ? selectedFile.name : 'No document selected'}</strong>
+                <span>{selectedFile ? `${Math.max(1, Math.round(selectedFile.size / 1024))} KB ready for upload` : 'Use drag-drop, file picker, or Drive fallback.'}</span>
+              </div>
+            </div>
+
+            <div className="drive-fallback">
+              <label htmlFor="drive-file-id">Drive file ID fallback</label>
+              <div>
+                <input
+                  id="drive-file-id"
+                  type="text"
+                  placeholder="1AbCDEFgHijK..."
+                  value={driveFileId}
+                  onChange={(event) => {
+                    setDriveFileId(event.target.value);
+                    setActiveStep(-1);
+                  }}
+                />
+                <span>Legacy intake only</span>
+              </div>
+            </div>
+
+            <button className="primary-action classify-action" type="button" disabled={!canStart} onClick={startPipeline}>
+              <span>{isComplete ? 'Classification Complete' : 'Start Classification'}</span>
+              <ArrowRight size={18} />
+            </button>
+          </article>
+
+          <article className="pipeline-panel">
+            <div className="panel-title">
+              <Clock3 size={20} />
+              <span>8-step pipeline</span>
+            </div>
+
+            <div className="pipeline-list">
+              {pipelineSteps.map((step, index) => {
+                const complete = activeStep > index || isComplete;
+                const active = activeStep === index && !isComplete;
+                return (
+                  <div className={`pipeline-step ${complete ? 'complete' : ''} ${active ? 'active' : ''}`} key={step}>
+                    <div>{complete ? <CheckCircle2 size={16} /> : <span>{index + 1}</span>}</div>
+                    <p>{step}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pipeline-result">
+              <p className="eyebrow">Pipeline state</p>
+              <strong>{isComplete ? 'Record ready for Evidence Library' : activeStep >= 0 ? 'Classification running' : 'Waiting for document'}</strong>
+              <span>{isComplete ? 'Expert queue and EQS outputs are prepared for review.' : 'Progress updates will stream here from the live API.'}</span>
+            </div>
+          </article>
+        </section>
+      </section>
+    </AppShell>
+  );
+}
+
 function App() {
   if (window.location.pathname === '/login') return <LoginPage />;
   if (window.location.pathname === '/dashboard') return <DashboardPage />;
   if (window.location.pathname === '/records') return <RecordsPage />;
+  if (window.location.pathname === '/classify') return <ClassifyPage />;
   return <LandingPage />;
 }
 
