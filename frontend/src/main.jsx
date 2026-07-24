@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   AlertTriangle,
@@ -349,6 +349,85 @@ const mockRecords = [
   },
 ];
 
+const API_BASE = tenantConfig.apiUrl.replace(/\/$/, '');
+
+async function apiRequest(path, options = {}) {
+  const headers = {
+    'x-evidenceos-tenant': tenantConfig.tenant,
+    'x-evidenceos-role': options.role || 'ORGANISATION_LEAD',
+    ...(options.headers || {}),
+  };
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || response.statusText);
+  }
+  return response.json();
+}
+
+function normalizeRecord(record) {
+  const tier = record.eqs_tier || record.confidence_tier || 'Tier 2';
+  return {
+    ...record,
+    adei_record_id: record.adei_record_id || record.id || `ADEI-${record.filename || 'record'}`,
+    tenant_id: record.tenant_id || tenantConfig.tenant,
+    filename: record.filename || record.name || 'Untitled evidence record',
+    source_uri: record.source_uri || record.s3_key || 'S3 source pending',
+    institution: record.institution || tenantConfig.orgName,
+    programme_name: record.programme_name || record.programme || 'Unassigned programme',
+    document_type: record.document_type || 'Evaluation Report',
+    publication_year: record.publication_year || record.year || 'Not captured',
+    classification_date: record.classification_date || record.classified_at || 'Not captured',
+    province: record.province || record.provinces || 'Not captured',
+    phase: record.phase || 'Not captured',
+    eqs_tier: String(tier).replace('TIER_', 'Tier '),
+    confidence_tier: record.confidence_tier || tier,
+    eqs_composite: record.eqs_composite || record.evidence_capital_score || 'N/A',
+    key_finding_1: record.key_finding_1 || 'No primary finding captured.',
+    key_finding_2: record.key_finding_2 || 'No secondary finding captured.',
+    key_finding_3: record.key_finding_3 || 'No tertiary finding captured.',
+  };
+}
+
+function normalizeQueueItem(item) {
+  return {
+    id: item.id,
+    record: item.document || item.record || item.record_id || 'Evidence record',
+    fieldName: item.field_name || item.field || 'classification_field',
+    recommendation: item.recommendation || item.claude_value || 'Review required',
+    confidence: Number(item.confidence || item.claude_confidence || 0),
+    alternatives: item.alternatives || ['Confirm recommendation', 'Override manually', 'Defer review'],
+    rationale: item.question || item.rationale || 'Low-confidence classification requires Organisation Lead review.',
+  };
+}
+
+function useLiveRecords() {
+  const [records, setRecords] = useState(mockRecords);
+  const [source, setSource] = useState('mock');
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/records')
+      .then(data => {
+        if (!cancelled && Array.isArray(data)) {
+          setRecords(data.map(normalizeRecord));
+          setSource('api');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSource('mock');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { records, source };
+}
+
 function buildCognitoUrl() {
   if (!tenantConfig.cognitoDomain || !tenantConfig.cognitoClientId) return '';
   const params = new URLSearchParams({
@@ -438,7 +517,7 @@ function queueCount() {
   return mockReviewQueue.length;
 }
 
-function DashboardNav({ active }) {
+function DashboardNav({ active, queueBadge = queueCount() }) {
   return (
     <>
       <aside className="dashboard-sidebar" aria-label="EvidenceOS navigation">
@@ -463,7 +542,7 @@ function DashboardNav({ active }) {
           <a className={active === 'queue' ? 'active' : ''} href="/queue">
             <CheckCircle2 size={18} />
             <span>Review</span>
-            <strong className="nav-badge">{queueCount()}</strong>
+            <strong className="nav-badge">{queueBadge}</strong>
           </a>
           <a className={active === 'knowledge' ? 'active' : ''} href="/knowledge">
             <Sparkles size={18} />
@@ -479,17 +558,33 @@ function DashboardNav({ active }) {
   );
 }
 
-function AppShell({ active, children }) {
+function AppShell({ active, children, queueBadge }) {
   return (
     <main className="dashboard-shell">
-      <DashboardNav active={active} />
+      <DashboardNav active={active} queueBadge={queueBadge} />
       {children}
     </main>
   );
 }
 
 function DashboardPage() {
-  const evidenceHealthScore = 82;
+  const { records } = useLiveRecords();
+  const [stats, setStats] = useState(null);
+  const evidenceHealthScore = stats?.records
+    ? Math.round(((stats.tier_counts?.TIER_1 || stats.tier_counts?.['Tier 1'] || 0) / stats.records) * 100)
+    : 82;
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/stats')
+      .then(data => {
+        if (!cancelled) setStats(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <AppShell active="dashboard">
@@ -554,7 +649,7 @@ function DashboardPage() {
               <article className="cascade-card" key={stage.title}>
                 <div className="cascade-index">{String(index + 1).padStart(2, '0')}</div>
                 <h3>{stage.title}</h3>
-                <strong>{stage.value}</strong>
+                <strong>{stage.title === 'Evidence Capital' ? `${records.length} records` : stage.value}</strong>
                 <p>{stage.detail}</p>
                 {index < cascadeStages.length - 1 && <ArrowRight className="cascade-arrow" size={18} />}
               </article>
@@ -613,12 +708,13 @@ function exportRecordsCsv(records) {
 }
 
 function RecordsPage() {
+  const { records, source } = useLiveRecords();
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ tier: 'all', type: 'all', phase: 'all', province: 'all' });
   const [selectedRecord, setSelectedRecord] = useState(null);
 
   const filteredRecords = useMemo(() => {
-    return mockRecords.filter((record) => {
+    return records.filter((record) => {
       const haystack = [
         record.filename,
         record.programme_name,
@@ -634,9 +730,9 @@ function RecordsPage() {
       const matchesProvince = filters.province === 'all' || record.province === filters.province;
       return matchesQuery && matchesTier && matchesType && matchesPhase && matchesProvince;
     });
-  }, [query, filters]);
+  }, [records, query, filters]);
 
-  const unique = (field) => [...new Set(mockRecords.map(record => record[field]).filter(Boolean))];
+  const unique = (field) => [...new Set(records.map(record => record[field]).filter(Boolean))];
 
   return (
     <AppShell active="records">
@@ -695,7 +791,7 @@ function RecordsPage() {
         <section className="table-panel" aria-label="Classified evidence records">
           <div className="table-summary">
             <span>{filteredRecords.length} records</span>
-            <span>55-field ADEI taxonomy v2.1</span>
+            <span>{source === 'api' ? 'Live API' : 'Mock fallback'} · 55-field ADEI taxonomy v2.1</span>
           </div>
           <div className="records-table" role="table">
             <div className="records-row records-head" role="row">
@@ -756,12 +852,31 @@ function ClassifyPage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [driveFileId, setDriveFileId] = useState('');
   const [activeStep, setActiveStep] = useState(-1);
+  const [classificationResult, setClassificationResult] = useState('');
 
-  function startPipeline() {
+  async function startPipeline() {
     setActiveStep(0);
+    setClassificationResult('');
     pipelineSteps.forEach((_, index) => {
       window.setTimeout(() => setActiveStep(index), index * 360);
     });
+
+    if (selectedFile) {
+      try {
+        const form = new FormData();
+        form.append('document', selectedFile);
+        const result = await apiRequest('/api/classify/upload', {
+          method: 'POST',
+          body: form,
+        });
+        setClassificationResult(`Created ${result.record_id || result.filename}`);
+      } catch (error) {
+        setClassificationResult(`Local API upload failed: ${error.message}`);
+      }
+    } else if (driveFileId.trim()) {
+      setClassificationResult('Drive file ID fallback is captured, but live classification now requires S3 upload.');
+    }
+
     window.setTimeout(() => setActiveStep(pipelineSteps.length), pipelineSteps.length * 360);
   }
 
@@ -865,7 +980,7 @@ function ClassifyPage() {
             <div className="pipeline-result">
               <p className="eyebrow">Pipeline state</p>
               <strong>{isComplete ? 'Record ready for Evidence Library' : activeStep >= 0 ? 'Classification running' : 'Waiting for document'}</strong>
-              <span>{isComplete ? 'Expert queue and EQS outputs are prepared for review.' : 'Progress updates will stream here from the live API.'}</span>
+              <span>{classificationResult || (isComplete ? 'Expert queue and EQS outputs are prepared for review.' : 'Progress updates will stream here from the live API.')}</span>
             </div>
           </article>
         </section>
@@ -878,13 +993,35 @@ function QueuePage() {
   const [items, setItems] = useState(mockReviewQueue);
   const [overrideValues, setOverrideValues] = useState({});
 
-  function resolveItem(id, value, override = false) {
-    setItems(current => current.filter(item => item.id !== id));
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/queue')
+      .then(data => {
+        if (!cancelled && Array.isArray(data)) setItems(data.map(normalizeQueueItem));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function resolveItem(id, value, override = false) {
+    const item = items.find(entry => entry.id === id);
+    setItems(current => current.filter(entry => entry.id !== id));
     setOverrideValues(current => ({ ...current, [id]: override ? value : '' }));
+    try {
+      await apiRequest(`/api/queue/${id}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: value || item?.recommendation, override }),
+      });
+    } catch {
+      // Local optimistic state is kept if the API is offline during UI review.
+    }
   }
 
   return (
-    <AppShell active="queue">
+    <AppShell active="queue" queueBadge={items.length}>
       <section className="dashboard-main">
         <header className="dashboard-header">
           <div>
@@ -970,15 +1107,53 @@ function downloadText(filename, text) {
 }
 
 function KnowledgePage() {
-  const eligibleRecords = mockRecords.filter(record => ['Tier 1', 'Tier 2'].includes(record.eqs_tier));
+  const { records, source } = useLiveRecords();
+  const eligibleRecords = records.filter(record => ['Tier 1', 'Tier 2'].includes(record.eqs_tier));
   const [recordId, setRecordId] = useState(eligibleRecords[0]?.adei_record_id || '');
   const [audience, setAudience] = useState(knowledgeAudiences[0].id);
   const [brief, setBrief] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!eligibleRecords.length) return;
+    if (!eligibleRecords.some(record => record.adei_record_id === recordId)) {
+      setRecordId(eligibleRecords[0].adei_record_id);
+    }
+  }, [eligibleRecords, recordId]);
 
   const selectedRecord = eligibleRecords.find(record => record.adei_record_id === recordId) || eligibleRecords[0];
   const selectedAudience = knowledgeAudiences.find(item => item.id === audience) || knowledgeAudiences[0];
 
-  function generateBrief() {
+  if (!selectedRecord) {
+    return (
+      <AppShell active="knowledge">
+        <section className="dashboard-main">
+          <article className="empty-panel">
+            <FileText size={28} />
+            <h2>No eligible records</h2>
+            <p>Knowledge products require Tier 1 or Tier 2 records.</p>
+          </article>
+        </section>
+      </AppShell>
+    );
+  }
+
+  async function generateBrief() {
+    if (!selectedRecord) return;
+    setIsGenerating(true);
+    try {
+      const product = await apiRequest('/api/knowledge-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record_id: selectedRecord.adei_record_id || selectedRecord.id, audience }),
+      });
+      setBrief(product.brief || product.content || '');
+      return;
+    } catch {
+      // Keep the interface usable if the local API is offline or Anthropic is unavailable.
+    } finally {
+      setIsGenerating(false);
+    }
     const output = [
       `${selectedAudience.label} Brief: ${selectedRecord.programme_name}`,
       '',
@@ -1012,7 +1187,7 @@ function KnowledgePage() {
           </div>
           <button className="primary-action" type="button" onClick={generateBrief}>
             <Sparkles size={18} />
-            <span>Generate Brief</span>
+            <span>{isGenerating ? 'Generating' : 'Generate Brief'}</span>
           </button>
         </header>
 
@@ -1020,7 +1195,7 @@ function KnowledgePage() {
           <article className="selector-panel">
             <div className="panel-title">
               <FileText size={20} />
-              <span>Record selector</span>
+              <span>Record selector · {source === 'api' ? 'Live API' : 'Mock fallback'}</span>
             </div>
             <div className="record-picker">
               {eligibleRecords.map((record) => (
@@ -1092,10 +1267,25 @@ function KnowledgePage() {
 }
 
 function ExecPage() {
-  const topFindings = mockRecords.flatMap(record => [
+  const { records } = useLiveRecords();
+  const [summary, setSummary] = useState(null);
+  const topFindings = records.flatMap(record => [
     record.key_finding_1,
     record.key_finding_2,
   ]).filter(Boolean).slice(0, 5);
+  const healthScore = summary?.evidence_health_score ?? 82;
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/exec-summary', { role: 'CEO_EXEC' })
+      .then(data => {
+        if (!cancelled) setSummary(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <main className="exec-shell">
@@ -1114,7 +1304,7 @@ function ExecPage() {
       <section className="exec-score-card">
         <div>
           <p className="eyebrow">Evidence Health Score</p>
-          <strong>82</strong>
+          <strong>{healthScore}</strong>
           <span>Strong portfolio readiness with targeted evidence gaps.</span>
         </div>
         <Gauge size={68} />
@@ -1151,8 +1341,8 @@ function ExecPage() {
             <span>Briefs ready for senior decision use</span>
           </article>
           <article>
-            <strong>2</strong>
-            <span>Evidence gaps worth commissioning next</span>
+            <strong>{summary?.queue_items_pending ?? 2}</strong>
+            <span>Evidence gaps or queue items needing attention</span>
           </article>
           <article>
             <strong>1</strong>
