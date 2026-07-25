@@ -1491,10 +1491,11 @@ function AdminLoginPage() {
     setBusy(true);
     setError('');
     try {
-      const result = await signInWithClient(tenantConfig.adminCognitoClientId, email.trim().toLowerCase(), password);
+      const username = email.trim();
+      const result = await signInWithClient(tenantConfig.adminCognitoClientId, username, password);
       if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         sessionStorage.setItem('evidenceos_new_password_session', result.Session);
-        sessionStorage.setItem('evidenceos_new_password_username', email.trim().toLowerCase());
+        sessionStorage.setItem('evidenceos_new_password_username', username);
         sessionStorage.setItem('evidenceos_new_password_client', 'admin');
         navigateInApp('/change-password');
         return;
