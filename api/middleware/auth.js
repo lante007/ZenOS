@@ -39,12 +39,12 @@ function signingKeyFor(tenant) {
 }
 
 function toUser(payload, tenantSlug) {
-  const role = payload['custom:role'] || payload.role || 'EVIDENCE_ANALYST';
+  const role = payload['custom:role'] || payload['custom:custom:role'] || payload.role || 'EVIDENCE_ANALYST';
   return {
     sub: payload.sub,
     email: payload.email,
     role,
-    tenant_id: payload['custom:tenant_id'] || payload['custom:tenant'] || tenantSlug,
+    tenant_id: payload['custom:tenant_id'] || payload['custom:custom:tenant_id'] || payload['custom:tenant'] || tenantSlug,
     name: payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(' '),
   };
 }
