@@ -140,6 +140,27 @@ button:disabled {
   font-size: clamp(15px, 2vw, 18px);
 }
 
+.landing-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.request-access-link {
+  color: rgba(245, 242, 238, 0.78);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(245, 242, 238, 0.34);
+}
+
+.request-access-link:hover {
+  color: #ffffff;
+  border-bottom-color: var(--primary);
+}
+
 .primary-action {
   display: inline-flex;
   align-items: center;

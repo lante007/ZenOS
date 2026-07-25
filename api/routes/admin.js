@@ -11,9 +11,12 @@ const cognito = new CognitoIdentityProviderClient({
 });
 
 function requireFounder(req, res, next) {
-  const email = req.user?.email || '';
-  const allowed = process.env.FOUNDER_EMAIL || 'emmanuel@auxeira.com';
-  if (email.toLowerCase() !== allowed.toLowerCase() && req.user?.role !== 'AUXEIRA_FOUNDER') {
+  const email = (req.user?.email || '').toLowerCase();
+  const allowed = (process.env.FOUNDER_EMAILS || process.env.FOUNDER_EMAIL || 'emmanuel@auxeira.com,lante007@gmail.com')
+    .split(',')
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean);
+  if (!allowed.includes(email) && req.user?.role !== 'AUXEIRA_FOUNDER') {
     return res.status(403).json({ error: 'Founder console access only' });
   }
   next();

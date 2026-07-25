@@ -362,10 +362,41 @@ function consumeIdTokenFromHash() {
 
 consumeIdTokenFromHash();
 
+function setInMemoryToken(token) {
+  browserIdToken = token || '';
+}
+
+function decodeJwtPayload(token) {
+  if (!token) return {};
+  try {
+    const payload = token.split('.')[1] || '';
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return {};
+  }
+}
+
+function routeForAuthToken(token) {
+  const payload = decodeJwtPayload(token);
+  const role = payload['custom:role'] || payload['custom:custom:role'] || payload.role || 'ORGANISATION_LEAD';
+  if (role === 'CEO_EXEC') return '/exec';
+  if (role === 'COMMUNICATIONS') return '/knowledge';
+  if (role === 'EVIDENCE_ANALYST') return '/records';
+  return '/dashboard';
+}
+
+function navigateInApp(path) {
+  window.history.pushState(null, '', path);
+  window.dispatchEvent(new Event('evidenceos:navigate'));
+}
+
 async function apiRequest(path, options = {}) {
   const headers = {
     'x-evidenceos-tenant': tenantConfig.tenant,
     'x-evidenceos-role': options.role || 'ORGANISATION_LEAD',
+    ...(browserIdToken ? { Authorization: `Bearer ${browserIdToken}` } : {}),
     ...(options.user ? { 'x-evidenceos-user': options.user } : {}),
     ...(options.headers || {}),
   };
@@ -440,18 +471,6 @@ function useLiveRecords() {
   return { records, source };
 }
 
-function buildCognitoUrl() {
-  if (!tenantConfig.cognitoDomain || !tenantConfig.cognitoClientId) return '';
-  const params = new URLSearchParams({
-    client_id: tenantConfig.cognitoClientId,
-    response_type: 'code',
-    scope: 'openid email profile',
-    redirect_uri: tenantConfig.cognitoRedirectUri,
-  });
-  const domain = tenantConfig.cognitoDomain.replace(/\/$/, '');
-  return `${domain}/oauth2/authorize?${params.toString()}`;
-}
-
 async function cognitoRequest(target, body) {
   const response = await fetch(`https://cognito-idp.${tenantConfig.cognitoRegion}.amazonaws.com/`, {
     method: 'POST',
@@ -517,10 +536,15 @@ function LandingPage() {
         <div className="landing-copy">
           <h1>{tenantConfig.orgName} Evidence Intelligence</h1>
           <p>Thirty years of Foundation Phase evidence, classified and decision-ready.</p>
-          <a className="primary-action" href="/login">
-            <span>Sign In</span>
-            <ArrowRight size={18} strokeWidth={2.4} />
-          </a>
+          <div className="landing-actions">
+            <a className="primary-action" href="/login">
+              <span>Sign In</span>
+              <ArrowRight size={18} strokeWidth={2.4} />
+            </a>
+            <a className="request-access-link" href="mailto:hello@auxeira.com?subject=EvidenceOS%20Access%20Request%20%E2%80%94%20Zenex%20Foundation">
+              Request Access
+            </a>
+          </div>
         </div>
 
         <div className="powered-line">Powered by Auxeira EvidenceOS</div>
@@ -534,7 +558,6 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const cognitoUrl = buildCognitoUrl();
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -545,11 +568,13 @@ function LoginPage() {
       if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         sessionStorage.setItem('evidenceos_new_password_session', result.Session);
         sessionStorage.setItem('evidenceos_new_password_username', email.trim().toLowerCase());
-        window.location.href = '/change-password';
+        navigateInApp('/change-password');
         return;
       }
-      await logLoginEvent(result.AuthenticationResult?.IdToken);
-      window.location.href = '/dashboard';
+      const idToken = result.AuthenticationResult?.IdToken || '';
+      setInMemoryToken(idToken);
+      await logLoginEvent(idToken);
+      navigateInApp(routeForAuthToken(idToken));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -594,10 +619,6 @@ function LoginPage() {
             <ArrowRight size={18} strokeWidth={2.4} />
           </button>
         </form>
-
-        {cognitoUrl && (
-          <a className="secondary-link" href={cognitoUrl}>Use hosted sign-in</a>
-        )}
       </section>
     </main>
   );
@@ -621,10 +642,12 @@ function ChangePasswordPage() {
     setBusy(true);
     try {
       const result = await completeNewPasswordChallenge(username, password, session);
-      await logLoginEvent(result.AuthenticationResult?.IdToken);
+      const idToken = result.AuthenticationResult?.IdToken || '';
+      setInMemoryToken(idToken);
+      await logLoginEvent(idToken);
       sessionStorage.removeItem('evidenceos_new_password_username');
       sessionStorage.removeItem('evidenceos_new_password_session');
-      window.location.href = '/dashboard';
+      navigateInApp(routeForAuthToken(idToken));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1960,18 +1983,30 @@ function ExecPage() {
 }
 
 function App() {
-  if (window.location.pathname === '/admin/dashboard') return <AdminDashboardPage />;
-  if (window.location.pathname === '/admin/tenants') return <AdminTenantsPage />;
-  if (window.location.pathname === '/admin/support') return <AdminSupportPage />;
-  if (window.location.pathname === '/login') return <LoginPage />;
-  if (window.location.pathname === '/change-password') return <ChangePasswordPage />;
-  if (window.location.pathname === '/dashboard') return <DashboardPage />;
-  if (window.location.pathname === '/records') return <RecordsPage />;
-  if (window.location.pathname === '/classify') return <ClassifyPage />;
-  if (window.location.pathname === '/queue') return <QueuePage />;
-  if (window.location.pathname === '/knowledge') return <KnowledgePage />;
-  if (window.location.pathname === '/settings') return <SettingsPage />;
-  if (window.location.pathname === '/exec') return <ExecPage />;
+  const [path, setPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const updatePath = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', updatePath);
+    window.addEventListener('evidenceos:navigate', updatePath);
+    return () => {
+      window.removeEventListener('popstate', updatePath);
+      window.removeEventListener('evidenceos:navigate', updatePath);
+    };
+  }, []);
+
+  if (path === '/admin/dashboard') return <AdminDashboardPage />;
+  if (path === '/admin/tenants') return <AdminTenantsPage />;
+  if (path === '/admin/support') return <AdminSupportPage />;
+  if (path === '/login') return <LoginPage />;
+  if (path === '/change-password') return <ChangePasswordPage />;
+  if (path === '/dashboard') return <DashboardPage />;
+  if (path === '/records') return <RecordsPage />;
+  if (path === '/classify') return <ClassifyPage />;
+  if (path === '/queue') return <QueuePage />;
+  if (path === '/knowledge') return <KnowledgePage />;
+  if (path === '/settings') return <SettingsPage />;
+  if (path === '/exec') return <ExecPage />;
   return <LandingPage />;
 }
 
