@@ -581,10 +581,11 @@ function LoginPage() {
     setBusy(true);
     setError('');
     try {
-      const result = await signInWithCognito(email.trim().toLowerCase(), password);
+      const username = email.trim();
+      const result = await signInWithCognito(username, password);
       if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         sessionStorage.setItem('evidenceos_new_password_session', result.Session);
-        sessionStorage.setItem('evidenceos_new_password_username', email.trim().toLowerCase());
+        sessionStorage.setItem('evidenceos_new_password_username', username);
         navigateInApp('/change-password');
         return;
       }
