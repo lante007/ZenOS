@@ -394,7 +394,7 @@ function navigateInApp(path) {
 
 async function apiRequest(path, options = {}) {
   const headers = {
-    'x-evidenceos-tenant': tenantConfig.tenant,
+    'x-evidenceos-tenant': options.tenant || tenantConfig.tenant,
     'x-evidenceos-role': options.role || 'ORGANISATION_LEAD',
     ...(browserIdToken ? { Authorization: `Bearer ${browserIdToken}` } : {}),
     ...(options.user ? { 'x-evidenceos-user': options.user } : {}),
@@ -487,11 +487,11 @@ async function cognitoRequest(target, body) {
   return payload;
 }
 
-async function signInWithCognito(email, password) {
-  if (!tenantConfig.cognitoClientId) throw new Error('Cognito app client is not configured');
+async function signInWithClient(clientId, email, password) {
+  if (!clientId) throw new Error('Cognito app client is not configured');
   return cognitoRequest('InitiateAuth', {
     AuthFlow: 'USER_PASSWORD_AUTH',
-    ClientId: tenantConfig.cognitoClientId,
+    ClientId: clientId,
     AuthParameters: {
       USERNAME: email,
       PASSWORD: password,
@@ -499,10 +499,14 @@ async function signInWithCognito(email, password) {
   });
 }
 
-async function completeNewPasswordChallenge(username, newPassword, session) {
-  if (!tenantConfig.cognitoClientId) throw new Error('Cognito app client is not configured');
+async function signInWithCognito(email, password) {
+  return signInWithClient(tenantConfig.cognitoClientId, email, password);
+}
+
+async function completeNewPasswordChallengeForClient(clientId, username, newPassword, session) {
+  if (!clientId) throw new Error('Cognito app client is not configured');
   return cognitoRequest('RespondToAuthChallenge', {
-    ClientId: tenantConfig.cognitoClientId,
+    ClientId: clientId,
     ChallengeName: 'NEW_PASSWORD_REQUIRED',
     Session: session,
     ChallengeResponses: {
@@ -510,6 +514,10 @@ async function completeNewPasswordChallenge(username, newPassword, session) {
       NEW_PASSWORD: newPassword,
     },
   });
+}
+
+async function completeNewPasswordChallenge(username, newPassword, session) {
+  return completeNewPasswordChallengeForClient(tenantConfig.cognitoClientId, username, newPassword, session);
 }
 
 async function logLoginEvent(idToken) {
@@ -631,6 +639,7 @@ function ChangePasswordPage() {
   const [error, setError] = useState('');
   const username = sessionStorage.getItem('evidenceos_new_password_username') || '';
   const session = sessionStorage.getItem('evidenceos_new_password_session') || '';
+  const challengeClient = sessionStorage.getItem('evidenceos_new_password_client') || 'zenex';
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -641,13 +650,15 @@ function ChangePasswordPage() {
     }
     setBusy(true);
     try {
-      const result = await completeNewPasswordChallenge(username, password, session);
+      const clientId = challengeClient === 'admin' ? tenantConfig.adminCognitoClientId : tenantConfig.cognitoClientId;
+      const result = await completeNewPasswordChallengeForClient(clientId, username, password, session);
       const idToken = result.AuthenticationResult?.IdToken || '';
       setInMemoryToken(idToken);
       await logLoginEvent(idToken);
       sessionStorage.removeItem('evidenceos_new_password_username');
       sessionStorage.removeItem('evidenceos_new_password_session');
-      navigateInApp(routeForAuthToken(idToken));
+      sessionStorage.removeItem('evidenceos_new_password_client');
+      navigateInApp(challengeClient === 'admin' ? '/admin/dashboard' : routeForAuthToken(idToken));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1459,6 +1470,7 @@ function adminApi(path, options = {}) {
   const authHeaders = browserIdToken ? { Authorization: `Bearer ${browserIdToken}` } : {};
   return apiRequest(`/api/admin${path}`, {
     ...options,
+    tenant: 'admin',
     role: 'AUXEIRA_FOUNDER',
     user: 'emmanuel@auxeira.com',
     headers: {
@@ -1468,19 +1480,76 @@ function adminApi(path, options = {}) {
   });
 }
 
-function adminLoginUrl() {
-  if (!tenantConfig.adminCognitoDomain || !tenantConfig.adminCognitoClientId) return '';
-  const params = new URLSearchParams({
-    client_id: tenantConfig.adminCognitoClientId,
-    response_type: 'token',
-    scope: 'openid email profile',
-    redirect_uri: `${window.location.origin}/admin/dashboard`,
-  });
-  return `${tenantConfig.adminCognitoDomain.replace(/\/$/, '')}/login?${params.toString()}`;
+function AdminLoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const result = await signInWithClient(tenantConfig.adminCognitoClientId, email.trim().toLowerCase(), password);
+      if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+        sessionStorage.setItem('evidenceos_new_password_session', result.Session);
+        sessionStorage.setItem('evidenceos_new_password_username', email.trim().toLowerCase());
+        sessionStorage.setItem('evidenceos_new_password_client', 'admin');
+        navigateInApp('/change-password');
+        return;
+      }
+      setInMemoryToken(result.AuthenticationResult?.IdToken || '');
+      navigateInApp('/admin/dashboard');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-shell admin-auth-shell">
+      <section className="auth-panel" aria-label="Auxeira founder sign in">
+        <div className="auth-identity">
+          <div>
+            <p className="eyebrow">Auxeira SuperAdmin</p>
+            <h1>Founder Console</h1>
+          </div>
+        </div>
+
+        <div className="auth-copy">
+          <h2>Sign in to Admin</h2>
+          <p>Use the dedicated Auxeira SuperAdmin account for platform support access.</p>
+        </div>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            <span>Email</span>
+            <div className="auth-input">
+              <Mail size={18} />
+              <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="name@auxeira.com" required />
+            </div>
+          </label>
+          <label>
+            <span>Password</span>
+            <div className="auth-input">
+              <LockKeyhole size={18} />
+              <input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Password" required />
+            </div>
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <button className="primary-action auth-action" type="submit" disabled={busy || !tenantConfig.adminCognitoClientId}>
+            <span>{busy ? 'Signing In' : 'Sign In'}</span>
+            <ArrowRight size={18} strokeWidth={2.4} />
+          </button>
+        </form>
+      </section>
+    </main>
+  );
 }
 
 function AdminShell({ active, children }) {
-  const loginUrl = adminLoginUrl();
   return (
     <main className="admin-shell">
       <aside className="dashboard-sidebar" aria-label="Auxeira admin navigation">
@@ -1502,8 +1571,8 @@ function AdminShell({ active, children }) {
             <span>Support</span>
           </a>
         </nav>
-        {loginUrl && !browserIdToken && (
-          <a className="admin-login-link" href={loginUrl}>
+        {!browserIdToken && (
+          <a className="admin-login-link" href="/admin/login">
             <LockKeyhole size={16} />
             <span>Founder Sign In</span>
           </a>
@@ -1995,6 +2064,7 @@ function App() {
     };
   }, []);
 
+  if (path === '/admin/login') return <AdminLoginPage />;
   if (path === '/admin/dashboard') return <AdminDashboardPage />;
   if (path === '/admin/tenants') return <AdminTenantsPage />;
   if (path === '/admin/support') return <AdminSupportPage />;
