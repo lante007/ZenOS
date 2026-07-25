@@ -351,6 +351,7 @@ const mockRecords = [
 
 const API_BASE = tenantConfig.apiUrl.replace(/\/$/, '');
 let browserIdToken = '';
+let browserAccessToken = '';
 
 function consumeIdTokenFromHash() {
   if (!window.location.hash.includes('id_token=')) return '';
@@ -362,8 +363,9 @@ function consumeIdTokenFromHash() {
 
 consumeIdTokenFromHash();
 
-function setInMemoryToken(token) {
-  browserIdToken = token || '';
+function setInMemoryToken(idToken, accessToken = '') {
+  browserIdToken = idToken || '';
+  browserAccessToken = accessToken || '';
 }
 
 function decodeJwtPayload(token) {
@@ -487,6 +489,13 @@ async function cognitoRequest(target, body) {
   return payload;
 }
 
+async function signOutOfCognito() {
+  if (!browserAccessToken) return;
+  await cognitoRequest('GlobalSignOut', {
+    AccessToken: browserAccessToken,
+  });
+}
+
 async function signInWithClient(clientId, email, password) {
   if (!clientId) throw new Error('Cognito app client is not configured');
   return cognitoRequest('InitiateAuth', {
@@ -580,7 +589,7 @@ function LoginPage() {
         return;
       }
       const idToken = result.AuthenticationResult?.IdToken || '';
-      setInMemoryToken(idToken);
+      setInMemoryToken(idToken, result.AuthenticationResult?.AccessToken || '');
       await logLoginEvent(idToken);
       navigateInApp(routeForAuthToken(idToken));
     } catch (err) {
@@ -653,7 +662,7 @@ function ChangePasswordPage() {
       const clientId = challengeClient === 'admin' ? tenantConfig.adminCognitoClientId : tenantConfig.cognitoClientId;
       const result = await completeNewPasswordChallengeForClient(clientId, username, password, session);
       const idToken = result.AuthenticationResult?.IdToken || '';
-      setInMemoryToken(idToken);
+      setInMemoryToken(idToken, result.AuthenticationResult?.AccessToken || '');
       await logLoginEvent(idToken);
       sessionStorage.removeItem('evidenceos_new_password_username');
       sessionStorage.removeItem('evidenceos_new_password_session');
@@ -1500,7 +1509,7 @@ function AdminLoginPage() {
         navigateInApp('/change-password');
         return;
       }
-      setInMemoryToken(result.AuthenticationResult?.IdToken || '');
+      setInMemoryToken(result.AuthenticationResult?.IdToken || '', result.AuthenticationResult?.AccessToken || '');
       navigateInApp('/admin/dashboard');
     } catch (err) {
       setError(err.message);
@@ -1551,6 +1560,17 @@ function AdminLoginPage() {
 }
 
 function AdminShell({ active, children }) {
+  async function handleSignOut() {
+    try {
+      await signOutOfCognito();
+    } catch {
+      // Local sign-out should still complete if Cognito cannot be reached.
+    } finally {
+      setInMemoryToken('');
+      navigateInApp('/admin/login');
+    }
+  }
+
   return (
     <main className="admin-shell">
       <aside className="dashboard-sidebar" aria-label="Auxeira admin navigation">
@@ -1572,7 +1592,12 @@ function AdminShell({ active, children }) {
             <span>Support</span>
           </a>
         </nav>
-        {!browserIdToken && (
+        {browserIdToken ? (
+          <button className="admin-login-link" type="button" onClick={handleSignOut}>
+            <LockKeyhole size={16} />
+            <span>Sign Out</span>
+          </button>
+        ) : (
           <a className="admin-login-link" href="/admin/login">
             <LockKeyhole size={16} />
             <span>Founder Sign In</span>

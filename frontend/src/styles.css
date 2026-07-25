@@ -1691,8 +1691,12 @@ button:disabled {
   margin: 18px 10px 0;
   padding: 0 12px;
   border: 1px solid rgba(239, 114, 24, 0.28);
+  background: transparent;
   color: #ffffff;
+  cursor: pointer;
+  font: inherit;
   font-weight: 900;
+  text-decoration: none;
 }
 
 .admin-corpus {
