@@ -433,35 +433,70 @@ async function tenantCounts(row) {
 }
 
 async function adminDashboard() {
-  const tenants = await masterTenants();
-  const counts = await Promise.all(tenants.map(tenantCounts));
-  const inputRate = Number(process.env.ANTHROPIC_INPUT_TOKEN_USD || 0.000003);
-  const outputRate = Number(process.env.ANTHROPIC_OUTPUT_TOKEN_USD || 0.000015);
-  const monthlySpend = counts.reduce((sum, count) => (
-    sum + (Number(count.monthly_input_tokens || 0) * inputRate) + (Number(count.monthly_output_tokens || 0) * outputRate)
-  ), 0);
+  const db = getPool();
+  if (!db) {
+    return {
+      active_tenants: 0,
+      documents_classified: 0,
+      total_users: 0,
+      anthropic_spend_month: 0,
+    };
+  }
+
+  const res = await db.query(`
+    SELECT
+      (SELECT COUNT(*)::int FROM master.tenants WHERE is_active = true) AS active_tenants,
+      (
+        SELECT COUNT(*)::int
+        FROM zenex.intelligence_records
+        WHERE record_status = 'ACTIVE'
+      ) AS documents_classified,
+      (
+        SELECT COUNT(*)::int
+        FROM zenex.users
+        WHERE is_active = true
+      ) AS total_users,
+      (
+        SELECT COALESCE(
+          SUM(claude_input_tokens + claude_output_tokens) * 0.000003, 0
+        )::numeric(10,4)
+        FROM zenex.ingestion_jobs
+        WHERE created_at >= date_trunc('month', NOW())
+      ) AS anthropic_spend_month
+  `);
 
   return {
-    active_tenants: tenants.filter(tenant => tenant.is_active !== false).length,
-    documents_classified: counts.reduce((sum, count) => sum + Number(count.records || 0), 0),
-    total_users: counts.reduce((sum, count) => sum + Number(count.users || 0), 0),
-    anthropic_spend_month: Number(monthlySpend.toFixed(2)),
+    active_tenants: res.rows[0].active_tenants,
+    documents_classified: res.rows[0].documents_classified,
+    total_users: res.rows[0].total_users,
+    anthropic_spend_month: Number(res.rows[0].anthropic_spend_month),
   };
 }
 
 async function adminTenantSummaries() {
-  const tenants = await masterTenants();
-  const rows = await Promise.all(tenants.map(async tenant => {
-    const counts = await tenantCounts(tenant);
-    return {
-      slug: tenant.slug,
-      name: tenant.name,
-      status: tenant.is_active === false ? 'Suspended' : 'Active',
-      users: counts.users,
-      documents: counts.records,
-    };
+  const db = getPool();
+  if (!db) return [];
+  const res = await db.query(`
+    SELECT
+      t.slug,
+      t.name,
+      t.is_active,
+      (SELECT COUNT(*)::int FROM zenex.users) AS users,
+      (
+        SELECT COUNT(*)::int
+        FROM zenex.intelligence_records
+      ) AS documents
+    FROM master.tenants t
+    WHERE t.slug = 'zenex'
+  `);
+
+  return res.rows.map(row => ({
+    slug: row.slug,
+    name: row.name,
+    status: row.is_active === false ? 'Suspended' : 'Active',
+    users: row.users,
+    documents: row.documents,
   }));
-  return rows;
 }
 
 async function suspendTenant(slug) {

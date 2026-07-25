@@ -38,6 +38,14 @@ router.get('/dashboard', requireFounder, async (_req, res, next) => {
   }
 });
 
+router.get('/platform', requireFounder, async (_req, res, next) => {
+  try {
+    res.json(await db.adminDashboard());
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/tenants/:slug/records', requireFounder, async (req, res, next) => {
   try {
     const tenant = await getTenantBySlug(req.params.slug);
