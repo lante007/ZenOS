@@ -1561,6 +1561,8 @@ function AdminLoginPage() {
 }
 
 function AdminShell({ active, children }) {
+  const isAdminAuthenticated = Boolean(browserIdToken) || window.location.pathname !== '/admin/login';
+
   async function handleSignOut() {
     try {
       await signOutOfCognito();
@@ -1574,12 +1576,13 @@ function AdminShell({ active, children }) {
 
   return (
     <main className="admin-shell">
-      <aside className="dashboard-sidebar" aria-label="Auxeira admin navigation">
-        <div className="sidebar-brand">
+      <header className="admin-topbar" aria-label="Auxeira admin navigation">
+        <div className="admin-wordmark">
           <span>Auxeira</span>
+          <i aria-hidden="true" />
           <strong>Founder Console</strong>
         </div>
-        <nav className="sidebar-nav">
+        <nav className="admin-nav">
           <a className={active === 'dashboard' ? 'active' : ''} href="/admin/dashboard">
             <Gauge size={18} />
             <span>Dashboard</span>
@@ -1593,7 +1596,7 @@ function AdminShell({ active, children }) {
             <span>Support</span>
           </a>
         </nav>
-        {browserIdToken ? (
+        {isAdminAuthenticated ? (
           <button className="admin-login-link" type="button" onClick={handleSignOut}>
             <LockKeyhole size={16} />
             <span>Sign Out</span>
@@ -1604,8 +1607,10 @@ function AdminShell({ active, children }) {
             <span>Founder Sign In</span>
           </a>
         )}
-      </aside>
-      {children}
+      </header>
+      <div className="admin-content">
+        {children}
+      </div>
     </main>
   );
 }
@@ -1697,16 +1702,21 @@ function AdminTenantsPage() {
         </section>
 
         <section className="admin-corpus">
-          <div className="panel-title">
-            <FileText size={20} />
-            <span>Read-only corpus · {selected}</span>
+          <div className="admin-section-heading">
+            <div>
+              <p className="eyebrow">Corpus preview</p>
+              <h2>Tenant records</h2>
+            </div>
+            <button className="admin-text-link" type="button" onClick={() => selected && adminApi(`/tenants/${selected}/records`).then(data => setRecords(Array.isArray(data) ? data.map(normalizeRecord) : [])).catch(() => setRecords([]))}>
+              Read-only corpus: {selected}
+            </button>
           </div>
-          <div className="record-picker">
+          <div className="admin-record-grid">
             {records.slice(0, 8).map(record => (
-              <button type="button" key={record.adei_record_id}>
+              <article className="admin-record-card" key={record.adei_record_id}>
                 <strong>{record.programme_name}</strong>
-                <span>{record.eqs_tier} · {record.filename}</span>
-              </button>
+                <span><b>{record.eqs_tier}</b>{record.filename}</span>
+              </article>
             ))}
           </div>
         </section>
@@ -1791,16 +1801,18 @@ function AdminSupportPage() {
         </section>
 
         <section className="admin-corpus">
-          <div className="panel-title">
-            <Database size={20} />
-            <span>Corpus preview</span>
+          <div className="admin-section-heading">
+            <div>
+              <p className="eyebrow">Read-only corpus</p>
+              <h2>Corpus preview</h2>
+            </div>
           </div>
-          <div className="record-picker">
+          <div className="admin-record-grid">
             {records.slice(0, 8).map(record => (
-              <button type="button" key={record.adei_record_id}>
+              <article className="admin-record-card" key={record.adei_record_id}>
                 <strong>{record.programme_name}</strong>
-                <span>{record.eqs_tier} · {record.filename}</span>
-              </button>
+                <span><b>{record.eqs_tier}</b>{record.filename}</span>
+              </article>
             ))}
           </div>
         </section>
