@@ -2,6 +2,7 @@
 .env
 service-account.json
 *.pem
+evidenceos-key.pub
 *.key
 
 # Node
