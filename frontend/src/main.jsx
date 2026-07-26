@@ -110,8 +110,8 @@ const pipelineSteps = [
   'Secure upload to tenant S3 bucket',
   'Extract text from source document',
   'Detect programme and document metadata',
-  'Run ADEI 55-field classification',
-  'Apply six protocol amendments',
+  'Classify and score document',
+  'Apply quality standards',
   'Calculate Evidence Quality Score',
   'Create expert queue items',
   'Save record and publish to library',
@@ -558,7 +558,7 @@ function LandingPage() {
               <span>Sign In</span>
               <ArrowRight size={18} strokeWidth={2.4} />
             </a>
-            <a className="request-access-link" href="mailto:hello@auxeira.com?subject=EvidenceOS%20Access%20Request%20%E2%80%94%20Zenex%20Foundation">
+            <a className="request-access-link" href="mailto:hello@auxeira.com?subject=EvidenceOS%20Access%20Request%20-%20Zenex%20Foundation">
               Request Access
             </a>
           </div>
@@ -723,7 +723,7 @@ function DashboardNav({ active, queueBadge = queueCount() }) {
       <aside className="dashboard-sidebar" aria-label="EvidenceOS navigation">
         <div className="sidebar-brand">
           <img src={tenantConfig.logoUrl} alt="Zenex Foundation" />
-          <span>EvidenceOS</span>
+          <span>ZENEX FOUNDATION</span>
         </div>
 
         <nav className="sidebar-nav">
@@ -991,7 +991,7 @@ function RecordsPage() {
         <section className="table-panel" aria-label="Classified evidence records">
           <div className="table-summary">
             <span>{filteredRecords.length} records</span>
-            <span>{source === 'api' ? 'Live API' : 'Mock fallback'} · 55-field ADEI taxonomy v2.1</span>
+            <span>{source === 'api' ? 'Live API' : 'Offline preview'} · 55-field ADEI taxonomy v2.1</span>
           </div>
           <div className="records-table" role="table">
             <div className="records-row records-head" role="row">
@@ -1252,7 +1252,7 @@ function QueuePage() {
               </div>
 
               <div className="recommendation-box">
-                <span>AI recommendation</span>
+                <span>System recommendation</span>
                 <strong>{item.recommendation}</strong>
                 <p>{item.rationale}</p>
               </div>
@@ -1395,7 +1395,7 @@ function KnowledgePage() {
           <article className="selector-panel">
             <div className="panel-title">
               <FileText size={20} />
-              <span>Record selector · {source === 'api' ? 'Live API' : 'Mock fallback'}</span>
+              <span>Record selector · {source === 'api' ? 'Live API' : 'Offline preview'}</span>
             </div>
             <div className="record-picker">
               {eligibleRecords.map((record) => (
