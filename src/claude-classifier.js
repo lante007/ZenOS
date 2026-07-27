@@ -125,41 +125,106 @@ async function classifyDocument({ filename, text, programme, role, phase, instit
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
-async function generateKnowledgeProduct({ record, audience, programmeContext, orgTypeContext }) {
-  const audiencePrompts = {
-    'Trustee': 'Write a 200-word trustee evidence brief. Focus on investment rationale, measurable outcomes, and EROI narrative. Use non-technical language. End with one recommendation.',
-    'DBE National': 'Write a 200-word policy brief for national DBE officials. Focus on what the evidence shows works, at what scale, and what the implementation conditions are. Be precise about effect sizes.',
-    'Provincial HOD': 'Write a 200-word implementation brief for a provincial Head of Department. Focus on what a school principal needs to know to implement this intervention. Include minimum effective dosage if available.',
-    'Co-Funder': 'Write a 200-word joint investment brief for a potential co-funder. Focus on the evidence quality, proven reach, and what additional investment would produce.',
-    'CEO': 'Write a 200-word strategic brief for the Foundation CEO. Focus on portfolio positioning, evidence gaps, and next commissioning priorities.',
-    'Sector Peer': 'Write a 200-word methodology note for sector researchers. Focus on the evaluation design, key findings, and limitations.',
+async function generateKnowledgeProduct({ record, audience, tenant }) {
+  const audienceDescriptions = {
+    TRUSTEE: 'A board trustee focused on governance, fiduciary responsibility, portfolio value, and institutional accountability. Needs plain language, quantified returns, and clear risk framing.',
+    CEO: 'The Foundation CEO focused on strategic portfolio decisions, organisational positioning, and evidence-based leadership. Needs portfolio-level insight and next-action clarity.',
+    DBE_NATIONAL: 'A national Department of Basic Education official focused on policy alignment, scale, and implementation evidence. Needs effect sizes, design quality, and replication conditions.',
+    PROVINCIAL_HOD: 'A provincial Head of Department focused on district and school-level implementation. Needs minimum dosage, fidelity requirements, and practical conditions for adoption.',
+    CO_FUNDER: 'A co-funder or potential investment partner focused on evidence quality, proven reach, and return on philanthropic capital. Needs confidence tier, EROI narrative, and leverage case.',
+    SECTOR_PEER: 'A sector researcher or peer organisation focused on methodology, limitations, and replication potential. Needs design detail, effect sizes, and honest limitations.',
   };
 
-  const prompt = `You are producing a knowledge product for ${record.institution || 'the client organisation'}.
-  
-Programme: ${record.programme_name}
-Document type: ${record.document_type}
-Key finding 1: ${record.key_finding_1 || 'Not available'}
-Key finding 2: ${record.key_finding_2 || 'Not available'}
-Policy relevance: ${record.policy_relevance_score}/5
-EQS composite: ${record.eqs_composite || 'Pending'}
+  const safe = (value, fallback = 'Not recorded') => {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (Array.isArray(value)) return value.length ? value.join(', ') : fallback;
+    return String(value);
+  };
+  const audienceKey = String(audience || 'TRUSTEE').toUpperCase();
+  const audienceProfile = audienceDescriptions[audienceKey] || audienceDescriptions.TRUSTEE;
+  const orgAttribution = tenant.organisation_type === 'FUNDER'
+    ? `This organisation is a philanthropy and funder. Always use attribution language such as "Zenex-funded evidence shows" or "Zenex-commissioned evaluation found". Never write "Zenex delivered" or "Zenex achieved" because Zenex funds and commissions; implementing organisations deliver.`
+    : `This organisation directly implements programmes. Direct attribution of outcomes is appropriate.`;
 
-${audiencePrompts[audience] || audiencePrompts['Trustee']}
+  const systemPrompt = `You are producing a formal evidence brief for ${tenant.name}.
 
-Additional context: ${programmeContext || ''}
+${orgAttribution}
 
-Attribution context: ${orgTypeContext || ''}
+You must produce ALL seven sections below in full.
+Never write "undefined", "not available", or leave a section blank. If specific data is absent from the record, derive a contextually appropriate statement from the other fields provided or acknowledge the gap honestly and specifically.
 
-Return only the brief text. No headings. No markdown. Plain paragraphs only.`;
+Write in UK English. Senior consultant register.
+No contractions. No em dashes. Precise and authoritative throughout.
+
+AUDIENCE: ${audienceKey}
+AUDIENCE PROFILE: ${audienceProfile}
+
+Produce exactly these seven sections with these exact headings:
+
+EXECUTIVE SUMMARY
+2-3 sentences. What this programme is, what the evidence shows, and why it matters for this specific audience.
+
+KEY FINDING
+The most important quantified finding from this evaluation. Include effect size where available. Name the study design, for example RCT or quasi-experimental. Name provinces and sample size.
+
+INVESTMENT AND REACH
+How much was invested and how many learners, schools, or districts were reached. If cost data is absent, note this explicitly: "Cost per beneficiary data is not available in this record."
+
+DECISION IMPLICATION
+What this finding means specifically for the ${audienceProfile.split('.')[0]}. Be specific to their role and responsibilities. Not generic.
+
+EVIDENCE CONFIDENCE
+EQS composite: ${safe(record.eqs_composite)}/5.0 · ${safe(record.eqs_tier).replace('_', ' ')}
+Name one key methodological strength and one named limitation from the record. If limitations field is populated, use it. Do not invent limitations.
+
+RECOMMENDED ACTION
+One specific, actionable sentence. What should this audience do with this evidence right now?
+
+SUPPORTING RECORDS
+Note any other classified records in the corpus that corroborate, extend, or contextualise this finding. If none are available yet, write: "Additional evaluations will be cross-referenced as the full corpus classification completes."`;
+
+  const userPrompt = `Generate a ${audienceKey} evidence brief for the following classified record.
+
+INTELLIGENCE RECORD:
+Programme: ${safe(record.programme_name)}
+Record ID: ${safe(record.id)}
+Document type: ${safe(record.document_type)}
+Evaluation design: ${safe(record.evaluation_subtype, 'Not specified')}
+Year: ${safe(record.year)}
+Provinces: ${safe(record.provinces, 'Not specified')}
+Implementing organisation: ${safe(record.implementing_organisation_name, 'Not specified')}
+Sample size: ${record.sample_size_learners ? `${record.sample_size_learners} learners` : 'Not specified'}
+Schools: ${record.sample_size_schools ? `${record.sample_size_schools} schools` : 'Not specified'}
+Key finding 1: ${safe(record.key_finding_1)}
+Key finding 2: ${safe(record.key_finding_2)}
+Key finding 3: ${safe(record.key_finding_3)}
+Effect size: ${record.effect_size_composite ? `${record.effect_size_composite} SD` : 'Not recorded'}
+Effect direction: ${safe(record.effect_direction)}
+EQS composite: ${safe(record.eqs_composite)}/5.0
+EQS tier: ${safe(record.eqs_tier)}
+Method rigour: ${safe(record.dim_methodological_rigour)}/5
+Data quality: ${safe(record.dim_data_quality)}/5
+Transparency: ${safe(record.dim_transparency)}/5
+Replicability: ${safe(record.dim_replicability)}/5
+Policy relevance: ${safe(record.policy_relevance_score)}/5
+Policy alignment: ${safe(record.policy_alignment)}
+Decision relevance: ${safe(record.decision_relevance)}
+DBE adoption: ${safe(record.dbe_adoption_status, 'Unknown')}
+Evidence gap: ${safe(record.evidence_gap_1, 'None identified')}
+Limitations: ${safe(record.limitations, 'Not recorded in this version')}
+Cost data: ${safe(record.cost_data_present)} - ${safe(record.cost_data_source, 'source not specified')}`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 500,
-    temperature: 0.3,
-    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 1500,
+    temperature: 0.2,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
   });
 
-  return message.content[0].text;
+  return (message.content[0].text || '')
+    .replace(/\bundefined\b/gi, 'Not recorded')
+    .replace(/[–—]/g, '-');
 }
 
 module.exports = { classifyDocument, generateKnowledgeProduct };

@@ -300,10 +300,13 @@ async function resolveQueueItem(tenant, id, value, reviewerId, isOverride) {
 
 async function createKnowledgeProduct(tenant, payload) {
   return withTenant(tenant, async client => {
+    const generatedBy = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.generated_by || '')
+      ? payload.generated_by
+      : null;
     const res = await client.query(`
       INSERT INTO knowledge_products (
-        tenant_id, record_id, audience, content, word_count, model_used, generated_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+        tenant_id, record_id, audience, content, word_count, model_used, generated_by, generated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING *
     `, [
       tenant.slug,
@@ -312,7 +315,8 @@ async function createKnowledgeProduct(tenant, payload) {
       payload.content,
       payload.word_count,
       payload.model_used || 'claude-sonnet-4-6',
-      payload.generated_by || null,
+      generatedBy,
+      payload.generated_at || new Date().toISOString(),
     ]);
     return res.rows[0];
   });

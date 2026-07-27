@@ -6,7 +6,6 @@ const localStore = require('../services/local-store');
 const { generateKnowledgeProduct } = require('../../src/claude-classifier');
 const { uploadJson } = require('../../src/s3-connector');
 const { requireRoles } = require('../middleware/permissions');
-const { orgTypeContext } = require('../services/org-context');
 
 const router = express.Router();
 
@@ -40,21 +39,24 @@ router.post('/knowledge-product', requireRoles('ORGANISATION_LEAD', 'COMMUNICATI
       return res.status(403).json({ error: 'Knowledge products can only be generated from Tier 1 or Tier 2 records' });
     }
 
-    const brief = await generateKnowledgeProduct({
+    const claudeResponse = await generateKnowledgeProduct({
       record,
-      audience: audience.ai,
-      orgTypeContext: orgTypeContext(req.tenant),
+      audience: audience.db,
+      tenant: req.tenant,
     });
+    const generatedAt = new Date().toISOString();
+    const wordCount = claudeResponse.split(/\s+/).filter(Boolean).length;
     const product = {
       id: `KP-${Date.now().toString(36).toUpperCase()}`,
       tenant_id: req.tenant.slug,
       record_id: recordId,
       audience: audience.db,
-      content: brief,
-      word_count: brief.split(/\s+/).filter(Boolean).length,
+      content: claudeResponse,
+      word_count: wordCount,
       model_used: 'claude-sonnet-4-6',
       generated_by: req.user.sub || req.user.email,
-      created_at: new Date().toISOString(),
+      generated_at: generatedAt,
+      created_at: generatedAt,
     };
 
     if (process.env.DATABASE_URL) await db.createKnowledgeProduct(req.tenant, product);
@@ -67,7 +69,16 @@ router.post('/knowledge-product', requireRoles('ORGANISATION_LEAD', 'COMMUNICATI
       metadata: { tenant: req.tenant.slug, record_id: recordId },
     });
 
-    res.json({ success: true, ...product, brief });
+    res.json({
+      success: true,
+      audience: audience.db,
+      record_id: record.id,
+      programme_name: record.programme_name,
+      brief: claudeResponse,
+      generated_at: generatedAt,
+      model: 'claude-sonnet-4-6',
+      word_count: wordCount,
+    });
   } catch (err) {
     next(err);
   }
