@@ -58,32 +58,34 @@ async function withTenant(tenant, fn) {
 
 async function listRecords(tenant, filters = {}) {
   return withTenant(tenant, async client => {
-    const where = ['r.tenant_id = $1'];
+    const where = ['r.tenant_id = $1', "r.record_status = 'ACTIVE'"];
     const params = [tenant.slug];
 
-    if (filters.tier) {
+    if (filters.tier && filters.tier !== 'all') {
       params.push(filters.tier);
-      where.push(`eqs_tier = $${params.length}`);
+      where.push(`r.eqs_tier = $${params.length}`);
     }
-    if (filters.type) {
+    if (filters.type && filters.type !== 'all') {
       params.push(filters.type);
-      where.push(`document_type = $${params.length}`);
+      where.push(`r.document_type = $${params.length}`);
     }
-    if (filters.phase) {
+    if (filters.phase && filters.phase !== 'all') {
       params.push(filters.phase);
-      where.push(`phase = $${params.length}`);
+      where.push(`r.phase = $${params.length}`);
     }
     if (filters.q) {
       params.push(`%${filters.q}%`);
-      where.push(`(filename ILIKE $${params.length} OR programme_name ILIKE $${params.length} OR document_type ILIKE $${params.length})`);
+      where.push(`(d.filename ILIKE $${params.length} OR r.programme_name ILIKE $${params.length} OR r.document_type ILIKE $${params.length})`);
     }
 
     const res = await client.query(`
-      SELECT r.*, d.filename, d.s3_key, d.mime_type, d.file_size_bytes
+      SELECT r.*, d.filename, d.s3_key,
+        d.mime_type, d.file_size_bytes,
+        d.rights_status AS doc_rights_status
       FROM intelligence_records r
       LEFT JOIN documents d ON d.id = r.document_id
       WHERE ${where.join(' AND ')}
-      ORDER BY r.created_at DESC
+      ORDER BY r.classified_at DESC NULLS LAST
       LIMIT 500
     `, params);
     return res.rows;
@@ -93,10 +95,14 @@ async function listRecords(tenant, filters = {}) {
 async function getRecord(tenant, id) {
   return withTenant(tenant, async client => {
     const res = await client.query(`
-      SELECT r.*, d.filename, d.s3_key, d.mime_type, d.file_size_bytes
+      SELECT r.*, d.filename, d.s3_key,
+        d.mime_type, d.file_size_bytes,
+        d.rights_status AS doc_rights_status
       FROM intelligence_records r
       LEFT JOIN documents d ON d.id = r.document_id
-      WHERE r.tenant_id = $1 AND r.id = $2
+      WHERE r.tenant_id = $1
+        AND r.record_status = 'ACTIVE'
+        AND r.id = $2
       LIMIT 1
     `, [tenant.slug, id]);
     return res.rows[0] || null;
@@ -405,6 +411,40 @@ async function createAuditLog(tenant, eventType, detail = {}, userId = null) {
   });
 }
 
+async function listAlerts(tenant, role) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT *
+      FROM alerts
+      WHERE target_role = $1
+        AND (expires_at IS NULL OR expires_at > NOW())
+        AND is_read = false
+        AND tenant_id = $2
+      ORDER BY
+        CASE priority
+          WHEN 'HIGH' THEN 1
+          WHEN 'MEDIUM' THEN 2
+          ELSE 3
+        END,
+        created_at DESC
+      LIMIT 20
+    `, [role, tenant.slug]);
+    return res.rows;
+  });
+}
+
+async function markAlertRead(tenant, id) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      UPDATE alerts
+      SET is_read = true
+      WHERE id = $1 AND tenant_id = $2
+      RETURNING *
+    `, [id, tenant.slug]);
+    return res.rows[0] || null;
+  });
+}
+
 async function masterTenants() {
   const db = getPool();
   if (!db) return [];
@@ -524,6 +564,8 @@ module.exports = {
   createUser,
   updateUser,
   createAuditLog,
+  listAlerts,
+  markAlertRead,
   adminDashboard,
   adminTenantSummaries,
   suspendTenant,

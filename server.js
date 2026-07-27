@@ -21,6 +21,8 @@ const reportsRoutes = require('./api/routes/reports');
 const settingsRoutes = require('./api/routes/settings');
 const auditRoutes = require('./api/routes/audit');
 const adminRoutes = require('./api/routes/admin');
+const synthesisRoutes = require('./api/routes/synthesis');
+const alertsRoutes = require('./api/routes/alerts');
 const db = require('./api/services/db');
 const localStore = require('./api/services/local-store');
 
@@ -78,6 +80,8 @@ app.use('/api/queue', queueRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/synthesis', synthesisRoutes);
+app.use('/api/alerts', alertsRoutes);
 app.use('/api', knowledgeRoutes);
 
 app.get('/api/stats', authenticate(), assertNoBoardAccess, async (req, res, next) => {

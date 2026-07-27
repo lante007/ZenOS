@@ -40,7 +40,16 @@ async function tenantMiddleware(req, res, next) {
       return res.status(404).json({ error: 'Tenant not found or inactive' });
     }
 
-    req.tenant = tenant;
+    req.tenant = {
+      ...tenant,
+      slug: tenant.slug,
+      name: tenant.name,
+      organisation_type: tenant.organisation_type,
+      s3_vault_bucket: tenant.s3_vault_bucket,
+      db_schema: tenant.db_schema,
+      cognito_pool_id: tenant.cognito_pool_id,
+      feature_flags: tenant.feature_flags,
+    };
     next();
   } catch (err) {
     next(err);

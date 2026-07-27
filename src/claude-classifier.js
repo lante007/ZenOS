@@ -125,7 +125,7 @@ async function classifyDocument({ filename, text, programme, role, phase, instit
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
-async function generateKnowledgeProduct({ record, audience, programmeContext }) {
+async function generateKnowledgeProduct({ record, audience, programmeContext, orgTypeContext }) {
   const audiencePrompts = {
     'Trustee': 'Write a 200-word trustee evidence brief. Focus on investment rationale, measurable outcomes, and EROI narrative. Use non-technical language. End with one recommendation.',
     'DBE National': 'Write a 200-word policy brief for national DBE officials. Focus on what the evidence shows works, at what scale, and what the implementation conditions are. Be precise about effect sizes.',
@@ -147,6 +147,8 @@ EQS composite: ${record.eqs_composite || 'Pending'}
 ${audiencePrompts[audience] || audiencePrompts['Trustee']}
 
 Additional context: ${programmeContext || ''}
+
+Attribution context: ${orgTypeContext || ''}
 
 Return only the brief text. No headings. No markdown. Plain paragraphs only.`;
 

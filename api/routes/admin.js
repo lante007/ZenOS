@@ -4,6 +4,8 @@ const express = require('express');
 const { AdminResetUserPasswordCommand, CognitoIdentityProviderClient } = require('@aws-sdk/client-cognito-identity-provider');
 const db = require('../services/db');
 const { getTenantBySlug } = require('../services/tenants');
+const { requireRoles } = require('../middleware/permissions');
+const { runFlywheel } = require('../services/flywheel');
 
 const router = express.Router();
 const cognito = new CognitoIdentityProviderClient({
@@ -21,6 +23,21 @@ function requireFounder(req, res, next) {
   }
   next();
 }
+
+router.post('/flywheel/run', requireRoles('ORGANISATION_LEAD'), async (req, res, next) => {
+  try {
+    const pool = db.getPool();
+    if (!pool) return res.status(503).json({ error: 'Database is not configured' });
+    const alerts = await runFlywheel(req.tenant, pool);
+    res.json({
+      success: true,
+      inserted: alerts.length,
+      alerts,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get('/tenants', requireFounder, async (_req, res, next) => {
   try {

@@ -6,6 +6,7 @@ const localStore = require('../services/local-store');
 const { generateKnowledgeProduct } = require('../../src/claude-classifier');
 const { uploadJson } = require('../../src/s3-connector');
 const { requireRoles } = require('../middleware/permissions');
+const { orgTypeContext } = require('../services/org-context');
 
 const router = express.Router();
 
@@ -39,7 +40,11 @@ router.post('/knowledge-product', requireRoles('ORGANISATION_LEAD', 'COMMUNICATI
       return res.status(403).json({ error: 'Knowledge products can only be generated from Tier 1 or Tier 2 records' });
     }
 
-    const brief = await generateKnowledgeProduct({ record, audience: audience.ai });
+    const brief = await generateKnowledgeProduct({
+      record,
+      audience: audience.ai,
+      orgTypeContext: orgTypeContext(req.tenant),
+    });
     const product = {
       id: `KP-${Date.now().toString(36).toUpperCase()}`,
       tenant_id: req.tenant.slug,
