@@ -21,7 +21,6 @@ import {
   Mail,
   Search,
   ShieldCheck,
-  Sparkles,
   TrendingUp,
   UploadCloud,
   Users,
@@ -353,6 +352,16 @@ const API_BASE = tenantConfig.apiUrl.replace(/\/$/, '');
 let browserIdToken = '';
 let browserAccessToken = '';
 
+function currentUser() {
+  const payload = decodeJwtPayload(browserIdToken);
+  return {
+    ...payload,
+    role: payload['custom:role'] || payload['custom:custom:role'] || payload.role || 'ORGANISATION_LEAD',
+    given_name: payload.given_name,
+    name: payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(' '),
+  };
+}
+
 function consumeIdTokenFromHash() {
   if (!window.location.hash.includes('id_token=')) return '';
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -389,15 +398,54 @@ function routeForAuthToken(token) {
   return '/dashboard';
 }
 
+function formatDisplayDate(value = new Date(), options = {}) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not recorded';
+  return date.toLocaleDateString('en-GB', {
+    weekday: options.weekday,
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatRecordValue(value, suffix = '') {
+  if (value == null || value === '') return 'Not recorded';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.length ? value.join(', ') : 'Not recorded';
+  return `${value}${suffix}`;
+}
+
+function formatScore(value) {
+  return value == null || value === '' ? 'Not recorded' : `${value}/5`;
+}
+
+function recordId(record) {
+  return record?.adei_record_id || record?.id;
+}
+
+function dateTimeStamp(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not recorded';
+  return date.toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function navigateInApp(path) {
   window.history.pushState(null, '', path);
   window.dispatchEvent(new Event('evidenceos:navigate'));
 }
 
 async function apiRequest(path, options = {}) {
+  const user = currentUser();
   const headers = {
     'x-evidenceos-tenant': options.tenant || tenantConfig.tenant,
-    'x-evidenceos-role': options.role || 'ORGANISATION_LEAD',
+    'x-evidenceos-role': options.role || user.role || 'ORGANISATION_LEAD',
     ...(browserIdToken ? { Authorization: `Bearer ${browserIdToken}` } : {}),
     ...(options.user ? { 'x-evidenceos-user': options.user } : {}),
     ...(options.headers || {}),
@@ -424,10 +472,10 @@ function normalizeRecord(record) {
     institution: record.institution || tenantConfig.orgName,
     programme_name: record.programme_name || record.programme || 'Unassigned programme',
     document_type: record.document_type || 'Evaluation Report',
-    publication_year: record.publication_year || record.year || 'Not captured',
-    classification_date: record.classification_date || record.classified_at || 'Not captured',
-    province: record.province || record.provinces || 'Not captured',
-    phase: record.phase || 'Not captured',
+    publication_year: record.publication_year || record.year || 'Not recorded',
+    classification_date: record.classification_date || record.classified_at || 'Not recorded',
+    province: record.province || (Array.isArray(record.provinces) ? record.provinces.join(', ') : record.provinces) || 'Not recorded',
+    phase: record.phase || 'Not recorded',
     eqs_tier: String(tier).replace('TIER_', 'Tier '),
     confidence_tier: record.confidence_tier || tier,
     eqs_composite: record.eqs_composite || record.evidence_capital_score || 'N/A',
@@ -435,6 +483,77 @@ function normalizeRecord(record) {
     key_finding_2: record.key_finding_2 || 'No secondary finding captured.',
     key_finding_3: record.key_finding_3 || 'No tertiary finding captured.',
   };
+}
+
+function fullRecordFields(record) {
+  const evaluationDesign = [record.evaluation_subtype, record.evaluation_design].filter(Boolean).join(' · ');
+  const sampleSize = [
+    record.sample_size_learners ? `${record.sample_size_learners} learners` : null,
+    record.sample_size_schools ? `${record.sample_size_schools} schools` : null,
+  ].filter(Boolean).join(' · ');
+  return [
+    ['CLASSIFICATION DATE', formatDisplayDate(record.classified_at || record.classification_date)],
+    ['DOCUMENT YEAR', record.year || record.publication_year],
+    ['EVALUATION DESIGN', evaluationDesign],
+    ['METHODOLOGY', record.methodology_description || record.methodology],
+    ['SAMPLE SIZE', sampleSize],
+    ['UNIT OF ANALYSIS', record.unit_of_analysis],
+    ['GRADE', record.grade],
+    ['SUBJECT AREA', record.subject_area],
+    ['INTERVENTION TYPE', record.intervention_type],
+    ['POPULATION SERVED', record.population_served],
+    ['COMPARISON GROUP', record.comparison_group],
+    ['BASELINE AVAILABLE', record.baseline_available],
+    ['ENDLINE AVAILABLE', record.endline_available],
+    ['NULL FINDINGS REPORTED', record.null_findings_reported],
+    ['NON-SIGNIFICANT VARIABLES', record.non_significant_variables],
+    ['EFFECT DIRECTION', record.effect_direction],
+    ['EFFECT SIZE', record.effect_size_composite == null ? null : `${record.effect_size_composite} SD`],
+    ['COST DATA SOURCE', record.cost_data_source],
+    ['AUDITED FINANCIALS', record.audited_financials_used],
+    ['SROI READY', record.sroi_ready],
+    ['POLICY ALIGNMENT', record.policy_alignment],
+    ['DECISION RELEVANCE', record.decision_relevance],
+    ['REPLICATION CONDITIONS', record.replication_conditions],
+    ['LIMITATIONS', record.limitations],
+    ['EQUITY CONSIDERATIONS', record.equity_considerations],
+    ['COMMISSIONED BY', record.commissioning_organisation_type],
+    ['IMPLEMENTED BY', record.implementing_organisation_name],
+    ['RIGOUR SCORE', formatScore(record.dim_methodological_rigour || record.rigour_score)],
+    ['DATA QUALITY SCORE', formatScore(record.dim_data_quality || record.data_quality_score)],
+    ['TRANSPARENCY SCORE', formatScore(record.dim_transparency || record.transparency_score)],
+    ['REPLICABILITY SCORE', formatScore(record.dim_replicability || record.replicability_score)],
+    ['POLICY RELEVANCE SCORE', formatScore(record.policy_relevance_score)],
+  ];
+}
+
+function RecordDetailModal({ record, onClose }) {
+  if (!record) return null;
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="record-modal" role="dialog" aria-modal="true" aria-label="ADEI record detail" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">ADEI 55-field detail</p>
+            <h2>{record.programme_name}</h2>
+            <p>{record.filename}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Close record detail" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="field-grid">
+          {fullRecordFields(record).map(([label, value]) => (
+            <div className="field-cell" key={label}>
+              <span>{label}</span>
+              <strong>{formatRecordValue(value)}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function normalizeQueueItem(item) {
@@ -472,6 +591,48 @@ function useLiveRecords() {
 
   return { records, source };
 }
+
+function useAlerts() {
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  async function loadAlerts() {
+    setLoading(true);
+    try {
+      const data = await apiRequest('/api/alerts');
+      setAlerts(Array.isArray(data) ? data : []);
+    } catch {
+      setAlerts([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAlerts();
+  }, []);
+
+  async function markRead(id) {
+    setAlerts(current => current.filter(alert => alert.id !== id));
+    try {
+      await apiRequest(`/api/alerts/${id}/read`, { method: 'POST' });
+    } catch {
+      await loadAlerts();
+    }
+  }
+
+  return { alerts, loading, loadAlerts, markRead };
+}
+
+const alertIcons = {
+  AUDIENCE_GAP: '📋',
+  CURRENCY_ALERT: '⏱',
+  COMMISSIONING_GAP: '💡',
+  QUEUE_BACKLOG: '⚠️',
+  BOARD_PROXIMITY: '📅',
+  ENDLINE_GAP: '🔍',
+  POLICY_WINDOW: '📢',
+};
 
 async function cognitoRequest(target, body) {
   const response = await fetch(`https://cognito-idp.${tenantConfig.cognitoRegion}.amazonaws.com/`, {
@@ -717,7 +878,8 @@ function queueCount() {
   return mockReviewQueue.length;
 }
 
-function DashboardNav({ active, queueBadge = queueCount() }) {
+function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() }) {
+  const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
   return (
     <>
       <aside className="dashboard-sidebar" aria-label="EvidenceOS navigation">
@@ -735,6 +897,12 @@ function DashboardNav({ active, queueBadge = queueCount() }) {
             <FileText size={18} />
             <span>Library</span>
           </a>
+          {canAsk && (
+            <a className={active === 'ask' ? 'active' : ''} href="/ask">
+              <span className="nav-emoji" aria-hidden="true">🔍</span>
+              <span>Ask Zenex</span>
+            </a>
+          )}
           <a className={active === 'classify' ? 'active' : ''} href="/classify">
             <UploadCloud size={18} />
             <span>Upload</span>
@@ -745,7 +913,7 @@ function DashboardNav({ active, queueBadge = queueCount() }) {
             <strong className="nav-badge">{queueBadge}</strong>
           </a>
           <a className={active === 'knowledge' ? 'active' : ''} href="/knowledge">
-            <Sparkles size={18} />
+            <span className="nav-emoji" aria-hidden="true">📄</span>
             <span>Products</span>
           </a>
           <a className={active === 'settings' ? 'active' : ''} href="/settings">
@@ -759,9 +927,10 @@ function DashboardNav({ active, queueBadge = queueCount() }) {
 }
 
 function AppShell({ active, children, queueBadge }) {
+  const user = currentUser();
   return (
     <main className="dashboard-shell">
-      <DashboardNav active={active} queueBadge={queueBadge} />
+      <DashboardNav active={active} queueBadge={queueBadge} user={user} />
       {children}
     </main>
   );
@@ -770,6 +939,17 @@ function AppShell({ active, children, queueBadge }) {
 function DashboardPage() {
   const { records } = useLiveRecords();
   const [stats, setStats] = useState(null);
+  const user = currentUser();
+  const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
+  const [seedAttempted, setSeedAttempted] = useState(false);
+  const hour = new Date().getHours();
+  const greeting = hour < 12
+    ? 'Good morning'
+    : hour < 17
+      ? 'Good afternoon'
+      : 'Good evening';
+  const firstName = user?.given_name || user?.name?.split(' ')[0] || 'there';
+  const today = formatDisplayDate(new Date(), { weekday: 'long' });
   const evidenceHealthScore = stats?.records
     ? Math.round(((stats.tier_counts?.TIER_1 || stats.tier_counts?.['Tier 1'] || 0) / stats.records) * 100)
     : 82;
@@ -786,17 +966,39 @@ function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (seedAttempted || alertsLoading || alerts.length > 0 || user.role !== 'ORGANISATION_LEAD') return;
+    setSeedAttempted(true);
+    apiRequest('/api/admin/flywheel/run', { method: 'POST' })
+      .then(() => loadAlerts())
+      .catch(() => {});
+  }, [alerts.length, alertsLoading, loadAlerts, seedAttempted, user.role]);
+
+  async function runIntelligenceCheck() {
+    await apiRequest('/api/admin/flywheel/run', { method: 'POST' });
+    await loadAlerts();
+  }
+
   return (
     <AppShell active="dashboard">
       <section className="dashboard-main">
         <header className="dashboard-header">
           <div>
             <p className="eyebrow">Zenex Foundation</p>
-            <h1>Evidence Health Dashboard</h1>
+            <h1>{greeting}, {firstName}</h1>
+            <p>{today}</p>
           </div>
-          <div className="tenant-pill">
-            <ShieldCheck size={16} />
-            <span>Tenant: {tenantConfig.tenant}</span>
+          <div className="header-actions">
+            {user.role === 'ORGANISATION_LEAD' && (
+              <button className="secondary-action" type="button" onClick={runIntelligenceCheck}>
+                <Search size={17} />
+                <span>Run intelligence check</span>
+              </button>
+            )}
+            <div className="tenant-pill">
+              <ShieldCheck size={16} />
+              <span>Tenant: {tenantConfig.tenant}</span>
+            </div>
           </div>
         </header>
 
@@ -877,6 +1079,44 @@ function DashboardPage() {
               </article>
             ))}
           </div>
+        </section>
+
+        <section className="alerts-section" aria-label="Intelligence alerts">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Learning Flywheel</p>
+              <h2>Intelligence Alerts</h2>
+              <span>EvidenceOS surfaces the right intelligence to the right person at the right moment</span>
+            </div>
+            <span className="live-badge">Live</span>
+          </div>
+
+          {alerts.length === 0 ? (
+            <article className="empty-panel compact">
+              <CheckCircle2 size={24} />
+              <p>No active alerts. Your evidence base is current.</p>
+            </article>
+          ) : (
+            <div className="alert-grid">
+              {alerts.map(alert => (
+                <article className={`alert-card priority-${String(alert.priority || 'MEDIUM').toLowerCase()}`} key={alert.id}>
+                  <div className="alert-icon" aria-hidden="true">{alertIcons[alert.alert_type] || '📢'}</div>
+                  <div>
+                    <h3>{alert.title}</h3>
+                    <p>{alert.body}</p>
+                    {alert.record_id && <a href={`/records?record=${alert.record_id}`}>Open record {alert.record_id}</a>}
+                    <footer>
+                      <span>{roleLabel(alert.target_role)}</span>
+                      <span>{dateTimeStamp(alert.created_at)}</span>
+                    </footer>
+                  </div>
+                  <button className="secondary-action mark-read-action" type="button" onClick={() => markRead(alert.id)}>
+                    Mark as read
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </section>
     </AppShell>
@@ -1018,31 +1258,168 @@ function RecordsPage() {
           </div>
         </section>
 
-        {selectedRecord && (
-          <div className="modal-backdrop" role="presentation" onClick={() => setSelectedRecord(null)}>
-            <section className="record-modal" role="dialog" aria-modal="true" aria-label="ADEI record detail" onClick={(event) => event.stopPropagation()}>
-              <div className="modal-header">
-                <div>
-                  <p className="eyebrow">ADEI 55-field detail</p>
-                  <h2>{selectedRecord.programme_name}</h2>
-                  <p>{selectedRecord.filename}</p>
-                </div>
-                <button className="icon-button" type="button" aria-label="Close record detail" onClick={() => setSelectedRecord(null)}>
-                  <X size={18} />
-                </button>
-              </div>
+        <RecordDetailModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />
+      </section>
+    </AppShell>
+  );
+}
 
-              <div className="field-grid">
-                {adeiFieldLabels.map(([field, label]) => (
-                  <div className="field-cell" key={field}>
-                    <span>{label}</span>
-                    <strong>{selectedRecord[field] == null || selectedRecord[field] === '' ? 'Not captured' : String(selectedRecord[field])}</strong>
-                  </div>
+const askPrompts = [
+  'What do we know about coaching in Foundation Phase?',
+  'Which programmes have the strongest evidence in rural schools?',
+  'Where are our biggest evidence gaps?',
+  'What should we commission next?',
+];
+
+function AskZenexPage() {
+  const { records } = useLiveRecords();
+  const user = currentUser();
+  const [question, setQuestion] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
+
+  const supportingRecords = useMemo(() => {
+    const ids = result?.supporting_record_ids || [];
+    return ids
+      .map(id => records.find(record => recordId(record) === id || record.id === id))
+      .filter(Boolean);
+  }, [records, result]);
+
+  async function submitAsk(prompt = question) {
+    const clean = String(prompt || '').trim();
+    if (!clean || loading) return;
+    setQuestion(clean);
+    setLoading(true);
+    setError(false);
+    setResult(null);
+    try {
+      const data = await apiRequest('/api/synthesis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: clean }),
+      });
+      setResult(data);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!canAsk) {
+    return (
+      <AppShell active="ask">
+        <section className="dashboard-main">
+          <article className="empty-panel">
+            <LockKeyhole size={28} />
+            <h2>Ask Zenex is not available for this role</h2>
+          </article>
+        </section>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell active="ask">
+      <section className="dashboard-main ask-page">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Evidence synthesis</p>
+            <h1>Ask Zenex</h1>
+            <p>Search {records.length} classified intelligence records</p>
+          </div>
+        </header>
+
+        {records.length < 5 && (
+          <article className="empty-panel compact">
+            <p>Ask Zenex works best with a full evidence corpus. The full Zenex archive will be available once batch classification completes.</p>
+          </article>
+        )}
+
+        <section className="ask-search-panel">
+          <label className="ask-input">
+            <Search size={22} />
+            <input
+              value={question}
+              onChange={event => setQuestion(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') submitAsk();
+              }}
+              placeholder="Ask anything about Zenex's evidence base..."
+            />
+          </label>
+          <button className="primary-action" type="button" disabled={!question.trim() || loading} onClick={() => submitAsk()}>
+            <span>Ask</span>
+            <ArrowRight size={18} />
+          </button>
+        </section>
+
+        {!result && !loading && !error && (
+          <section className="prompt-chip-grid" aria-label="Example prompts">
+            {askPrompts.map(prompt => (
+              <button type="button" key={prompt} onClick={() => submitAsk(prompt)}>{prompt}</button>
+            ))}
+          </section>
+        )}
+
+        {loading && (
+          <section className="ask-loading">
+            <span className="pulse-dot" />
+            <strong>Searching {records.length} records...</strong>
+          </section>
+        )}
+
+        {error && (
+          <article className="error-banner">Unable to search the corpus right now. Please try again in a moment.</article>
+        )}
+
+        {result && (
+          <section className="ask-results">
+            <span className={`confidence-badge ${String(result.confidence || 'LOW').toLowerCase()}`}>{result.confidence}</span>
+            <article className="answer-card">
+              <p>{result.answer}</p>
+            </article>
+
+            <section className="supporting-records">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Supporting records</p>
+                  <h2>Based on {supportingRecords.length || result.supporting_record_ids?.length || 0} records</h2>
+                </div>
+              </div>
+              <div className="admin-record-grid">
+                {supportingRecords.map(record => (
+                  <button className="support-record-card" type="button" key={recordId(record)} onClick={() => setSelectedRecord(record)}>
+                    <strong>{record.programme_name}</strong>
+                    <span>{record.eqs_tier} · {record.year || record.publication_year}</span>
+                    <p>{record.key_finding_1}</p>
+                  </button>
                 ))}
               </div>
             </section>
-          </div>
+
+            {result.contradictions && (
+              <article className="contradiction-box">
+                <strong>Contradictory evidence noted</strong>
+                <p>{result.contradictions}</p>
+              </article>
+            )}
+
+            <article className="recommended-action-box">
+              <strong>Recommended action</strong>
+              <p>{result.recommended_action}</p>
+            </article>
+
+            <footer className="ask-footer">
+              Searched {result.records_searched} records · {dateTimeStamp(result.generated_at)}
+            </footer>
+          </section>
         )}
+
+        <RecordDetailModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />
       </section>
     </AppShell>
   );
@@ -1306,6 +1683,18 @@ function downloadText(filename, text) {
   URL.revokeObjectURL(url);
 }
 
+function downloadWord(filename, html) {
+  const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function KnowledgePage() {
   const { records, source } = useLiveRecords();
   const eligibleRecords = records.filter(record => ['Tier 1', 'Tier 2'].includes(record.eqs_tier));
@@ -1372,9 +1761,32 @@ function KnowledgePage() {
     setBrief(output);
   }
 
+  function reportSections() {
+    return [
+      ['EXECUTIVE SUMMARY', brief || `${selectedRecord.programme_name} is a ${selectedRecord.eqs_tier} record with EQS ${selectedRecord.eqs_composite}.`],
+      ['KEY FINDING', selectedRecord.key_finding_1],
+      ['INVESTMENT AND REACH', selectedRecord.decision_relevance || selectedRecord.population_served],
+      ['DECISION IMPLICATION', selectedRecord.evidence_gap_1 || selectedRecord.evidence_gap || selectedRecord.decision_relevance],
+      ['EVIDENCE CONFIDENCE', `Rigour: ${formatScore(selectedRecord.dim_methodological_rigour || selectedRecord.rigour_score)}. Data quality: ${formatScore(selectedRecord.dim_data_quality || selectedRecord.data_quality_score)}. Transparency: ${formatScore(selectedRecord.dim_transparency || selectedRecord.transparency_score)}. Replicability: ${formatScore(selectedRecord.dim_replicability || selectedRecord.replicability_score)}. Policy relevance: ${formatScore(selectedRecord.policy_relevance_score)}.`],
+      ['RECOMMENDED ACTION', selectedRecord.replication_conditions || selectedRecord.evidence_gap_2 || 'Review this record alongside the current commissioning calendar.'],
+      ['SUPPORTING RECORDS', `${recordId(selectedRecord)} · ${selectedRecord.filename}`],
+    ];
+  }
+
+  function reportText() {
+    const lines = [
+      `ZENEX FOUNDATION - ${selectedAudience.label.toUpperCase()} EVIDENCE BRIEF`,
+      `Programme: ${selectedRecord.programme_name}`,
+      `Record: ${recordId(selectedRecord)} | Classified: ${formatDisplayDate(selectedRecord.classified_at || selectedRecord.classification_date)}`,
+      `Evidence tier: ${selectedRecord.eqs_tier} | EQS: ${selectedRecord.eqs_composite}/5.0`,
+      '',
+      ...reportSections().flatMap(([title, body]) => [title, formatRecordValue(body), '']),
+    ];
+    return lines.join('\n');
+  }
+
   async function copyBrief() {
-    if (!brief) return;
-    await navigator.clipboard?.writeText(brief);
+    await navigator.clipboard?.writeText(reportText());
   }
 
   return (
@@ -1386,8 +1798,8 @@ function KnowledgePage() {
             <h1>Generate Audience Brief</h1>
           </div>
           <button className="primary-action" type="button" onClick={generateBrief}>
-            <Sparkles size={18} />
-            <span>{isGenerating ? 'Generating' : 'Generate Brief'}</span>
+            <Edit3 size={18} />
+            <span>{isGenerating ? `Generating ${selectedAudience.label} brief for ${selectedRecord.programme_name}...` : 'Generate Brief'}</span>
           </button>
         </header>
 
@@ -1446,20 +1858,58 @@ function KnowledgePage() {
               <h2>{selectedRecord.programme_name}</h2>
             </div>
             <div className="brief-actions">
-              <button className="secondary-action" type="button" disabled={!brief} onClick={copyBrief}>
+              <button className="secondary-action" type="button" disabled={!brief && !selectedRecord} onClick={copyBrief}>
                 <ClipboardCopy size={17} />
                 <span>Copy</span>
               </button>
-              <button className="secondary-action" type="button" disabled={!brief} onClick={() => downloadText(`${selectedRecord.adei_record_id}-${audience}.txt`, brief)}>
+              <button className="secondary-action" type="button" disabled={!brief} onClick={() => window.print()}>
                 <Download size={17} />
-                <span>Download</span>
+                <span>Download PDF</span>
+              </button>
+              <button className="secondary-action" type="button" disabled={!brief} onClick={() => downloadWord(`${recordId(selectedRecord)}-${audience}.doc`, reportText().replace(/\n/g, '<br>'))}>
+                <Download size={17} />
+                <span>Download Word</span>
               </button>
             </div>
           </div>
 
-          <pre className={brief ? 'brief-body filled' : 'brief-body'}>
-            {brief || 'Select a record and audience, then generate a brief.'}
-          </pre>
+          {isGenerating ? (
+            <div className="brief-loading">
+              <span className="pulse-dot" />
+              <strong>Generating {selectedAudience.label} brief for {selectedRecord.programme_name}...</strong>
+            </div>
+          ) : brief ? (
+            <article className="report-card">
+              <header>
+                <h2>ZENEX FOUNDATION - {selectedAudience.label.toUpperCase()} EVIDENCE BRIEF</h2>
+                <p>Programme: {selectedRecord.programme_name}</p>
+                <p>Record: {recordId(selectedRecord)} | Classified: {formatDisplayDate(selectedRecord.classified_at || selectedRecord.classification_date)}</p>
+                <p>Evidence tier: {selectedRecord.eqs_tier} | EQS: {selectedRecord.eqs_composite}/5.0</p>
+              </header>
+              {reportSections().map(([title, body]) => (
+                <section key={title}>
+                  <h3>{title}</h3>
+                  <p>{formatRecordValue(body)}</p>
+                </section>
+              ))}
+              <div className="report-export-row">
+                <button className="secondary-action" type="button" onClick={copyBrief}>
+                  <ClipboardCopy size={17} />
+                  <span>Copy</span>
+                </button>
+                <button className="secondary-action" type="button" onClick={() => window.print()}>
+                  <Download size={17} />
+                  <span>Download PDF</span>
+                </button>
+                <button className="secondary-action" type="button" onClick={() => downloadWord(`${recordId(selectedRecord)}-${audience}.doc`, reportText().replace(/\n/g, '<br>'))}>
+                  <Download size={17} />
+                  <span>Download Word</span>
+                </button>
+              </div>
+            </article>
+          ) : (
+            <pre className="brief-body">Select a record and audience, then generate a brief.</pre>
+          )}
         </section>
       </section>
     </AppShell>
@@ -1926,7 +2376,7 @@ function SettingsPage() {
                 <tr><td colSpan="6">Loading users...</td></tr>
               ) : usersList.map(user => (
                 <tr key={user.id}>
-                  <td>{user.full_name || 'Not captured'}</td>
+                  <td>{user.full_name || 'Not recorded'}</td>
                   <td>{user.email}</td>
                   <td>{roleLabel(user.role)}</td>
                   <td>{user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never'}</td>
@@ -2111,6 +2561,7 @@ function App() {
   if (path === '/change-password') return <ChangePasswordPage />;
   if (path === '/dashboard') return <DashboardPage />;
   if (path === '/records') return <RecordsPage />;
+  if (path === '/ask') return <AskZenexPage />;
   if (path === '/classify') return <ClassifyPage />;
   if (path === '/queue') return <QueuePage />;
   if (path === '/knowledge') return <KnowledgePage />;
