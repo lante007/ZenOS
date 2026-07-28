@@ -263,7 +263,7 @@ const navigate = navigateInApp;
 
 async function apiRequest(path, options = {}) {
   const user = currentUser();
-  const token = browserAccessToken || browserIdToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY);
+  const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
   const headers = {
     'x-evidenceos-tenant': options.tenant || tenantConfig.tenant,
     'x-evidenceos-role': options.role || user.role || 'ORGANISATION_LEAD',

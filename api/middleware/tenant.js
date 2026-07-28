@@ -2,6 +2,15 @@
 
 const { getTenantBySlug } = require('../services/tenants');
 
+function infraCognitoValue(slug, key) {
+  try {
+    const outputs = require('../../infra/outputs.json');
+    return outputs[`${slug}_${key}`] || null;
+  } catch {
+    return null;
+  }
+}
+
 function slugFromHost(hostname) {
   const host = (hostname || '').split(':')[0].toLowerCase();
   if (!host || host === 'localhost' || host === '127.0.0.1') {
@@ -47,7 +56,8 @@ async function tenantMiddleware(req, res, next) {
       organisation_type: tenant.organisation_type,
       s3_vault_bucket: tenant.s3_vault_bucket,
       db_schema: tenant.db_schema,
-      cognito_pool_id: tenant.cognito_pool_id,
+      cognito_pool_id: tenant.cognito_pool_id || infraCognitoValue(tenant.slug, 'cognito_pool_id'),
+      cognito_client_id: tenant.cognito_client_id || infraCognitoValue(tenant.slug, 'cognito_client_id'),
       feature_flags: tenant.feature_flags,
     };
     next();
