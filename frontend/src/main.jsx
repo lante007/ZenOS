@@ -145,8 +145,10 @@ const adeiFieldLabels = [
 const FALLBACK_RECORDS_EMPTY = [];
 
 const API_BASE = tenantConfig.apiUrl.replace(/\/$/, '');
-let browserIdToken = '';
-let browserAccessToken = '';
+const ID_TOKEN_STORAGE_KEY = 'evidenceos_id_token';
+const ACCESS_TOKEN_STORAGE_KEY = 'evidenceos_access_token';
+let browserIdToken = sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || '';
+let browserAccessToken = sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) || '';
 
 function currentUser() {
   const payload = decodeJwtPayload(browserIdToken);
@@ -155,6 +157,9 @@ function currentUser() {
     role: payload['custom:role'] || payload['custom:custom:role'] || payload.role || 'ORGANISATION_LEAD',
     given_name: payload.given_name,
     name: payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(' '),
+    email: payload.email,
+    preferred_username: payload.preferred_username,
+    cognito_username: payload['cognito:username'],
   };
 }
 
@@ -162,6 +167,9 @@ function consumeIdTokenFromHash() {
   if (!window.location.hash.includes('id_token=')) return '';
   const params = new URLSearchParams(window.location.hash.slice(1));
   browserIdToken = params.get('id_token') || '';
+  browserAccessToken = params.get('access_token') || '';
+  if (browserIdToken) sessionStorage.setItem(ID_TOKEN_STORAGE_KEY, browserIdToken);
+  if (browserAccessToken) sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, browserAccessToken);
   window.history.replaceState(null, '', window.location.pathname);
   return browserIdToken;
 }
@@ -171,6 +179,10 @@ consumeIdTokenFromHash();
 function setInMemoryToken(idToken, accessToken = '') {
   browserIdToken = idToken || '';
   browserAccessToken = accessToken || '';
+  if (browserIdToken) sessionStorage.setItem(ID_TOKEN_STORAGE_KEY, browserIdToken);
+  else sessionStorage.removeItem(ID_TOKEN_STORAGE_KEY);
+  if (browserAccessToken) sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, browserAccessToken);
+  else sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
 }
 
 function decodeJwtPayload(token) {
@@ -220,6 +232,16 @@ function recordId(record) {
   return record?.adei_record_id || record?.id;
 }
 
+function greetingNameFor(user) {
+  const value = user?.given_name
+    || user?.name?.split(' ')[0]
+    || user?.email?.split('@')[0]
+    || user?.['cognito:username']
+    || user?.cognito_username
+    || user?.preferred_username;
+  return value || '';
+}
+
 function dateTimeStamp(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return 'Not recorded';
@@ -241,10 +263,11 @@ const navigate = navigateInApp;
 
 async function apiRequest(path, options = {}) {
   const user = currentUser();
+  const token = browserAccessToken || browserIdToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY);
   const headers = {
     'x-evidenceos-tenant': options.tenant || tenantConfig.tenant,
     'x-evidenceos-role': options.role || user.role || 'ORGANISATION_LEAD',
-    ...(browserIdToken ? { Authorization: `Bearer ${browserIdToken}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.user ? { 'x-evidenceos-user': options.user } : {}),
     ...(options.headers || {}),
   };
@@ -458,10 +481,13 @@ async function cognitoRequest(target, body) {
 }
 
 async function signOutOfCognito() {
-  if (!browserAccessToken) return;
-  await cognitoRequest('GlobalSignOut', {
-    AccessToken: browserAccessToken,
-  });
+  const accessToken = browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  if (accessToken) {
+    await cognitoRequest('GlobalSignOut', {
+      AccessToken: accessToken,
+    });
+  }
+  setInMemoryToken('', '');
 }
 
 async function signInWithClient(clientId, email, password) {
@@ -705,6 +731,10 @@ function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() 
             <FileText size={18} />
             <span>Library</span>
           </a>
+          <a className={active === 'classify' ? 'active' : ''} href="/classify">
+            <UploadCloud size={18} />
+            <span>Upload</span>
+          </a>
           {canSynthesise && (
             <a className={active === 'synthesise' ? 'active' : ''} href="/synthesise">
               <Layers size={18} />
@@ -760,7 +790,8 @@ function DashboardPage() {
     : hour < 17
       ? 'Good afternoon'
       : 'Good evening';
-  const firstName = user?.given_name || user?.name?.split(' ')[0] || 'there';
+  console.log('User object:', user);
+  const firstName = greetingNameFor(user);
   const today = formatDisplayDate(new Date(), { weekday: 'long' });
   const evidenceHealthScore = stats?.records
     ? Math.round(((stats.tier_counts?.TIER_1 || stats.tier_counts?.['Tier 1'] || 0) / stats.records) * 100)
@@ -815,7 +846,7 @@ function DashboardPage() {
         <header className="dashboard-header">
           <div>
             <p className="eyebrow">Zenex Foundation</p>
-            <h1>{greeting}, {firstName}</h1>
+            <h1>{firstName ? `${greeting}, ${firstName}` : greeting}</h1>
             <p>{today}</p>
           </div>
           <div className="header-actions">
