@@ -978,6 +978,23 @@ button:disabled {
   background: rgba(10, 22, 40, 0.52);
 }
 
+.formula-info {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(245, 242, 238, 0.16);
+  border-radius: 999px;
+  background: rgba(245, 242, 238, 0.06);
+  color: rgba(245, 242, 238, 0.82);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+
 .cascade-index {
   width: 34px;
   height: 28px;
@@ -1008,6 +1025,23 @@ button:disabled {
 .queue-item p {
   margin: 10px 0 0;
   color: rgba(245, 242, 238, 0.58);
+}
+
+.dimension-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.dimension-pills span {
+  padding: 6px 8px;
+  border: 1px solid rgba(245, 242, 238, 0.1);
+  border-radius: 999px;
+  background: rgba(245, 242, 238, 0.055);
+  color: rgba(245, 242, 238, 0.72);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .cascade-arrow {
@@ -1255,6 +1289,27 @@ button:disabled {
   border: 1px solid rgba(239, 114, 24, 0.24);
   background: #0A1628;
   box-shadow: var(--shadow);
+}
+
+.formula-modal {
+  width: min(560px, 100%);
+  border: 1px solid rgba(239, 114, 24, 0.24);
+  background: #0A1628;
+  box-shadow: var(--shadow);
+}
+
+.formula-modal p {
+  margin: 0;
+  padding: 22px 24px 10px;
+  color: rgba(245, 242, 238, 0.78);
+  line-height: 1.7;
+}
+
+.formula-modal small {
+  display: block;
+  padding: 0 24px 24px;
+  color: rgba(245, 242, 238, 0.54);
+  line-height: 1.5;
 }
 
 .modal-header {

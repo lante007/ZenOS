@@ -38,30 +38,6 @@ const healthDimensions = [
   { label: 'Policy relevance', score: 4.6 },
 ];
 
-const cascadeStages = [
-  {
-    title: 'Financial Capital',
-    // Source: Zenex board-approved budget 2019-2025. Pending audited confirmation.
-    value: 'R428m',
-    detail: 'Board-approved portfolio investment 2019-2025 · pending financial records.',
-  },
-  {
-    title: 'Evidence Capital',
-    value: '5 records',
-    detail: 'Evaluation assets extracted, classified, and quality scored.',
-  },
-  {
-    title: 'Decision Capital',
-    value: '3 briefs',
-    detail: 'Audience-ready knowledge products queued for leadership use.',
-  },
-  {
-    title: 'Institutional Capital',
-    value: '2 reviews',
-    detail: 'Expert review items strengthening the evidence base.',
-  },
-];
-
 const FALLBACK_QUEUE_EMPTY = [];
 
 const knowledgeAudiences = [
@@ -240,6 +216,37 @@ function greetingNameFor(user) {
     || user?.cognito_username
     || user?.preferred_username;
   return value || '';
+}
+
+function cascadeDimensions(cascade) {
+  const dims = cascade?.institutional_capital?.dimensions || {};
+  return [
+    ['Quality', dims.evidence_quality?.score],
+    ['Currency', dims.currency?.score],
+    ['Coverage', dims.coverage?.score],
+    ['Standards', dims.commissioning_standards?.score],
+  ];
+}
+
+function CascadeFormulaModal({ item, onClose }) {
+  if (!item) return null;
+  return (
+    <div className="modal-backdrop formula-backdrop" role="presentation" onClick={onClose}>
+      <section className="formula-modal" role="dialog" aria-modal="true" aria-label={`${item.title} calculation`} onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">Calculation method</p>
+            <h2>{item.title} - How we calculate this</h2>
+          </div>
+          <button className="icon-button" type="button" aria-label="Close formula" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <p>{item.formula || 'N/A'}</p>
+        {item.note && <small>Source note: {item.note}</small>}
+      </section>
+    </div>
+  );
 }
 
 function dateTimeStamp(value = new Date()) {
@@ -781,6 +788,9 @@ function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [queueItems, setQueueItems] = useState(FALLBACK_QUEUE_EMPTY);
   const [queueLoading, setQueueLoading] = useState(true);
+  const [cascade, setCascade] = useState(null);
+  const [cascadeLoading, setCascadeLoading] = useState(true);
+  const [formulaModal, setFormulaModal] = useState(null);
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
   const [seedAttempted, setSeedAttempted] = useState(false);
@@ -804,6 +814,23 @@ function DashboardPage() {
         if (!cancelled) setStats(data);
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/stats/cascade')
+      .then(data => {
+        if (!cancelled) {
+          setCascade(data);
+          setCascadeLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCascadeLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -839,6 +866,34 @@ function DashboardPage() {
     await apiRequest('/api/admin/flywheel/run', { method: 'POST' });
     await loadAlerts();
   }
+
+  const cascadeCards = [
+    {
+      title: 'Financial Capital',
+      value: cascadeLoading ? 'Calculating...' : cascade?.financial_capital?.label || 'N/A',
+      note: cascade?.financial_capital?.note || '',
+      formula: cascade?.financial_capital?.formula,
+    },
+    {
+      title: 'Evidence Capital',
+      value: cascadeLoading ? 'Calculating...' : cascade?.evidence_capital?.label || 'N/A',
+      note: cascade?.evidence_capital?.note || '',
+      formula: cascade?.evidence_capital?.formula,
+    },
+    {
+      title: 'Decision Capital',
+      value: cascadeLoading ? 'Calculating...' : cascade?.decision_capital?.label || 'N/A',
+      note: cascade?.decision_capital?.note || '',
+      formula: cascade?.decision_capital?.formula,
+    },
+    {
+      title: 'Institutional Capital',
+      value: cascadeLoading ? 'Calculating...' : cascade?.institutional_capital?.label || 'N/A',
+      note: '',
+      formula: cascade?.institutional_capital?.formula,
+      dimensions: cascadeDimensions(cascade),
+    },
+  ];
 
   return (
     <AppShell active="dashboard" queueBadge={queueItems.length}>
@@ -876,7 +931,7 @@ function DashboardPage() {
             <div className="score-track" aria-hidden="true">
               <span style={{ width: `${evidenceHealthScore}%` }} />
             </div>
-            <p>Overall portfolio readiness based on rigour, data quality, transparency, replicability, and policy relevance.</p>
+            <p>Based on {cascade?.corpus_size || 0} classified documents. Score reflects evidence quality and currency. Increases as corpus grows.</p>
           </article>
 
           <article className="dimension-panel">
@@ -908,13 +963,24 @@ function DashboardPage() {
           </div>
 
           <div className="cascade-grid">
-            {cascadeStages.map((stage, index) => (
+            {cascadeCards.map((stage, index) => (
               <article className="cascade-card" key={stage.title}>
+                <button className="formula-info" type="button" aria-label={`${stage.title} formula`} onClick={() => setFormulaModal(stage)}>
+                  ⓘ
+                </button>
                 <div className="cascade-index">{String(index + 1).padStart(2, '0')}</div>
                 <h3>{stage.title}</h3>
-                <strong>{stage.title === 'Evidence Capital' ? `${records.length} records` : stage.value}</strong>
-                <p>{stage.detail}</p>
-                {index < cascadeStages.length - 1 && <ArrowRight className="cascade-arrow" size={18} />}
+                <strong>{stage.value}</strong>
+                {stage.dimensions ? (
+                  <div className="dimension-pills">
+                    {stage.dimensions.map(([label, score]) => (
+                      <span key={label}>{label} {score ?? 0}/25</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{stage.note || 'N/A'}</p>
+                )}
+                {index < cascadeCards.length - 1 && <ArrowRight className="cascade-arrow" size={18} />}
               </article>
             ))}
           </div>
@@ -998,6 +1064,7 @@ function DashboardPage() {
             </div>
           )}
         </section>
+        <CascadeFormulaModal item={formulaModal} onClose={() => setFormulaModal(null)} />
       </section>
     </AppShell>
   );
