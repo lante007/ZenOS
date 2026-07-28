@@ -125,7 +125,7 @@ async function classifyDocument({ filename, text, programme, role, phase, instit
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
-async function generateKnowledgeProduct({ record, audience, tenant }) {
+async function generateKnowledgeProduct({ record, audience, tenant, synthesisContext = '' }) {
   const audienceDescriptions = {
     TRUSTEE: 'A board trustee focused on governance, fiduciary responsibility, portfolio value, and institutional accountability. Needs plain language, quantified returns, and clear risk framing.',
     CEO: 'The Foundation CEO focused on strategic portfolio decisions, organisational positioning, and evidence-based leadership. Needs portfolio-level insight and next-action clarity.',
@@ -145,10 +145,13 @@ async function generateKnowledgeProduct({ record, audience, tenant }) {
   const orgAttribution = tenant.organisation_type === 'FUNDER'
     ? `This organisation is a philanthropy and funder. Always use attribution language such as "Zenex-funded evidence shows" or "Zenex-commissioned evaluation found". Never write "Zenex delivered" or "Zenex achieved" because Zenex funds and commissions; implementing organisations deliver.`
     : `This organisation directly implements programmes. Direct attribution of outcomes is appropriate.`;
+  const synthesisSection = synthesisContext || '';
 
   const systemPrompt = `You are producing a formal evidence brief for ${tenant.name}.
 
 ${orgAttribution}
+
+${synthesisSection}
 
 You must produce ALL seven sections below in full.
 Never write "undefined", "not available", or leave a section blank. If specific data is absent from the record, derive a contextually appropriate statement from the other fields provided or acknowledge the gap honestly and specifically.

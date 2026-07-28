@@ -410,6 +410,30 @@ async function createKnowledgeProduct(tenant, payload) {
   });
 }
 
+async function saveProvenance(tenant, data) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      INSERT INTO provenance_records (
+        tenant_id, synthesis_id,
+        source_record_ids, audience,
+        brief_content, generated_at,
+        model_used, word_count
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      RETURNING id
+    `, [
+      tenant.slug,
+      data.synthesis_id || null,
+      data.source_record_ids,
+      data.audience,
+      data.brief_content,
+      data.generated_at,
+      data.model_used,
+      data.word_count,
+    ]);
+    return res.rows[0];
+  });
+}
+
 async function listUsers(tenant) {
   return withTenant(tenant, async client => {
     const res = await client.query(`
@@ -657,6 +681,7 @@ module.exports = {
   listQueue,
   resolveQueueItem,
   createKnowledgeProduct,
+  saveProvenance,
   listUsers,
   createUser,
   updateUser,
