@@ -223,11 +223,14 @@ async function processDocument(file, opts, batchId, outputDir, processedHashes) 
         classification: flatClassification,
         eqs,
         evidence_capital: evidenceCapital,
+        eqs_pathway: eqs.eqs_pathway,
+        eqs_version: eqs.eqs_version,
+        pathway_multiplier: eqs.pathway_multiplier,
         fatima_queue: fatimaQueue,
         api_usage: usage,
         classified_at: new Date().toISOString(),
         taxonomy_version: 'v2.1',
-        scoring_logic_version: 'v0.2',
+        scoring_logic_version: eqs.eqs_version || 'v0.2',
         status: 'PENDING_REVIEW',
       };
       fs.writeFileSync(outputFile, JSON.stringify(record, null, 2));

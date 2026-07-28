@@ -60,6 +60,13 @@ function loginUrlForTenant(tenant) {
   return `https://${tenant.subdomain || 'zenex.auxeira.com'}/login`;
 }
 
+function uuidOrNull(value) {
+  const str = String(value || '');
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str)
+    ? str
+    : null;
+}
+
 async function sendWelcomeEmail({ tenant, email, fullName, temporaryPassword }) {
   const from = process.env.SES_FROM_EMAIL || process.env.CEO_SUMMARY_FROM || 'emmanuel@auxeira.com';
   await ses.send(new SendEmailCommand({
@@ -85,6 +92,41 @@ async function sendWelcomeEmail({ tenant, email, fullName, temporaryPassword }) 
 }
 
 router.use(requireRoles('ORGANISATION_LEAD'));
+
+router.post('/ratify-eqs-v2', async (req, res, next) => {
+  try {
+    const pool = db.getPool();
+    const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+    const ratifiedBy = uuidOrNull(req.user?.sub);
+    const result = await pool.query(
+      `INSERT INTO ${schema}.methodology_versions (
+         tenant_id, version_label, ratified_by,
+         ratified_at, effective_from, notes
+       ) VALUES (
+         $1, 'v2.0', $2, NOW(), NOW(),
+         'EQS v2.0 pathway methodology. ' ||
+         'Three pathways: Impact Causal (x1.00), ' ||
+         'Impact Descriptive (x0.85), ' ||
+         'Process/Implementation (x0.75), ' ||
+         'Formative/Baseline (x0.60). ' ||
+         'Equal dimension weights 20% each. ' ||
+         'Research Studies now scored via ' ||
+         'Formative pathway.'
+       )
+       RETURNING version_label, ratified_at`,
+      [req.tenant.slug, ratifiedBy]
+    );
+
+    res.json({
+      success: true,
+      version: result.rows[0].version_label,
+      ratified_at: result.rows[0].ratified_at,
+      message: 'EQS v2.0 is now active for all new classifications. Existing records retain v1.0 scores.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get('/users', async (req, res, next) => {
   try {

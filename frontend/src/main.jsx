@@ -2710,11 +2710,13 @@ function AdminSupportPage() {
 }
 
 function SettingsPage() {
+  const user = currentUser();
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
+  const [ratifying, setRatifying] = useState(false);
   const [invite, setInvite] = useState({
     first_name: '',
     last_name: '',
@@ -2776,6 +2778,22 @@ function SettingsPage() {
     }
   }
 
+  async function handleRatifyV2() {
+    setError('');
+    setToast('');
+    setRatifying(true);
+    try {
+      const result = await apiRequest('/api/settings/ratify-eqs-v2', {
+        method: 'POST',
+      });
+      setToast(result.message || 'EQS v2.0 ratified for new classifications.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRatifying(false);
+    }
+  }
+
   return (
     <AppShell active="settings">
       <section className="dashboard-main">
@@ -2796,6 +2814,33 @@ function SettingsPage() {
         <section className="settings-tabs">
           <button className="active" type="button">Users</button>
         </section>
+
+        {user.role === 'ORGANISATION_LEAD' && (
+          <section className="methodology-version-card">
+            <div>
+              <p className="eyebrow">Methodology</p>
+              <h3>Evidence Quality Score Methodology</h3>
+              <p className="methodology-current">Current version: EQS v1.0</p>
+              <p>
+                EQS v2.0 is available. It introduces three evaluation pathways so process,
+                formative, and impact evaluations are each judged against their intended
+                purpose.
+              </p>
+              <p className="muted">
+                Existing scores are preserved. Only new classifications will use v2.0.
+                This action is recorded with your name and timestamp.
+              </p>
+            </div>
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={handleRatifyV2}
+              disabled={ratifying}
+            >
+              {ratifying ? 'Ratifying...' : 'Ratify EQS v2.0 Methodology'}
+            </button>
+          </section>
+        )}
 
         <section className="table-panel">
           <table className="records-table users-table">

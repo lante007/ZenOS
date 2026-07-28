@@ -70,6 +70,9 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
     rights_status: extraction.rights,
     eqs_composite: eqs.eqs_composite,
     confidence_tier: eqs.confidence_tier || 'N_A',
+    eqs_pathway: eqs.eqs_pathway,
+    eqs_version: eqs.eqs_version,
+    pathway_multiplier: eqs.pathway_multiplier,
     dimensions: eqs.dimensions,
     evidence_capital_score: evidenceCapital?.evidence_capital_score || null,
     half_life_rating: evidenceCapital?.half_life_rating || null,
@@ -82,7 +85,7 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
     api_usage: usage,
     classified_at: new Date().toISOString(),
     taxonomy_version: 'v2.1',
-    scoring_logic_version: 'v0.2',
+    scoring_logic_version: eqs.eqs_version || 'v0.2',
     status: queueItems.length > 0 ? 'PENDING_REVIEW' : 'COMPLETE',
     classified_by: user?.email || 'system',
   };

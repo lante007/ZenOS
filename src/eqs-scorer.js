@@ -1,14 +1,61 @@
 'use strict';
 /**
  * ADEI EQS Scorer
- * Evidence Quality Score — five-dimension weighted formula
- * Taxonomy v2.1 · Scoring Logic v0.2
- * 
- * Formula: EQS = (Rigour × 0.35) + (Data Quality × 0.20) + (Transparency × 0.15)
- *              + (Replicability × 0.15) + (Context Relevance × 0.15)
+ * Evidence Quality Score — pathway-based v2.0 scoring for new classifications
+ * Taxonomy v2.1 · Scoring Logic v2.0
  *
- * Tiers: Tier 1 ≥ 3.5 | Tier 2 2.5-3.49 | Tier 3 1.5-2.49 | Excluded < 1.5
+ * EQS v2.0 uses five equally weighted dimensions, with the fifth dimension
+ * adapted to the document pathway. Existing database records are not rescored.
  */
+
+function detectEQSPathway(documentType, evaluationSubtype) {
+  const dt = (documentType || '').toLowerCase();
+  const es = (evaluationSubtype || '').toLowerCase();
+
+  if (dt.includes('impact')) {
+    if (
+      es.includes('rct') ||
+      es.includes('randomis') ||
+      es.includes('quasi')
+    ) {
+      return {
+        pathway: 'IMPACT_CAUSAL',
+        multiplier: 1.00,
+        label: 'Impact evaluation (causal design)',
+      };
+    }
+    return {
+      pathway: 'IMPACT_DESCRIPTIVE',
+      multiplier: 0.85,
+      label: 'Impact evaluation (descriptive design)',
+    };
+  }
+  if (dt.includes('process') || dt.includes('implementation')) {
+    return {
+      pathway: 'PROCESS_IMPLEMENTATION',
+      multiplier: 0.75,
+      label: 'Process or implementation evaluation',
+    };
+  }
+  if (
+    dt.includes('research') ||
+    dt.includes('formative') ||
+    dt.includes('baseline') ||
+    dt.includes('landscape') ||
+    dt.includes('literature')
+  ) {
+    return {
+      pathway: 'FORMATIVE_BASELINE',
+      multiplier: 0.60,
+      label: 'Formative, baseline, or landscape study',
+    };
+  }
+  return {
+    pathway: 'NOT_APPLICABLE',
+    multiplier: null,
+    label: 'No EQS pathway applicable',
+  };
+}
 
 // Scoring rubrics per dimension
 function scoreMethodologicalRigour(classification) {
@@ -84,61 +131,82 @@ function scoreContextRelevance(classification) {
   return Math.min(5.0, Math.max(1.0, score));
 }
 
+function scorePathwayDimension(classification, pathway) {
+  const subtype = (classification.evaluation_subtype || '').toLowerCase();
+  const hasControl = classification.has_control_group;
+
+  if (pathway === 'IMPACT_CAUSAL') {
+    if (subtype.includes('rct') || subtype.includes('randomis')) return hasControl ? 4.5 : 4.0;
+    if (subtype.includes('quasi') || subtype.includes('difference-in-difference') || subtype.includes('did')) {
+      return hasControl ? 4.0 : 3.5;
+    }
+    if (subtype.includes('pre-post') || subtype.includes('pre/post')) return hasControl ? 3.0 : 2.0;
+    return 1.5;
+  }
+
+  if (pathway === 'IMPACT_DESCRIPTIVE') {
+    if (hasControl) return 3.0;
+    if (subtype.includes('pre-post') || subtype.includes('pre/post')) return 2.5;
+    return 1.8;
+  }
+
+  if (pathway === 'PROCESS_IMPLEMENTATION') {
+    let score = 1.5;
+    if (classification.theory_of_change_explicit) score += 0.8;
+    if (classification.fidelity_reported) score += 1.0;
+    if (classification.dosage_documented) score += 0.8;
+    if (classification.methodology_description) score += 0.4;
+    if (classification.evidence_gap_1) score += 0.2;
+    return Math.min(5.0, score);
+  }
+
+  if (pathway === 'FORMATIVE_BASELINE') {
+    let score = 2.0;
+    if (classification.methodology_description) score += 0.6;
+    if (classification.evidence_gap_1) score += 0.7;
+    if (classification.evidence_gap_2) score += 0.4;
+    if (classification.policy_relevance_score >= 4) score += 0.4;
+    if (classification.key_finding_1 && classification.key_finding_2) score += 0.4;
+    return Math.min(5.0, score);
+  }
+
+  return null;
+}
+
 /**
  * Compute the full EQS score from a classification record
  * Returns null for research studies and formative evaluations
  */
 function computeEQS(classification) {
-  const docType = (classification.document_type || '').toLowerCase();
-  const subtype = (classification.evaluation_subtype || '').toLowerCase();
+  const pathwayInfo = detectEQSPathway(
+    classification.document_type,
+    classification.evaluation_subtype
+  );
 
-  // Research studies: no EQS
-  if (
-    docType === 'research study' ||
-    subtype.includes('literature') ||
-    subtype.includes('landscape')
-  ) {
+  if (pathwayInfo.pathway === 'NOT_APPLICABLE') {
     return {
       applicable: false,
-      reason: 'Research studies do not receive EQS scores',
+      reason: 'No EQS pathway applicable',
+      eqs_pathway: pathwayInfo.pathway,
+      eqs_version: 'v2.0',
+      pathway_multiplier: pathwayInfo.multiplier,
       eqs_composite: null,
       confidence_tier: null,
     };
   }
 
-  const rigour = scoreMethodologicalRigour(classification);
   const dataQuality = scoreDataQuality(classification);
   const transparency = scoreTransparency(classification);
   const replicability = scoreReplicability(classification);
   const contextRelevance = scoreContextRelevance(classification);
+  const pathwayDimension = scorePathwayDimension(classification, pathwayInfo.pathway);
 
-  // Process evaluations: only Transparency and Replicability scored
-  if (docType === 'process evaluation') {
-    const composite = (transparency * 0.5) + (replicability * 0.5);
-    return {
-      applicable: true,
-      partial: true,
-      reason: 'Process evaluations scored on Transparency and Replicability only',
-      dimensions: {
-        methodological_rigour: null,
-        data_quality: null,
-        transparency: parseFloat(transparency.toFixed(2)),
-        replicability: parseFloat(replicability.toFixed(2)),
-        context_relevance: parseFloat(contextRelevance.toFixed(2)),
-      },
-      eqs_composite: parseFloat(composite.toFixed(2)),
-      confidence_tier: composite >= 3.5 ? 'TIER_1' : composite >= 2.5 ? 'TIER_2' : 'TIER_3',
-      max_possible: 3.0,
-    };
-  }
-
-  // Impact evaluations: full five-dimension EQS
   const composite = (
-    (rigour || 2.0) * 0.35 +
     dataQuality * 0.20 +
-    transparency * 0.15 +
-    replicability * 0.15 +
-    contextRelevance * 0.15
+    transparency * 0.20 +
+    replicability * 0.20 +
+    contextRelevance * 0.20 +
+    (pathwayDimension || 1.0) * 0.20
   );
 
   let tier;
@@ -150,8 +218,11 @@ function computeEQS(classification) {
   return {
     applicable: true,
     partial: false,
+    eqs_pathway: pathwayInfo.pathway,
+    eqs_version: 'v2.0',
+    pathway_multiplier: pathwayInfo.multiplier,
     dimensions: {
-      methodological_rigour: rigour ? parseFloat(rigour.toFixed(2)) : null,
+      methodological_rigour: pathwayDimension ? parseFloat(pathwayDimension.toFixed(2)) : null,
       data_quality: parseFloat(dataQuality.toFixed(2)),
       transparency: parseFloat(transparency.toFixed(2)),
       replicability: parseFloat(replicability.toFixed(2)),
@@ -194,4 +265,4 @@ function computeEvidenceCapital(eqs, classification) {
   };
 }
 
-module.exports = { computeEQS, computeHalfLife, computeEvidenceCapital };
+module.exports = { detectEQSPathway, computeEQS, computeHalfLife, computeEvidenceCapital };

@@ -9,6 +9,55 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+function detectEQSPathway(documentType, evaluationSubtype) {
+  const dt = (documentType || '').toLowerCase();
+  const es = (evaluationSubtype || '').toLowerCase();
+
+  if (dt.includes('impact')) {
+    if (
+      es.includes('rct') ||
+      es.includes('randomis') ||
+      es.includes('quasi')
+    ) {
+      return {
+        pathway: 'IMPACT_CAUSAL',
+        multiplier: 1.00,
+        label: 'Impact evaluation (causal design)',
+      };
+    }
+    return {
+      pathway: 'IMPACT_DESCRIPTIVE',
+      multiplier: 0.85,
+      label: 'Impact evaluation (descriptive design)',
+    };
+  }
+  if (dt.includes('process') || dt.includes('implementation')) {
+    return {
+      pathway: 'PROCESS_IMPLEMENTATION',
+      multiplier: 0.75,
+      label: 'Process or implementation evaluation',
+    };
+  }
+  if (
+    dt.includes('research') ||
+    dt.includes('formative') ||
+    dt.includes('baseline') ||
+    dt.includes('landscape') ||
+    dt.includes('literature')
+  ) {
+    return {
+      pathway: 'FORMATIVE_BASELINE',
+      multiplier: 0.60,
+      label: 'Formative, baseline, or landscape study',
+    };
+  }
+  return {
+    pathway: 'NOT_APPLICABLE',
+    multiplier: null,
+    label: 'No EQS pathway applicable',
+  };
+}
+
 const CLASSIFICATION_PROMPT = `You are the ADEI Evidence Intelligence classification engine for Auxeira. 
 You are classifying evaluation and research documents for {{INSTITUTION}}, a client organisation using EvidenceOS.
 
@@ -47,6 +96,9 @@ Return ONLY valid JSON, no preamble, no markdown.
   "evidence_gap_1": "string or null",
   "evidence_gap_2": "string or null",
   "commissioning_standards_met": 0..9,
+  "eqs_pathway": "IMPACT_CAUSAL | IMPACT_DESCRIPTIVE | PROCESS_IMPLEMENTATION | FORMATIVE_BASELINE | NOT_APPLICABLE",
+  "pathway_multiplier": 1.00 | 0.85 | 0.75 | 0.60 | null,
+  "eqs_version": "v2.0",
   "confidence_scores": {
     "document_type": 0.0..1.0,
     "evaluation_subtype": 0.0..1.0,
@@ -63,6 +115,21 @@ PA4. Confidence tiers must be disaggregated by unit of analysis where the docume
 PA5. Non-significant tested variables must be explicitly reported in key_findings.
 PA6. Decision relevance is judged by asymmetry: assumption-challenging findings outrank confirming findings.
 If omitted variable bias is detected, note it in methodology_description.
+
+EQS v2.0 PATHWAY DETECTION:
+Assign exactly one pathway for scoring new classifications.
+- IMPACT_CAUSAL: Impact evaluation with RCT, randomised, or quasi-experimental design. Multiplier 1.00.
+- IMPACT_DESCRIPTIVE: Impact evaluation with descriptive, pre-post, or weak attribution design. Multiplier 0.85.
+- PROCESS_IMPLEMENTATION: Process or implementation evaluation. Multiplier 0.75.
+- FORMATIVE_BASELINE: Research, formative, baseline, landscape, or literature study. Multiplier 0.60.
+- NOT_APPLICABLE: No evaluation pathway applies. Multiplier null.
+
+EQS v2.0 uses five equal 20% dimensions:
+- Data Quality: sample adequacy, source credibility, measurement validity, completeness.
+- Transparency: limitations acknowledged, methods described, null findings reported.
+- Replicability: sufficient detail for reproduction, dosage documented, population described.
+- Context Relevance: current policy alignment, geographic fit, timing relative to decisions.
+- Pathway Dimension: causal rigour for impact pathways, implementation fidelity for process pathways, problem definition quality for formative or baseline pathways.
 
 DOCUMENT TO CLASSIFY:
 Filename: {{FILENAME}}
@@ -107,6 +174,12 @@ async function classifyDocument({ filename, text, programme, role, phase, instit
   } catch (err) {
     throw new Error(`Claude returned invalid JSON: ${err.message}\nRaw: ${rawContent.substring(0, 200)}`);
   }
+
+  const pathwayInfo = detectEQSPathway(parsed.document_type, parsed.evaluation_subtype);
+  parsed.eqs_pathway = pathwayInfo.pathway;
+  parsed.pathway_multiplier = pathwayInfo.multiplier;
+  parsed.eqs_version = 'v2.0';
+  parsed.scoring_logic_version = 'v2.0';
 
   return {
     classification: parsed,
@@ -230,4 +303,4 @@ Cost data: ${safe(record.cost_data_present)} - ${safe(record.cost_data_source, '
     .replace(/[–—]/g, '-');
 }
 
-module.exports = { classifyDocument, generateKnowledgeProduct };
+module.exports = { detectEQSPathway, classifyDocument, generateKnowledgeProduct };

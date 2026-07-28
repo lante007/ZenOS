@@ -261,11 +261,12 @@ async function createRecord(tenant, record, document = {}) {
         dim_replicability, dim_context_relevance, half_life_rating,
         evidence_capital_score, policy_relevance_weight, sroi_eligible,
         board_citable, classified_by, classification_confidence,
-        taxonomy_version, scoring_logic_version, record_status
+        taxonomy_version, scoring_logic_version, eqs_pathway,
+        eqs_version, pathway_multiplier, record_status
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
         $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,
-        $38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49
+        $38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52
       )
       ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
     `, [
@@ -316,7 +317,10 @@ async function createRecord(tenant, record, document = {}) {
       'CLAUDE_SONNET',
       record.classification_confidence || record.confidence_scores || {},
       record.taxonomy_version || 'v2.1',
-      record.scoring_logic_version || 'v0.2',
+      record.scoring_logic_version || record.eqs_version || 'v0.2',
+      record.eqs_pathway || null,
+      record.eqs_version || (record.eqs_pathway ? 'v2.0' : 'v1.0'),
+      record.pathway_multiplier == null ? null : record.pathway_multiplier,
       record.status === 'PENDING_REVIEW' ? 'PENDING_REVIEW' : 'ACTIVE',
     ]);
 
