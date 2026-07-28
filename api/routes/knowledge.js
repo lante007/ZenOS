@@ -160,6 +160,7 @@ Do not introduce findings not present in this synthesis.`;
       generated_at: generatedAt,
       model: 'claude-sonnet-4-6',
       word_count: wordCount,
+      provenance_id: provenance?.id || null,
       provenance_record_id: provenance?.id || null,
     });
   } catch (err) {

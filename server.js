@@ -24,6 +24,7 @@ const adminRoutes = require('./api/routes/admin');
 const strategicSynthesisRoutes = require('./api/routes/strategic-synthesis');
 const synthesisRoutes = require('./api/routes/synthesis');
 const alertsRoutes = require('./api/routes/alerts');
+const provenanceRoutes = require('./api/routes/provenance');
 const db = require('./api/services/db');
 const localStore = require('./api/services/local-store');
 
@@ -84,6 +85,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/strategic-synthesis', strategicSynthesisRoutes);
 app.use('/api/synthesis', synthesisRoutes);
 app.use('/api/alerts', alertsRoutes);
+app.use('/api/provenance', provenanceRoutes);
 app.use('/api', knowledgeRoutes);
 
 app.get('/api/stats', authenticate(), assertNoBoardAccess, async (req, res, next) => {
