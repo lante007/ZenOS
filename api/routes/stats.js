@@ -126,8 +126,8 @@ router.get('/cascade',
         note: ec.total_records > 0
           ? `Quality-adjusted evidence index · ${ec.total_records} records`
           : 'No classified records yet',
-        cost_data_note: 'Rand value unavailable until financial records are classified. Upload an audited annual report or evaluation budget to unlock.',
-        formula: 'Quality-adjusted evidence index (0-5.0). Formula: Σ(EQS ÷ 5 × pathway multiplier × depreciation factor) ÷ record count. When cost data is available: EC (Rands) = Σ(Evaluation cost × EQS ÷ 5 × pathway multiplier × depreciation factor).',
+        cost_data_note: 'Rand value unavailable until financial records are classified.',
+        formula: 'Quality-adjusted evidence index (0-5.0). Formula: Σ(EQS ÷ 5 × pathway multiplier × depreciation factor) ÷ record count. Rand value unlocks when audited financial records are classified.',
       };
 
       const decisionTable = await pool.query('SELECT to_regclass($1) AS table_name', [`${schema}.decision_capital_instances`]);
