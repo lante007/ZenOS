@@ -1027,6 +1027,12 @@ button:disabled {
   color: rgba(245, 242, 238, 0.58);
 }
 
+.cascade-card .cascade-cost-note {
+  color: rgba(245, 242, 238, 0.44);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .dimension-pills {
   display: flex;
   flex-wrap: wrap;

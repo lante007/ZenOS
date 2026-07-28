@@ -119,12 +119,15 @@ router.get('/cascade',
         historical: ec.historical_count,
         has_data: ec.total_records > 0,
         label: ec.total_records > 0
-          ? `${ec.total_records} records · EC index ${ec.net_ec_index}`
+          ? (ec.net_ec_index
+              ? `${parseFloat(ec.net_ec_index).toFixed(2)} / 5.0`
+              : 'N/A')
           : 'N/A',
         note: ec.total_records > 0
-          ? `Tier 1: ${ec.tier_1} · Aging: ${ec.aging_count}`
+          ? `Quality-adjusted evidence index · ${ec.total_records} records`
           : 'No classified records yet',
-        formula: 'Σ(EQS ÷ 5 × pathway multiplier × depreciation factor). RCT=1.0, Process=0.75, Formative=0.60. Current=1.0, Aging=0.65, Historical=0.30.',
+        cost_data_note: 'Rand value unavailable until financial records are classified. Upload an audited annual report or evaluation budget to unlock.',
+        formula: 'Quality-adjusted evidence index (0-5.0). Formula: Σ(EQS ÷ 5 × pathway multiplier × depreciation factor) ÷ record count. When cost data is available: EC (Rands) = Σ(Evaluation cost × EQS ÷ 5 × pathway multiplier × depreciation factor).',
       };
 
       const decisionTable = await pool.query('SELECT to_regclass($1) AS table_name', [`${schema}.decision_capital_instances`]);

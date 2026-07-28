@@ -877,7 +877,10 @@ function DashboardPage() {
     {
       title: 'Evidence Capital',
       value: cascadeLoading ? 'Calculating...' : cascade?.evidence_capital?.label || 'N/A',
-      note: cascade?.evidence_capital?.note || '',
+      note: 'Quality-adjusted evidence index',
+      costDataNote: cascade?.evidence_capital?.cost_data_note
+        ? `Cost data pending - ${cascade.evidence_capital.cost_data_note}`
+        : 'Cost data pending - Rand value unavailable until financial records are classified',
       formula: cascade?.evidence_capital?.formula,
     },
     {
@@ -978,7 +981,10 @@ function DashboardPage() {
                     ))}
                   </div>
                 ) : (
-                  <p>{stage.note || 'N/A'}</p>
+                  <>
+                    <p>{stage.note || 'N/A'}</p>
+                    {stage.costDataNote && <p className="cascade-cost-note">{stage.costDataNote}</p>}
+                  </>
                 )}
                 {index < cascadeCards.length - 1 && <ArrowRight className="cascade-arrow" size={18} />}
               </article>
