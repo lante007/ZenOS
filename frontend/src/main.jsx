@@ -40,8 +40,9 @@ const healthDimensions = [
 const cascadeStages = [
   {
     title: 'Financial Capital',
-    value: 'R84.2m',
-    detail: 'Programme investment represented in classified evidence.',
+    // Source: Zenex board-approved budget 2019-2025. Pending audited confirmation.
+    value: 'R428m',
+    detail: 'Board-approved portfolio investment 2019-2025 · pending financial records.',
   },
   {
     title: 'Evidence Capital',
@@ -60,41 +61,7 @@ const cascadeStages = [
   },
 ];
 
-const workQueue = [
-  { title: 'Foundation Phase reading synthesis', owner: 'Evidence Analyst', state: 'Review' },
-  { title: 'Learner outcome dashboard brief', owner: 'Communications', state: 'Draft' },
-  { title: 'Quarterly trustee evidence pack', owner: 'Organisation Lead', state: 'Ready' },
-];
-
-const mockReviewQueue = [
-  {
-    id: 'QR-ZEN-001',
-    record: 'Foundation Phase Literacy',
-    fieldName: 'effect_size',
-    recommendation: '0.32 SD',
-    confidence: 0.58,
-    alternatives: ['0.28 SD', 'Positive direction only', 'Not enough evidence'],
-    rationale: 'Reported in learner assessment appendix but confidence is below direct acceptance threshold.',
-  },
-  {
-    id: 'QR-ZEN-002',
-    record: 'Numeracy Recovery',
-    fieldName: 'cost_data_source',
-    recommendation: 'Management budget summary',
-    confidence: 0.52,
-    alternatives: ['No audited cost data', 'Approved Proxy Library', 'Unknown'],
-    rationale: 'Protocol amendment PA3 requires audited financials or approved proxy before SROI use.',
-  },
-  {
-    id: 'QR-ZEN-003',
-    record: 'School Leadership Support',
-    fieldName: 'decision_relevance',
-    recommendation: 'Medium',
-    confidence: 0.61,
-    alternatives: ['High', 'Low', 'Commissioning only'],
-    rationale: 'Finding challenges a common assumption but evidence quality is mixed across source reports.',
-  },
-];
+const FALLBACK_QUEUE_EMPTY = [];
 
 const knowledgeAudiences = [
   { id: 'TRUSTEE', label: 'Trustee', focus: 'Governance, risk, and portfolio value' },
@@ -174,179 +141,7 @@ const adeiFieldLabels = [
   ['expert_review_required', 'Expert Review Required'],
 ];
 
-const mockRecords = [
-  {
-    adei_record_id: 'ADEI-ZEN-001',
-    tenant_id: 'zenex',
-    filename: 'Zenex Grade R Literacy Evaluation 2024.pdf',
-    source_uri: 's3://auxeira-evidenceos-zenex/raw/documents/grade-r-literacy-2024.pdf',
-    institution: 'Zenex Foundation',
-    programme_name: 'Foundation Phase Literacy',
-    document_type: 'Impact Evaluation',
-    publication_year: 2024,
-    classification_date: '2026-07-24',
-    evaluation_design: 'Quasi-experimental matched comparison',
-    methodology: 'Mixed methods with learner assessment and classroom observation',
-    sample_size: '2,480 learners',
-    unit_of_analysis: 'Learner, teacher, school',
-    province: 'Gauteng',
-    district: 'Johannesburg East',
-    phase: 'Foundation Phase',
-    grade: 'Grade R',
-    subject_area: 'Literacy',
-    intervention_type: 'Teacher coaching and reading resources',
-    implementation_period: '2022-2024',
-    population_served: 'Learners in under-resourced primary schools',
-    comparison_group: 'Matched non-participating schools',
-    data_sources: 'Learner tests, teacher logs, observations, interviews',
-    baseline_available: 'Yes',
-    endline_available: 'Yes',
-    key_finding_1: 'Learners gained the equivalent of 0.32 standard deviations in early literacy.',
-    key_finding_2: 'Teacher coaching fidelity predicted stronger classroom uptake.',
-    key_finding_3: 'Resource use varied sharply by school management support.',
-    null_findings: 'No statistically significant maths spillover effect detected.',
-    non_significant_variables: 'Attendance, caregiver workshop exposure',
-    effect_direction: 'Positive literacy effect',
-    effect_size: '0.32 SD',
-    cost_data_source: 'Audited grant expenditure schedule',
-    audited_financials_used: 'Yes',
-    sroi_ready: 'Yes',
-    policy_alignment: 'DBE Foundation Phase reading strategy',
-    decision_relevance: 'High: supports scale pathway with coaching fidelity guardrails',
-    assumption_challenge: 'Confirms coaching matters more than resource delivery alone',
-    evidence_gap: 'Longer-term tracking into Grade 3 comprehension',
-    replication_conditions: 'Coaching intensity, principal support, aligned reading materials',
-    limitations: 'Province coverage limited to Gauteng',
-    equity_considerations: 'Strongest gains in schools with lower baseline scores',
-    data_quality_score: 4.2,
-    rigour_score: 4.4,
-    transparency_score: 4.1,
-    replicability_score: 3.8,
-    policy_relevance_score: 4.7,
-    eqs_composite: 4.3,
-    eqs_tier: 'Tier 1',
-    confidence_tier: 'TIER_1',
-    board_citable: 'Yes',
-    evidence_capital_score: 91,
-    half_life_rating: 'Current',
-    audience_relevance: 'Board, DBE National, Co-Funder',
-    expert_review_required: 'No',
-  },
-  {
-    adei_record_id: 'ADEI-ZEN-002',
-    tenant_id: 'zenex',
-    filename: 'Eastern Cape Numeracy Process Review.docx',
-    source_uri: 's3://auxeira-evidenceos-zenex/raw/documents/ec-numeracy-process-review.docx',
-    institution: 'Zenex Foundation',
-    programme_name: 'Numeracy Recovery',
-    document_type: 'Process Evaluation',
-    publication_year: 2023,
-    classification_date: '2026-07-24',
-    evaluation_design: 'Implementation review',
-    methodology: 'School visits, teacher interviews, programme records',
-    sample_size: '62 teachers',
-    unit_of_analysis: 'Teacher, school',
-    province: 'Eastern Cape',
-    district: 'OR Tambo Inland',
-    phase: 'Foundation Phase',
-    grade: 'Grade 1-3',
-    subject_area: 'Numeracy',
-    intervention_type: 'Teacher professional development',
-    implementation_period: '2021-2023',
-    population_served: 'Foundation Phase teachers',
-    comparison_group: 'None',
-    data_sources: 'Interviews, attendance registers, facilitator notes',
-    baseline_available: 'Partial',
-    endline_available: 'No',
-    key_finding_1: 'Teacher attendance was highest where circuit managers actively reinforced participation.',
-    key_finding_2: 'Materials reached schools on time in 78% of sampled sites.',
-    key_finding_3: 'Coach workload constrained follow-up cycles.',
-    null_findings: 'No causal learner outcome claim is made for this process evaluation.',
-    non_significant_variables: 'Not applicable',
-    effect_direction: 'Implementation learning',
-    effect_size: 'Not estimated',
-    cost_data_source: 'Management budget summary',
-    audited_financials_used: 'No',
-    sroi_ready: 'No',
-    policy_alignment: 'Provincial numeracy recovery priorities',
-    decision_relevance: 'Medium: improves implementation design',
-    assumption_challenge: 'Challenges assumption that training attendance alone drives adoption',
-    evidence_gap: 'Learner outcome endline required',
-    replication_conditions: 'Circuit manager engagement and coach load controls',
-    limitations: 'No comparison group; self-reported teacher practice',
-    equity_considerations: 'Rural travel constraints affected coaching dosage',
-    data_quality_score: 3.4,
-    rigour_score: 2.8,
-    transparency_score: 3.6,
-    replicability_score: 3.3,
-    policy_relevance_score: 4.1,
-    eqs_composite: 3.3,
-    eqs_tier: 'Tier 2',
-    confidence_tier: 'TIER_2',
-    board_citable: 'With caveat',
-    evidence_capital_score: 72,
-    half_life_rating: 'Current',
-    audience_relevance: 'Organisation Lead, Evidence Analyst',
-    expert_review_required: 'Yes',
-  },
-  {
-    adei_record_id: 'ADEI-ZEN-003',
-    tenant_id: 'zenex',
-    filename: 'Western Cape School Leadership Synthesis.pptx',
-    source_uri: 's3://auxeira-evidenceos-zenex/raw/documents/wc-leadership-synthesis.pptx',
-    institution: 'Zenex Foundation',
-    programme_name: 'School Leadership Support',
-    document_type: 'Synthesis',
-    publication_year: 2022,
-    classification_date: '2026-07-24',
-    evaluation_design: 'Narrative synthesis',
-    methodology: 'Document review and stakeholder validation',
-    sample_size: '14 source reports',
-    unit_of_analysis: 'School, leadership team',
-    province: 'Western Cape',
-    district: 'Cape Winelands',
-    phase: 'Senior Phase',
-    grade: 'Grade 7-9',
-    subject_area: 'School leadership',
-    intervention_type: 'Leadership development',
-    implementation_period: '2018-2022',
-    population_served: 'School management teams',
-    comparison_group: 'Not applicable',
-    data_sources: 'Evaluation reports, programme memos, workshop data',
-    baseline_available: 'No',
-    endline_available: 'No',
-    key_finding_1: 'Leadership routines improved planning discipline but did not consistently shift learner outcomes.',
-    key_finding_2: 'District alignment was the strongest predictor of sustained use.',
-    key_finding_3: 'Evidence is strongest for management practice, weaker for achievement outcomes.',
-    null_findings: 'Learner achievement effect remains unproven.',
-    non_significant_variables: 'Learner achievement measures across source reports',
-    effect_direction: 'Mixed',
-    effect_size: 'Not pooled',
-    cost_data_source: 'No audited cost data',
-    audited_financials_used: 'No',
-    sroi_ready: 'No',
-    policy_alignment: 'School management and accountability priorities',
-    decision_relevance: 'Medium: useful for commissioning stronger endline studies',
-    assumption_challenge: 'Questions direct link between leadership training and learner gains',
-    evidence_gap: 'Outcome-linked longitudinal design',
-    replication_conditions: 'District endorsement and leadership practice tracking',
-    limitations: 'Heterogeneous source quality',
-    equity_considerations: 'Small rural school evidence is thin',
-    data_quality_score: 3.1,
-    rigour_score: 2.6,
-    transparency_score: 3.2,
-    replicability_score: 2.9,
-    policy_relevance_score: 3.8,
-    eqs_composite: 3.0,
-    eqs_tier: 'Tier 2',
-    confidence_tier: 'TIER_2',
-    board_citable: 'With caveat',
-    evidence_capital_score: 66,
-    half_life_rating: 'Aging',
-    audience_relevance: 'Evidence Analyst, CEO',
-    expert_review_required: 'Yes',
-  },
-];
+const FALLBACK_RECORDS_EMPTY = [];
 
 const API_BASE = tenantConfig.apiUrl.replace(/\/$/, '');
 let browserIdToken = '';
@@ -557,20 +352,29 @@ function RecordDetailModal({ record, onClose }) {
 }
 
 function normalizeQueueItem(item) {
+  const rawConfidence = Number(item.claude_confidence ?? item.confidence ?? 0);
+  const confidence = rawConfidence > 1 ? rawConfidence / 100 : rawConfidence;
   return {
     id: item.id,
-    record: item.document || item.record || item.record_id || 'Evidence record',
+    recordId: item.record_id || item.id,
+    programmeName: item.programme_name || item.record?.programme_name || item.document || item.record || item.record_id || 'Evidence record',
     fieldName: item.field_name || item.field || 'classification_field',
-    recommendation: item.recommendation || item.claude_value || 'Review required',
-    confidence: Number(item.confidence || item.claude_confidence || 0),
+    recommendation: item.system_recommendation || item.recommendation || item.claude_value || 'Review required',
+    confidence,
+    targetRole: item.target_role || item.assigned_role || item.role || 'ORGANISATION_LEAD',
+    state: item.resolved_at || item.status === 'RESOLVED' ? 'Resolved' : 'Pending review',
     alternatives: item.alternatives || ['Confirm recommendation', 'Override manually', 'Defer review'],
     rationale: item.question || item.rationale || 'Low-confidence classification requires Organisation Lead review.',
   };
 }
 
+function formatQueueConfidence(confidence) {
+  return `${Math.round(Number(confidence || 0) * 100)}% confidence`;
+}
+
 function useLiveRecords() {
-  const [records, setRecords] = useState(mockRecords);
-  const [source, setSource] = useState('mock');
+  const [records, setRecords] = useState(FALLBACK_RECORDS_EMPTY);
+  const [source, setSource] = useState('live');
 
   useEffect(() => {
     let cancelled = false;
@@ -578,11 +382,11 @@ function useLiveRecords() {
       .then(data => {
         if (!cancelled && Array.isArray(data)) {
           setRecords(data.map(normalizeRecord));
-          setSource('api');
+          setSource('live');
         }
       })
       .catch(() => {
-        if (!cancelled) setSource('mock');
+        if (!cancelled) setSource('offline');
       });
     return () => {
       cancelled = true;
@@ -874,8 +678,8 @@ function ChangePasswordPage() {
   );
 }
 
-function queueCount() {
-  return mockReviewQueue.length;
+function queueCount(queueItems = FALLBACK_QUEUE_EMPTY) {
+  return queueItems.length;
 }
 
 function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() }) {
@@ -939,6 +743,8 @@ function AppShell({ active, children, queueBadge }) {
 function DashboardPage() {
   const { records } = useLiveRecords();
   const [stats, setStats] = useState(null);
+  const [queueItems, setQueueItems] = useState(FALLBACK_QUEUE_EMPTY);
+  const [queueLoading, setQueueLoading] = useState(true);
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
   const [seedAttempted, setSeedAttempted] = useState(false);
@@ -967,6 +773,24 @@ function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/queue')
+      .then(data => {
+        if (cancelled) return;
+        setQueueItems(Array.isArray(data) ? data.map(normalizeQueueItem) : FALLBACK_QUEUE_EMPTY);
+        setQueueLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setQueueItems(FALLBACK_QUEUE_EMPTY);
+        setQueueLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (seedAttempted || alertsLoading || alerts.length > 0 || user.role !== 'ORGANISATION_LEAD') return;
     setSeedAttempted(true);
     apiRequest('/api/admin/flywheel/run', { method: 'POST' })
@@ -980,7 +804,7 @@ function DashboardPage() {
   }
 
   return (
-    <AppShell active="dashboard">
+    <AppShell active="dashboard" queueBadge={queueItems.length}>
       <section className="dashboard-main">
         <header className="dashboard-header">
           <div>
@@ -1068,12 +892,31 @@ function DashboardPage() {
           </div>
 
           <div className="queue-list">
-            {workQueue.map((item) => (
-              <article className="queue-item" key={item.title}>
+            {queueLoading ? (
+              <article className="queue-item">
+                <Clock3 size={18} />
+                <div>
+                  <h3>Loading evidence actions...</h3>
+                  <p>Checking the expert review queue</p>
+                </div>
+              </article>
+            ) : queueItems.length === 0 ? (
+              <article className="queue-item">
                 <CheckCircle2 size={18} />
                 <div>
-                  <h3>{item.title}</h3>
-                  <p>{item.owner}</p>
+                  <h3>No pending evidence actions.</h3>
+                  <p>Evidence base is current.</p>
+                </div>
+              </article>
+            ) : queueItems.map((item) => (
+              <article className="queue-item" key={item.id}>
+                <CheckCircle2 size={18} />
+                <div>
+                  <h3>{item.programmeName}</h3>
+                  <p>
+                    {item.fieldName} · {formatQueueConfidence(item.confidence)} · {roleLabel(item.targetRole)}
+                    {item.recordId && ` · ${item.recordId}`}
+                  </p>
                 </div>
                 <span>{item.state}</span>
               </article>
@@ -1231,7 +1074,7 @@ function RecordsPage() {
         <section className="table-panel" aria-label="Classified evidence records">
           <div className="table-summary">
             <span>{filteredRecords.length} records</span>
-            <span>{source === 'api' ? 'Live API' : 'Offline preview'} · 55-field ADEI taxonomy v2.1</span>
+            <span>{source === 'live' ? 'Live API' : 'Offline preview'} · 55-field ADEI taxonomy v2.1</span>
           </div>
           <div className="records-table" role="table">
             <div className="records-row records-head" role="row">
@@ -1567,7 +1410,7 @@ function ClassifyPage() {
 }
 
 function QueuePage() {
-  const [items, setItems] = useState(mockReviewQueue);
+  const [items, setItems] = useState(FALLBACK_QUEUE_EMPTY);
   const [overrideValues, setOverrideValues] = useState({});
 
   useEffect(() => {
@@ -1576,7 +1419,9 @@ function QueuePage() {
       .then(data => {
         if (!cancelled && Array.isArray(data)) setItems(data.map(normalizeQueueItem));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setItems(FALLBACK_QUEUE_EMPTY);
+      });
     return () => {
       cancelled = true;
     };
@@ -1622,10 +1467,10 @@ function QueuePage() {
             <article className="review-card" key={item.id}>
               <div className="review-topline">
                 <div>
-                  <p className="eyebrow">{item.record}</p>
+                  <p className="eyebrow">{item.programmeName}</p>
                   <h2>{item.fieldName}</h2>
                 </div>
-                <strong>{Math.round(item.confidence * 100)}% confidence</strong>
+                <strong>{formatQueueConfidence(item.confidence)}</strong>
               </div>
 
               <div className="recommendation-box">
@@ -1807,7 +1652,7 @@ function KnowledgePage() {
           <article className="selector-panel">
             <div className="panel-title">
               <FileText size={20} />
-              <span>Record selector · {source === 'api' ? 'Live API' : 'Offline preview'}</span>
+              <span>Record selector · {source === 'live' ? 'Live API' : 'Offline preview'}</span>
             </div>
             <div className="record-picker">
               {eligibleRecords.map((record) => (
@@ -2074,7 +1919,7 @@ function AdminDashboardPage() {
     ['Total active tenants', stats?.active_tenants ?? 0],
     ['Total documents classified', stats?.documents_classified ?? 0],
     ['Total users', stats?.total_users ?? 0],
-    ['Anthropic spend this month', `$${stats?.anthropic_spend_month ?? 0}`],
+    ['Anthropic spend this month', `R${stats?.anthropic_spend_month ?? 0}`],
   ];
 
   return (
