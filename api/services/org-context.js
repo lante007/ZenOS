@@ -6,4 +6,11 @@ function orgTypeContext(tenant) {
     : 'This organisation is an implementing NGO. It directly delivers programmes. Attribution is direct.';
 }
 
-module.exports = { orgTypeContext };
+function getOrgContext(tenant) {
+  return {
+    organisation_type: tenant?.organisation_type || 'FUNDER',
+    attribution: orgTypeContext(tenant),
+  };
+}
+
+module.exports = { orgTypeContext, getOrgContext };

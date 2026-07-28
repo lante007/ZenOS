@@ -109,6 +109,94 @@ async function getRecord(tenant, id) {
   });
 }
 
+async function getRecordsByIds(tenant, ids) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT r.*, d.filename, d.s3_key,
+        d.mime_type, d.file_size_bytes,
+        d.rights_status AS doc_rights_status
+      FROM intelligence_records r
+      LEFT JOIN documents d ON d.id = r.document_id
+      WHERE r.id = ANY($1)
+        AND r.tenant_id = $2
+        AND r.record_status = 'ACTIVE'
+      ORDER BY r.classified_at DESC NULLS LAST
+    `, [ids, tenant.slug]);
+    return res.rows;
+  });
+}
+
+async function saveSynthesis(tenant, data) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      INSERT INTO syntheses (
+        tenant_id, title, record_ids,
+        record_count, findings, evidence_gaps,
+        leverage_points, cross_patterns,
+        status, generated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+        'DRAFT', NOW())
+      RETURNING *
+    `, [
+      tenant.slug,
+      data.title,
+      data.record_ids,
+      data.record_count,
+      JSON.stringify(data.findings),
+      JSON.stringify(data.evidence_gaps),
+      JSON.stringify(data.leverage_points),
+      JSON.stringify(data.cross_patterns),
+    ]);
+    return res.rows[0];
+  });
+}
+
+async function getSynthesis(tenant, id) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT *
+      FROM syntheses
+      WHERE id = $1
+        AND tenant_id = $2
+    `, [id, tenant.slug]);
+    return res.rows[0] || null;
+  });
+}
+
+async function listSyntheses(tenant) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT id, title, record_count,
+        record_ids, status, generated_at,
+        confirmed_at
+      FROM syntheses
+      WHERE tenant_id = $1
+        AND status != 'ARCHIVED'
+      ORDER BY generated_at DESC
+      LIMIT 50
+    `, [tenant.slug]);
+    return res.rows;
+  });
+}
+
+async function confirmSynthesis(tenant, id, userId) {
+  return withTenant(tenant, async client => {
+    const confirmedBy = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId || '')
+      ? userId
+      : null;
+    const res = await client.query(`
+      UPDATE syntheses
+      SET status = 'CONFIRMED',
+        confirmed_by = $3,
+        confirmed_at = NOW()
+      WHERE id = $1
+        AND tenant_id = $2
+      RETURNING *
+    `, [id, tenant.slug, confirmedBy]);
+    return res.rows[0];
+  });
+}
+
 async function insertIngestionJob(tenant, documentId, usage, status = 'COMPLETE') {
   return withTenant(tenant, async client => {
     await client.query(`
@@ -560,6 +648,11 @@ module.exports = {
   withTenant,
   listRecords,
   getRecord,
+  getRecordsByIds,
+  saveSynthesis,
+  getSynthesis,
+  listSyntheses,
+  confirmSynthesis,
   createRecord,
   listQueue,
   resolveQueueItem,
