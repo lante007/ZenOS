@@ -872,6 +872,17 @@ function DashboardPage() {
     ? Math.round(((stats.tier_counts?.TIER_1 || stats.tier_counts?.['Tier 1'] || 0) / stats.records) * 100)
     : 82;
   const healthLabel = getHealthLabel(evidenceHealthScore);
+  const dimRigour = healthDimensions.find(item => item.label === 'Method rigour')?.score || 0;
+  const dimDataQuality = healthDimensions.find(item => item.label === 'Data quality')?.score || 0;
+  const dimTransparency = healthDimensions.find(item => item.label === 'Transparency')?.score || 0;
+  const dimReplicability = healthDimensions.find(item => item.label === 'Replicability')?.score || 0;
+  const dimPolicyRelevance = healthDimensions.find(item => item.label === 'Policy relevance')?.score || 0;
+  const avgEqs = (
+    (dimRigour + dimDataQuality + dimTransparency + dimReplicability + dimPolicyRelevance) / 5
+  ).toFixed(1);
+  const expected = 74;
+  const totalRecords = cascade?.corpus_size || estate?.total_records || stats?.records || records.length || 0;
+  const coveragePct = Math.round((totalRecords / expected) * 100);
 
   useEffect(() => {
     let cancelled = false;
@@ -1106,6 +1117,17 @@ function DashboardPage() {
             </div>
             <div className="health-score-label" style={{ color: healthLabel.color }}>
               {healthLabel.label}
+            </div>
+            <div className="health-score-explanation">
+              <span className="explanation-quality">
+                Quality: {avgEqs}/5.0 across {totalRecords} classified documents
+              </span>
+              <span className="explanation-coverage">
+                Coverage: {totalRecords} of {expected} documents classified ({coveragePct}% of archive)
+              </span>
+              <span className="explanation-note">
+                Health score combines quality and coverage. Increases as more documents are classified.
+              </span>
             </div>
             <div className="score-track" aria-hidden="true">
               <span style={{ width: `${evidenceHealthScore}%` }} />
