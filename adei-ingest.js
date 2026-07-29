@@ -223,6 +223,7 @@ async function processDocument(file, opts, batchId, outputDir, processedHashes) 
         classification: flatClassification,
         eqs,
         evidence_capital: evidenceCapital,
+        eqs_scoring_pathway: eqs.eqs_scoring_pathway,
         eqs_pathway: eqs.eqs_pathway,
         eqs_version: eqs.eqs_version,
         pathway_multiplier: eqs.pathway_multiplier,

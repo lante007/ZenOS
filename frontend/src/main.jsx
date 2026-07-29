@@ -225,6 +225,24 @@ function recordId(record) {
   return record?.adei_record_id || record?.id;
 }
 
+function PathwayBadge({ pathway }) {
+  if (pathway === 'PROCESS') {
+    return (
+      <span className="pathway-badge process" title="Scored for implementation quality, not causal outcomes">
+        Process pathway
+      </span>
+    );
+  }
+  if (pathway === 'RESEARCH') {
+    return (
+      <span className="pathway-badge research" title="Scored for synthesis quality and policy relevance">
+        Research pathway
+      </span>
+    );
+  }
+  return null;
+}
+
 function greetingNameFor(user) {
   const value = user?.given_name
     || user?.name?.split(' ')[0]
@@ -390,6 +408,7 @@ function RecordDetailModal({ record, onClose }) {
             <p className="eyebrow">ADEI 55-field detail</p>
             <h2>{record.programme_name}</h2>
             <p>{record.filename}</p>
+            <PathwayBadge pathway={record.eqs_scoring_pathway} />
           </div>
           <button className="icon-button" type="button" aria-label="Close record detail" onClick={onClose}>
             <X size={18} />
@@ -1414,7 +1433,10 @@ function RecordsPage() {
                 <span>{record.document_type}</span>
                 <span>{record.phase}</span>
                 <span>{record.province}</span>
-                <span><mark>{record.eqs_tier}</mark></span>
+                <span>
+                  <mark>{record.eqs_tier}</mark>
+                  <PathwayBadge pathway={record.eqs_scoring_pathway} />
+                </span>
                 <span>{record.eqs_composite}</span>
               </div>
             ))}
@@ -3063,7 +3085,7 @@ function SettingsPage() {
     setToast('');
     setRatifying(true);
     try {
-      const result = await apiRequest('/api/settings/ratify-eqs-v2', {
+      const result = await apiRequest('/api/settings/ratify-eqs', {
         method: 'POST',
       });
       setToast(result.message || 'EQS v2.0 ratified for new classifications.');
@@ -3100,15 +3122,17 @@ function SettingsPage() {
             <div>
               <p className="eyebrow">Methodology</p>
               <h3>Evidence Quality Score Methodology</h3>
-              <p className="methodology-current">Current version: EQS v1.0</p>
+              <p className="methodology-current">Current version: EQS v2.0</p>
               <p>
-                EQS v2.0 is available. It introduces three evaluation pathways so process,
-                formative, and impact evaluations are each judged against their intended
-                purpose.
-              </p>
-              <p className="muted">
+                EQS v2.0 introduces three evaluation pathways so process, formative,
+                and impact evaluations are each judged against their intended purpose.
                 Existing scores are preserved. Only new classifications will use v2.0.
                 This action is recorded with your name and timestamp.
+              </p>
+              <p className="muted">
+                Fatima Adam is the methodology ratifier. Process evaluations are scored
+                for implementation quality, and research studies are scored for synthesis
+                quality and policy relevance.
               </p>
             </div>
             <button

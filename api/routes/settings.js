@@ -128,6 +128,36 @@ router.post('/ratify-eqs-v2', async (req, res, next) => {
   }
 });
 
+router.post('/ratify-eqs', async (req, res, next) => {
+  try {
+    const pool = db.getPool();
+    const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+    await pool.query(`
+      INSERT INTO ${schema}.audit_log (
+        event_type, user_id, tenant_id, detail, created_at
+      ) VALUES (
+        'EQS_METHODOLOGY_RATIFIED',
+        $1, $2, $3, NOW()
+      )
+    `, [
+      req.user?.sub,
+      req.tenant.slug,
+      JSON.stringify({
+        version: 'v2.0',
+        pathways: ['IMPACT', 'PROCESS', 'RESEARCH'],
+        ratified_by: req.user?.email,
+      }),
+    ]);
+    return res.json({
+      success: true,
+      version: 'v2.0',
+      ratified_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/users', async (req, res, next) => {
   try {
     res.json(await db.listUsers(req.tenant));

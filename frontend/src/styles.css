@@ -1475,6 +1475,31 @@ button.estate-stat-tile {
   font-weight: 900;
 }
 
+.pathway-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  margin-top: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pathway-badge.process {
+  border: 1px solid rgba(0, 180, 216, 0.36);
+  background: rgba(0, 180, 216, 0.12);
+  color: #7DE8FF;
+}
+
+.pathway-badge.research {
+  border: 1px solid rgba(239, 114, 24, 0.36);
+  background: rgba(239, 114, 24, 0.12);
+  color: #FFB278;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

@@ -70,6 +70,7 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
     rights_status: extraction.rights,
     eqs_composite: eqs.eqs_composite,
     confidence_tier: eqs.confidence_tier || 'N_A',
+    eqs_scoring_pathway: eqs.eqs_scoring_pathway,
     eqs_pathway: eqs.eqs_pathway,
     eqs_version: eqs.eqs_version,
     pathway_multiplier: eqs.pathway_multiplier,
