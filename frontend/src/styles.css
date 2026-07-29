@@ -1003,6 +1003,127 @@ button.estate-stat-tile {
   text-align: right;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+.modal-panel {
+  background: var(--color-surface);
+  border-radius: 12px;
+  padding: 28px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow);
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 4px;
+}
+
+.modal-subtitle {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin: 0 0 20px;
+}
+
+.type-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.type-name {
+  font-size: 13px;
+  color: var(--color-text);
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.type-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.type-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+
+.type-count {
+  font-size: 13px;
+  color: var(--color-muted);
+  width: 20px;
+  text-align: right;
+}
+
+.type-percent {
+  font-size: 12px;
+  color: var(--color-muted);
+  width: 36px;
+  text-align: right;
+}
+
+.modal-doc-list {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.modal-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px;
+}
+
+.modal-doc-item:last-child {
+  border-bottom: none;
+}
+
+.modal-tier-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(110, 201, 138, 0.12);
+  color: #6EC98A;
+  font-size: 10px;
+  font-weight: 900;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -1810,6 +1931,35 @@ button.estate-stat-tile {
   text-align: center;
 }
 
+.upload-duplicate {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: rgba(239,114,24,0.1);
+  border: 1px solid rgba(239,114,24,0.3);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.duplicate-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.upload-duplicate strong {
+  display: block;
+  color: #EF7218;
+  margin-bottom: 4px;
+}
+
+.upload-duplicate p {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin: 0 0 8px;
+}
+
 .upload-hint {
   color: var(--color-muted);
   font-size: 13px;
@@ -1933,6 +2083,87 @@ button.estate-stat-tile {
 .pipeline-result span {
   margin-top: 5px;
   color: rgba(245, 242, 238, 0.58);
+}
+
+.classification-comparison {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgba(0, 180, 216, 0.24);
+  border-radius: 8px;
+  background: rgba(10, 22, 40, 0.5);
+}
+
+.comparison-heading h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 20px;
+}
+
+.comparison-table {
+  display: grid;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+}
+
+.comparison-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(180px, 1fr) 58px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(245, 242, 238, 0.72);
+}
+
+.comparison-row:last-child {
+  border-bottom: 0;
+}
+
+.comparison-head {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.comparison-row input,
+.comparison-row select,
+.comparison-row textarea {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(10, 22, 40, 0.68);
+  color: #ffffff;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.comparison-row textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.comparison-match,
+.comparison-diff {
+  font-size: 20px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.comparison-match {
+  color: #4CAF50;
+}
+
+.comparison-diff {
+  color: #FF9800;
+}
+
+.comparison-submit {
+  margin-top: 14px;
+  border: 0;
 }
 
 .queue-pill {

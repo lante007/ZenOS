@@ -334,8 +334,11 @@ async function apiRequest(path, options = {}) {
     return undefined;
   }
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.error || response.statusText);
+    const payload = await response.json().catch(() => ({ error: response.statusText }));
+    const error = new Error(payload.error || response.statusText);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
   return response.json();
 }
@@ -1053,7 +1056,7 @@ function DashboardPage() {
             <span>Last updated: {formatDisplayDate(new Date())}</span>
           </div>
           <div className="estate-stat-grid">
-            <button className="estate-stat-tile" type="button" onClick={() => setEstateTypesOpen(open => !open)}>
+            <button className="estate-stat-tile" type="button" onClick={() => setEstateTypesOpen(true)}>
               <strong>{estateLoading ? '...' : estate?.total_records || 0}</strong>
               <span>Evaluations</span>
               <small className="estate-tile-subtitle">Classified and scored</small>
@@ -1073,37 +1076,48 @@ function DashboardPage() {
               <span>Years of evidence</span>
               <small className="estate-tile-subtitle">{estateLoading ? '...' : estateYearSubtitle}</small>
             </article>
-            {estateTypesOpen && (
-              <div className="estate-breakdown">
-                <div className="breakdown-header">Evaluation types</div>
-                {(estate?.type_breakdown || []).map(item => {
-                  const type = item.document_type || item.type || 'Unknown';
-                  const count = Number(item.count || 0);
-                  const width = totalEstateRecords > 0 ? (count / totalEstateRecords) * 100 : 0;
-                  return (
-                    <div className="breakdown-row" key={type}>
-                      <span className="breakdown-type">{type}</span>
-                      <span className="breakdown-bar">
-                        <span className="breakdown-fill" style={{ width: `${width}%` }} />
-                      </span>
-                      <span className="breakdown-count">{count}</span>
-                    </div>
-                  );
-                })}
-                {(estate?.type_breakdown || []).length === 0 && (
-                  <div className="breakdown-row">
-                    <span className="breakdown-type">No evaluation types recorded</span>
-                    <span className="breakdown-bar">
-                      <span className="breakdown-fill" style={{ width: '0%' }} />
-                    </span>
-                    <span className="breakdown-count">0</span>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           <p>Last document ingested: {estate?.last_ingestion ? formatDisplayDate(estate.last_ingestion) : 'Not recorded'}</p>
         </section>
+
+        {estateTypesOpen && (
+          <div className="modal-overlay" role="presentation" onClick={() => setEstateTypesOpen(false)}>
+            <section className="modal-panel" role="dialog" aria-modal="true" aria-label="Evaluation types" onClick={event => event.stopPropagation()}>
+              <button className="modal-close" type="button" aria-label="Close evaluation types" onClick={() => setEstateTypesOpen(false)}>
+                ×
+              </button>
+              <h2 className="modal-title">Evaluation Types</h2>
+              <p className="modal-subtitle">
+                {totalEstateRecords} classified documents by type · as at {formatDisplayDate(new Date())}
+              </p>
+
+              {(estate?.type_breakdown || []).map(item => {
+                const type = item.document_type || item.type || 'Unknown';
+                const count = Number(item.count || 0);
+                const percentage = totalEstateRecords > 0 ? Math.round((count / totalEstateRecords) * 100) : 0;
+                return (
+                  <div className="type-row" key={type}>
+                    <span className="type-name">{type}</span>
+                    <span className="type-count">{count}</span>
+                    <span className="type-bar-wrap">
+                      <span className="type-bar-fill" style={{ width: `${percentage}%` }} />
+                    </span>
+                    <span className="type-percent">{percentage}%</span>
+                  </div>
+                );
+              })}
+
+              <div className="modal-doc-list">
+                {records.map(record => (
+                  <div className="modal-doc-item" key={recordId(record)}>
+                    <span className="modal-tier-badge">{record.eqs_tier}</span>
+                    <span>{record.programme_name} · {record.year || record.publication_year || 'Not recorded'} · EQS {record.eqs_composite}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
 
         <section className="dashboard-grid" aria-label="Evidence health summary">
           <article className="health-panel">
@@ -1537,6 +1551,48 @@ const askPrompts = [
   'Where are our biggest evidence gaps?',
   'What should we commission next?',
 ];
+
+const comparisonFields = [
+  {
+    field: 'document_type',
+    label: 'Document type',
+    input: 'select',
+    options: ['Impact Evaluation', 'Process Evaluation', 'Implementation Evaluation', 'Research Study', 'Literature Review', 'Annual Report', 'Budget Document'],
+  },
+  { field: 'evaluation_subtype', label: 'Evaluation subtype', input: 'text' },
+  { field: 'eqs_composite', label: 'EQS composite', input: 'number', step: '0.1', min: '1', max: '5' },
+  {
+    field: 'eqs_tier',
+    label: 'EQS tier',
+    input: 'select',
+    options: ['TIER_1', 'TIER_2', 'TIER_3', 'EXCLUDED', 'N_A'],
+  },
+  { field: 'key_finding_1', label: 'Key finding 1', input: 'textarea' },
+  { field: 'effect_size_composite', label: 'Effect size composite', input: 'number', step: '0.01' },
+  {
+    field: 'half_life_rating',
+    label: 'Half-life rating',
+    input: 'select',
+    options: ['CURRENT', 'AGING', 'HISTORICAL', 'UNKNOWN'],
+  },
+];
+
+function comparisonValue(record, field) {
+  const value = record?.[field];
+  if (value == null) return '';
+  return String(value);
+}
+
+function buildManualComparison(record) {
+  return comparisonFields.reduce((memo, item) => ({
+    ...memo,
+    [item.field]: comparisonValue(record, item.field),
+  }), {});
+}
+
+function comparisonMatches(systemValue, manualValue) {
+  return String(systemValue ?? '').trim() === String(manualValue ?? '').trim();
+}
 
 function SynthesisePage() {
   const user = currentUser();
@@ -2025,12 +2081,21 @@ function ClassifyPage() {
   const [classificationResult, setClassificationResult] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadPhase, setUploadPhase] = useState('idle');
+  const [duplicateInfo, setDuplicateInfo] = useState(null);
+  const [classifiedRecord, setClassifiedRecord] = useState(null);
+  const [manualComparison, setManualComparison] = useState({});
+  const [comparisonSubmitting, setComparisonSubmitting] = useState(false);
+  const [comparisonSubmitted, setComparisonSubmitted] = useState(false);
 
   async function uploadAndClassify(file) {
     if (!file) return null;
     setSelectedFile(file);
     setActiveStep(0);
     setClassificationResult('');
+    setDuplicateInfo(null);
+    setClassifiedRecord(null);
+    setManualComparison({});
+    setComparisonSubmitted(false);
     setUploadPhase('requesting');
     setUploadProgress(0);
     pipelineSteps.forEach((_, index) => {
@@ -2084,6 +2149,16 @@ function ClassifyPage() {
       });
 
       if (result?.success || result?.record_id) {
+        let record = result;
+        if (result.record_id) {
+          try {
+            record = await apiRequest(`/api/records/${result.record_id}`);
+          } catch {
+            record = result;
+          }
+        }
+        setClassifiedRecord(record);
+        setManualComparison(buildManualComparison(record));
         setUploadPhase('complete');
         setActiveStep(pipelineSteps.length);
         setClassificationResult(`Created ${result.record_id || result.filename}`);
@@ -2092,6 +2167,13 @@ function ClassifyPage() {
 
       throw new Error(result?.error || 'Classification failed');
     } catch (err) {
+      if (err.status === 409 && err.payload?.error === 'duplicate_detected') {
+        setDuplicateInfo(err.payload);
+        setUploadPhase('duplicate');
+        setClassificationResult(err.payload.message || 'Document already exists');
+        setActiveStep(-1);
+        return null;
+      }
       setUploadPhase('error');
       setClassificationResult(err.message || 'Upload failed');
       setActiveStep(-1);
@@ -2124,8 +2206,31 @@ function ClassifyPage() {
     }
   }
 
+  async function submitComparisonFeedback() {
+    if (!classifiedRecord) return;
+    setComparisonSubmitting(true);
+    try {
+      const systemValues = comparisonFields.reduce((memo, item) => ({
+        ...memo,
+        [item.field]: comparisonValue(classifiedRecord, item.field),
+      }), {});
+      await apiRequest('/api/classify/comparison-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          record_id: classifiedRecord.id || classifiedRecord.record_id || classifiedRecord.adei_record_id,
+          system_values: systemValues,
+          manual_values: manualComparison,
+        }),
+      });
+      setComparisonSubmitted(true);
+    } finally {
+      setComparisonSubmitting(false);
+    }
+  }
+
   const isComplete = activeStep >= pipelineSteps.length;
-  const canStart = driveFileId.trim() || (selectedFile && ['idle', 'error'].includes(uploadPhase));
+  const canStart = driveFileId.trim() || (selectedFile && ['idle', 'error', 'duplicate'].includes(uploadPhase));
 
   return (
     <AppShell active="classify">
@@ -2197,6 +2302,20 @@ function ClassifyPage() {
                   Upload failed. Please try again or contact your system administrator.
                 </div>
               )}
+              {uploadPhase === 'duplicate' && duplicateInfo && (
+                <div className="upload-duplicate">
+                  <span className="duplicate-icon">⚠</span>
+                  <div>
+                    <strong>Document already exists</strong>
+                    <p>
+                      This document is already in the archive. View the existing record in the Library or upload a revised version with a different filename.
+                    </p>
+                    <a href="/records" className="btn-ghost">
+                      View in Library
+                    </a>
+                  </div>
+                </div>
+              )}
               <label className="secondary-action file-picker">
                 <input
                   type="file"
@@ -2263,6 +2382,72 @@ function ClassifyPage() {
               <strong>{isComplete ? 'Record ready for Evidence Library' : activeStep >= 0 ? 'Classification running' : 'Waiting for document'}</strong>
               <span>{classificationResult || (isComplete ? 'Expert queue and EQS outputs are prepared for review.' : 'Progress updates will stream here from the live API.')}</span>
             </div>
+
+            {classifiedRecord && isComplete && (
+              <section className="classification-comparison">
+                <div className="comparison-heading">
+                  <p className="eyebrow">Classification comparison</p>
+                  <h2>System classification vs your assessment</h2>
+                </div>
+                <div className="comparison-table" role="table">
+                  <div className="comparison-row comparison-head" role="row">
+                    <span>Field</span>
+                    <span>System Value</span>
+                    <span>Your Assessment</span>
+                    <span>Match</span>
+                  </div>
+                  {comparisonFields.map(item => {
+                    const systemValue = comparisonValue(classifiedRecord, item.field);
+                    const manualValue = manualComparison[item.field] ?? '';
+                    const matches = comparisonMatches(systemValue, manualValue);
+                    return (
+                      <div className="comparison-row" role="row" key={item.field}>
+                        <span>{item.label}</span>
+                        <span>{systemValue || 'Not recorded'}</span>
+                        <span>
+                          {item.input === 'select' ? (
+                            <select
+                              value={manualValue}
+                              onChange={event => setManualComparison(current => ({ ...current, [item.field]: event.target.value }))}
+                            >
+                              <option value="">Not recorded</option>
+                              {item.options.map(option => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                            </select>
+                          ) : item.input === 'textarea' ? (
+                            <textarea
+                              value={manualValue}
+                              onChange={event => setManualComparison(current => ({ ...current, [item.field]: event.target.value }))}
+                            />
+                          ) : (
+                            <input
+                              type={item.input}
+                              step={item.step}
+                              min={item.min}
+                              max={item.max}
+                              value={manualValue}
+                              onChange={event => setManualComparison(current => ({ ...current, [item.field]: event.target.value }))}
+                            />
+                          )}
+                        </span>
+                        <span className={matches ? 'comparison-match' : 'comparison-diff'}>
+                          {matches ? '✓' : '≠'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  className="primary-action comparison-submit"
+                  type="button"
+                  onClick={submitComparisonFeedback}
+                  disabled={comparisonSubmitting || comparisonSubmitted}
+                >
+                  <span>{comparisonSubmitted ? 'Comparison feedback submitted' : comparisonSubmitting ? 'Submitting...' : 'Submit comparison feedback'}</span>
+                </button>
+              </section>
+            )}
           </article>
         </section>
       </section>

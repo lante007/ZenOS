@@ -22,6 +22,17 @@ function safeUploadName(filename) {
     .replace(/\s+/g, '_');
 }
 
+function sendDuplicateResponse(res, err) {
+  const existing = err.existingDocument || {};
+  return res.status(409).json({
+    error: 'duplicate_detected',
+    message: 'A document with this filename or identical content already exists in the archive.',
+    existing_document_id: existing.id,
+    existing_record_status: existing.record_status,
+    action: 'Use the existing record or upload a revised version with a different filename.',
+  });
+}
+
 async function classifyFromS3Key(tenant, s3Key, filename, institution, user) {
   const meta = await storage.getFileMetadata(s3Key, { bucket: tenant.s3_vault_bucket });
   const buffer = await storage.downloadFile(s3Key, meta.mimeType, { bucket: tenant.s3_vault_bucket });
@@ -122,6 +133,7 @@ router.post('/upload', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), up
     });
   } catch (err) {
     if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    if (err.code === 'DUPLICATE_DOCUMENT') return sendDuplicateResponse(res, err);
     next(err);
   }
 });
@@ -140,6 +152,7 @@ router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (r
 
     res.json(result);
   } catch (err) {
+    if (err.code === 'DUPLICATE_DOCUMENT') return sendDuplicateResponse(res, err);
     next(err);
   }
 });
@@ -170,6 +183,27 @@ router.post('/process', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), a
     }, req.user.email || req.user.sub);
 
     return res.json(result);
+  } catch (err) {
+    if (err.code === 'DUPLICATE_DOCUMENT') return sendDuplicateResponse(res, err);
+    next(err);
+  }
+});
+
+router.post('/comparison-feedback', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (req, res, next) => {
+  try {
+    const { record_id: recordId, system_values: systemValues, manual_values: manualValues } = req.body;
+
+    if (!recordId) {
+      return res.status(400).json({ error: 'record_id required' });
+    }
+
+    await db.createAuditLog(req.tenant, 'MANUAL_CLASSIFICATION_COMPARISON', {
+      record_id: recordId,
+      system_values: systemValues || {},
+      manual_values: manualValues || {},
+    }, req.user.email || req.user.sub);
+
+    return res.json({ success: true });
   } catch (err) {
     next(err);
   }

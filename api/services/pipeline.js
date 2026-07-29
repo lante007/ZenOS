@@ -23,6 +23,30 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
   const extraction = await extractText(buffer, mimeType, filename);
   if (extraction.quality === 'FAILED') throw new Error('Text extraction failed');
 
+  if (process.env.DATABASE_URL) {
+    const pool = db.getPool();
+    const schema = tenant.db_schema || tenant.slug || 'zenex';
+    const existingDoc = await pool.query(`
+      SELECT d.id, d.filename, COALESCE(r.record_status, d.ingestion_status) AS record_status
+      FROM ${schema}.documents d
+      LEFT JOIN ${schema}.intelligence_records r
+        ON r.document_id = d.id
+      WHERE d.tenant_id = $1
+        AND (
+          d.file_hash = $2
+          OR d.filename = $3
+        )
+      LIMIT 1
+    `, [tenant.slug, extraction.hash, filename]);
+
+    if (existingDoc.rows.length > 0) {
+      const duplicate = new Error('duplicate_detected');
+      duplicate.code = 'DUPLICATE_DOCUMENT';
+      duplicate.existingDocument = existingDoc.rows[0];
+      throw duplicate;
+    }
+  }
+
   const detection = detectProgramme(filename, extraction.text.substring(0, 500));
   const { classification, usage } = await classifyDocument({
     filename,
