@@ -263,6 +263,14 @@ function cascadeDimensions(cascade) {
   ];
 }
 
+function getHealthLabel(score) {
+  if (score >= 90) return { label: 'Excellent', color: '#4CAF50' };
+  if (score >= 75) return { label: 'Strong', color: '#8BC34A' };
+  if (score >= 60) return { label: 'Established', color: '#FFC107' };
+  if (score >= 40) return { label: 'Developing', color: '#FF9800' };
+  return { label: 'Early stage', color: '#EF7218' };
+}
+
 function CascadeFormulaModal({ item, onClose }) {
   if (!item) return null;
   return (
@@ -863,6 +871,7 @@ function DashboardPage() {
   const evidenceHealthScore = stats?.records
     ? Math.round(((stats.tier_counts?.TIER_1 || stats.tier_counts?.['Tier 1'] || 0) / stats.records) * 100)
     : 82;
+  const healthLabel = getHealthLabel(evidenceHealthScore);
 
   useEffect(() => {
     let cancelled = false;
@@ -996,6 +1005,10 @@ function DashboardPage() {
   ];
   const programmeNames = [...new Set((portfolio?.programmes || []).map(item => item.programme_name).filter(Boolean))];
   const freshness = portfolio?.freshness || {};
+  const totalEstateRecords = estate?.total_records || 0;
+  const estateYearSubtitle = estate?.earliest_year && estate?.latest_year
+    ? `${estate.earliest_year} to ${estate.latest_year}`
+    : 'Not recorded';
 
   return (
     <AppShell active="dashboard" queueBadge={queueItems.length}>
@@ -1032,30 +1045,52 @@ function DashboardPage() {
             <button className="estate-stat-tile" type="button" onClick={() => setEstateTypesOpen(open => !open)}>
               <strong>{estateLoading ? '...' : estate?.total_records || 0}</strong>
               <span>Evaluations</span>
+              <small className="estate-tile-subtitle">Classified and scored</small>
             </button>
             <article className="estate-stat-tile">
               <strong>{estateLoading ? '...' : estate?.total_programmes || 0}</strong>
               <span>Programmes</span>
+              <small className="estate-tile-subtitle">Across the portfolio</small>
             </article>
             <article className="estate-stat-tile">
               <strong>{estateLoading ? '...' : estate?.total_provinces || 0}</strong>
               <span>Provinces</span>
+              <small className="estate-tile-subtitle">Geographic reach</small>
             </article>
             <article className="estate-stat-tile">
               <strong>{estateLoading ? '...' : estate?.years_span || 0}</strong>
               <span>Years of evidence</span>
+              <small className="estate-tile-subtitle">{estateLoading ? '...' : estateYearSubtitle}</small>
             </article>
+            {estateTypesOpen && (
+              <div className="estate-breakdown">
+                <div className="breakdown-header">Evaluation types</div>
+                {(estate?.type_breakdown || []).map(item => {
+                  const type = item.document_type || item.type || 'Unknown';
+                  const count = Number(item.count || 0);
+                  const width = totalEstateRecords > 0 ? (count / totalEstateRecords) * 100 : 0;
+                  return (
+                    <div className="breakdown-row" key={type}>
+                      <span className="breakdown-type">{type}</span>
+                      <span className="breakdown-bar">
+                        <span className="breakdown-fill" style={{ width: `${width}%` }} />
+                      </span>
+                      <span className="breakdown-count">{count}</span>
+                    </div>
+                  );
+                })}
+                {(estate?.type_breakdown || []).length === 0 && (
+                  <div className="breakdown-row">
+                    <span className="breakdown-type">No evaluation types recorded</span>
+                    <span className="breakdown-bar">
+                      <span className="breakdown-fill" style={{ width: '0%' }} />
+                    </span>
+                    <span className="breakdown-count">0</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          {estateTypesOpen && (
-            <div className="estate-type-popover">
-              {(estate?.type_breakdown || []).map(item => (
-                <div key={item.document_type || item.type || 'Unknown'}>
-                  <span>{item.document_type || item.type || 'Unknown'}</span>
-                  <strong>{item.count}</strong>
-                </div>
-              ))}
-            </div>
-          )}
           <p>Last document ingested: {estate?.last_ingestion ? formatDisplayDate(estate.last_ingestion) : 'Not recorded'}</p>
         </section>
 
@@ -1068,6 +1103,9 @@ function DashboardPage() {
             <div className="score-row">
               <strong>{evidenceHealthScore}</strong>
               <span>/100</span>
+            </div>
+            <div className="health-score-label" style={{ color: healthLabel.color }}>
+              {healthLabel.label}
             </div>
             <div className="score-track" aria-hidden="true">
               <span style={{ width: `${evidenceHealthScore}%` }} />

@@ -940,26 +940,72 @@ button.estate-stat-tile {
   font-weight: 900;
 }
 
-.estate-type-popover {
-  position: absolute;
-  left: 24px;
-  top: 188px;
-  z-index: 5;
-  width: min(360px, calc(100% - 48px));
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border: 1px solid rgba(239, 114, 24, 0.24);
-  background: #0A1628;
-  box-shadow: var(--shadow);
+.estate-tile-subtitle {
+  font-size: 11px;
+  color: var(--color-muted);
+  margin-top: 2px;
 }
 
-.estate-type-popover div {
+.estate-breakdown {
+  grid-column: 1 / -1;
+  background: var(--color-surface);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+.breakdown-header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--color-muted);
+  margin-bottom: 12px;
+}
+
+.breakdown-row {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  color: rgba(245, 242, 238, 0.74);
-  font-weight: 800;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.breakdown-row:last-child {
+  margin-bottom: 0;
+}
+
+.breakdown-type {
+  font-size: 13px;
+  color: var(--color-text);
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.breakdown-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.breakdown-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+
+.breakdown-count {
+  font-size: 13px;
+  color: var(--color-muted);
+  width: 24px;
+  text-align: right;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .estate-hero > p {
@@ -1011,6 +1057,14 @@ button.estate-stat-tile {
   color: rgba(245, 242, 238, 0.52);
   font-size: 18px;
   font-weight: 800;
+}
+
+.health-score-label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
 }
 
 .score-track,
