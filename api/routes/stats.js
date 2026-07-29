@@ -17,6 +17,77 @@ function toNumber(value) {
   return Number(value);
 }
 
+router.get('/estate',
+  requireRoles(
+    'ORGANISATION_LEAD',
+    'EVIDENCE_ANALYST',
+    'COMMUNICATIONS',
+    'CEO_EXEC'
+  ),
+  async (req, res, next) => {
+    try {
+      const pool = getPool();
+      if (!pool) return res.status(503).json({ error: 'Database is not configured' });
+
+      const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+      assertSchema(schema);
+
+      const summary = await pool.query(`
+        SELECT
+          COUNT(*)::int AS total_records,
+          COUNT(DISTINCT programme_name)::int AS total_programmes,
+          MIN(CASE WHEN year ~ '^[0-9]{4}$' THEN year::int ELSE NULL END) AS earliest_year,
+          MAX(CASE WHEN year ~ '^[0-9]{4}$' THEN year::int ELSE NULL END) AS latest_year,
+          MAX(classified_at) AS last_ingestion
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+      `, [req.tenant.slug]);
+
+      const provinceSummary = await pool.query(`
+        SELECT COUNT(DISTINCT p.province)::int AS total_provinces
+        FROM ${schema}.intelligence_records r
+        LEFT JOIN LATERAL unnest(COALESCE(r.provinces, ARRAY[]::text[])) AS p(province) ON true
+        WHERE r.tenant_id = $1
+          AND r.record_status = 'ACTIVE'
+      `, [req.tenant.slug]);
+
+      const typeBreakdown = await pool.query(`
+        SELECT
+          document_type,
+          COUNT(*)::int AS count
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+        GROUP BY document_type
+        ORDER BY count DESC, document_type
+      `, [req.tenant.slug]);
+
+      const row = summary.rows[0] || {};
+      const yearsSpan = row.latest_year && row.earliest_year
+        ? row.latest_year - row.earliest_year
+        : 0;
+
+      return res.json({
+        total_records: row.total_records || 0,
+        total_programmes: row.total_programmes || 0,
+        total_provinces: provinceSummary.rows[0]?.total_provinces || 0,
+        years_span: yearsSpan,
+        earliest_year: row.earliest_year,
+        latest_year: row.latest_year,
+        last_ingestion: row.last_ingestion,
+        type_breakdown: typeBreakdown.rows.map(row => ({
+          type: row.document_type,
+          document_type: row.document_type,
+          count: row.count,
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 router.get('/cascade',
   requireRoles(
     'ORGANISATION_LEAD',
@@ -243,6 +314,84 @@ router.get('/cascade',
         institutional_capital: institutionalCapital,
         generated_at: new Date().toISOString(),
         corpus_size: ec.total_records,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get('/portfolio',
+  requireRoles(
+    'ORGANISATION_LEAD',
+    'EVIDENCE_ANALYST',
+    'COMMUNICATIONS',
+    'CEO_EXEC'
+  ),
+  async (req, res, next) => {
+    try {
+      const pool = getPool();
+      if (!pool) return res.status(503).json({ error: 'Database is not configured' });
+
+      const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+      assertSchema(schema);
+
+      const freshness = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE half_life_rating = 'CURRENT')::int AS current_count,
+          COUNT(*) FILTER (WHERE half_life_rating = 'AGING')::int AS aging_count,
+          COUNT(*) FILTER (WHERE half_life_rating = 'HISTORICAL')::int AS historical_count,
+          COUNT(*)::int AS total
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+      `, [req.tenant.slug]);
+
+      const gaps = await pool.query(`
+        SELECT COUNT(*)::int AS gap_count
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+          AND (
+            evidence_gap_1 IS NOT NULL OR
+            endline_available = false
+          )
+      `, [req.tenant.slug]);
+
+      const queue = await pool.query(`
+        SELECT COUNT(*)::int AS pending
+        FROM ${schema}.queue_items
+        WHERE tenant_id = $1
+          AND resolved_at IS NULL
+      `, [req.tenant.slug]);
+
+      const programmes = await pool.query(`
+        SELECT
+          programme_name,
+          eqs_tier,
+          half_life_rating,
+          year
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+        ORDER BY programme_name
+      `, [req.tenant.slug]);
+
+      const fr = freshness.rows[0] || {};
+      const total = fr.total || 1;
+
+      return res.json({
+        freshness: {
+          current: fr.current_count || 0,
+          aging: fr.aging_count || 0,
+          historical: fr.historical_count || 0,
+          current_pct: Math.round(((fr.current_count || 0) / total) * 100),
+          aging_pct: Math.round(((fr.aging_count || 0) / total) * 100),
+          historical_pct: Math.round(((fr.historical_count || 0) / total) * 100),
+        },
+        evidence_gaps: gaps.rows[0]?.gap_count || 0,
+        pending_review: queue.rows[0]?.pending || 0,
+        programmes: programmes.rows,
       });
     } catch (err) {
       next(err);

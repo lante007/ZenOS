@@ -282,6 +282,14 @@ async function apiRequest(path, options = {}) {
     ...options,
     headers,
   });
+  if (response.status === 401) {
+    browserIdToken = '';
+    browserAccessToken = '';
+    sessionStorage.removeItem(ID_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    window.location.href = '/login?reason=expired';
+    return undefined;
+  }
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.error || response.statusText);
@@ -576,6 +584,7 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const sessionExpired = new URLSearchParams(window.location.search).get('reason') === 'expired';
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -616,6 +625,12 @@ function LoginPage() {
           <h2>Sign in to Evidence Intelligence</h2>
           <p>Use your organisation email and password to access Zenex Foundation's secure EvidenceOS space.</p>
         </div>
+
+        {sessionExpired && (
+          <div className="session-expired-banner">
+            Your session has expired. Please sign in again.
+          </div>
+        )}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label>
@@ -786,6 +801,12 @@ function AppShell({ active, children, queueBadge }) {
 function DashboardPage() {
   const { records } = useLiveRecords();
   const [stats, setStats] = useState(null);
+  const [estate, setEstate] = useState(null);
+  const [estateLoading, setEstateLoading] = useState(true);
+  const [estateTypesOpen, setEstateTypesOpen] = useState(false);
+  const [portfolio, setPortfolio] = useState(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const [portfolioProgrammesOpen, setPortfolioProgrammesOpen] = useState(false);
   const [queueItems, setQueueItems] = useState(FALLBACK_QUEUE_EMPTY);
   const [queueLoading, setQueueLoading] = useState(true);
   const [cascade, setCascade] = useState(null);
@@ -821,6 +842,23 @@ function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    apiRequest('/api/stats/estate')
+      .then(data => {
+        if (!cancelled) {
+          setEstate(data);
+          setEstateLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEstateLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     apiRequest('/api/stats/cascade')
       .then(data => {
         if (!cancelled) {
@@ -830,6 +868,23 @@ function DashboardPage() {
       })
       .catch(() => {
         if (!cancelled) setCascadeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/stats/portfolio')
+      .then(data => {
+        if (!cancelled) {
+          setPortfolio(data);
+          setPortfolioLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPortfolioLoading(false);
       });
     return () => {
       cancelled = true;
@@ -870,8 +925,14 @@ function DashboardPage() {
   const cascadeCards = [
     {
       title: 'Financial Capital',
-      value: cascadeLoading ? 'Calculating...' : cascade?.financial_capital?.label || 'N/A',
-      note: cascade?.financial_capital?.note || '',
+      value: cascadeLoading
+        ? 'Calculating...'
+        : cascade?.financial_capital?.has_data
+          ? cascade.financial_capital.label
+          : 'Awaiting financial records',
+      note: cascade?.financial_capital?.has_data
+        ? cascade.financial_capital.note
+        : 'Upload audited financial statements to calculate',
       formula: cascade?.financial_capital?.formula,
     },
     {
@@ -897,6 +958,8 @@ function DashboardPage() {
       dimensions: cascadeDimensions(cascade),
     },
   ];
+  const programmeNames = [...new Set((portfolio?.programmes || []).map(item => item.programme_name).filter(Boolean))];
+  const freshness = portfolio?.freshness || {};
 
   return (
     <AppShell active="dashboard" queueBadge={queueItems.length}>
@@ -920,6 +983,45 @@ function DashboardPage() {
             </div>
           </div>
         </header>
+
+        <section className="estate-hero" aria-label="Evidence estate">
+          <div className="estate-header">
+            <div>
+              <p className="eyebrow">Evidence Estate</p>
+              <h2>Zenex Foundation</h2>
+            </div>
+            <span>Last updated: {formatDisplayDate(new Date())}</span>
+          </div>
+          <div className="estate-stat-grid">
+            <button className="estate-stat-tile" type="button" onClick={() => setEstateTypesOpen(open => !open)}>
+              <strong>{estateLoading ? '...' : estate?.total_records || 0}</strong>
+              <span>Evaluations</span>
+            </button>
+            <article className="estate-stat-tile">
+              <strong>{estateLoading ? '...' : estate?.total_programmes || 0}</strong>
+              <span>Programmes</span>
+            </article>
+            <article className="estate-stat-tile">
+              <strong>{estateLoading ? '...' : estate?.total_provinces || 0}</strong>
+              <span>Provinces</span>
+            </article>
+            <article className="estate-stat-tile">
+              <strong>{estateLoading ? '...' : estate?.years_span || 0}</strong>
+              <span>Years of evidence</span>
+            </article>
+          </div>
+          {estateTypesOpen && (
+            <div className="estate-type-popover">
+              {(estate?.type_breakdown || []).map(item => (
+                <div key={item.document_type || item.type || 'Unknown'}>
+                  <span>{item.document_type || item.type || 'Unknown'}</span>
+                  <strong>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+          <p>Last document ingested: {estate?.last_ingestion ? formatDisplayDate(estate.last_ingestion) : 'Not recorded'}</p>
+        </section>
 
         <section className="dashboard-grid" aria-label="Evidence health summary">
           <article className="health-panel">
@@ -989,6 +1091,53 @@ function DashboardPage() {
                 {index < cascadeCards.length - 1 && <ArrowRight className="cascade-arrow" size={18} />}
               </article>
             ))}
+          </div>
+        </section>
+
+        <section className="portfolio-section" aria-label="Portfolio intelligence">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Portfolio Intelligence</p>
+              <h2>Portfolio Intelligence</h2>
+            </div>
+          </div>
+
+          <div className="portfolio-grid">
+            <article className="portfolio-card">
+              <h3>Evidence Freshness</h3>
+              <strong>
+                Current {portfolioLoading ? '...' : freshness.current_pct || 0}% |
+                Aging {portfolioLoading ? '...' : freshness.aging_pct || 0}% |
+                Historical {portfolioLoading ? '...' : freshness.historical_pct || 0}%
+              </strong>
+              <div className="freshness-bar" aria-hidden="true">
+                <span className="fresh-current" style={{ width: `${freshness.current_pct || 0}%` }} />
+                <span className="fresh-aging" style={{ width: `${freshness.aging_pct || 0}%` }} />
+                <span className="fresh-historical" style={{ width: `${freshness.historical_pct || 0}%` }} />
+              </div>
+            </article>
+            <article className="portfolio-card">
+              <h3>Evidence Gaps</h3>
+              <strong>{portfolioLoading ? '...' : portfolio?.evidence_gaps || 0} identified</strong>
+              <p>Records with missing endline or documented gaps</p>
+            </article>
+            <article className="portfolio-card">
+              <h3>Programmes Covered</h3>
+              <button className="portfolio-link-button" type="button" onClick={() => setPortfolioProgrammesOpen(open => !open)}>
+                {portfolioLoading ? '...' : programmeNames.length} programmes
+              </button>
+              {portfolioProgrammesOpen && (
+                <div className="programme-popover">
+                  {programmeNames.map(name => <span key={name}>{name}</span>)}
+                </div>
+              )}
+            </article>
+            <article className="portfolio-card">
+              <h3>Pending Review</h3>
+              <button className="portfolio-link-button" type="button" onClick={() => navigate('/queue')}>
+                {portfolioLoading ? '...' : portfolio?.pending_review || 0} items
+              </button>
+            </article>
           </div>
         </section>
 
