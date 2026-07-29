@@ -1963,41 +1963,109 @@ function ClassifyPage() {
   const [driveFileId, setDriveFileId] = useState('');
   const [activeStep, setActiveStep] = useState(-1);
   const [classificationResult, setClassificationResult] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState('idle');
 
-  async function startPipeline() {
+  async function uploadAndClassify(file) {
+    if (!file) return null;
+    setSelectedFile(file);
     setActiveStep(0);
     setClassificationResult('');
+    setUploadPhase('requesting');
+    setUploadProgress(0);
     pipelineSteps.forEach((_, index) => {
       window.setTimeout(() => setActiveStep(index), index * 360);
     });
 
+    try {
+      const presign = await apiRequest(`/api/classify/presign?${new URLSearchParams({
+        filename: file.name,
+        content_type: file.type || 'application/octet-stream',
+      })}`);
+
+      if (!presign?.upload_url || !presign?.s3_key) {
+        throw new Error('Could not prepare upload');
+      }
+
+      setUploadPhase('uploading');
+
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            setUploadProgress(Math.round((event.loaded / event.total) * 100));
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200 || xhr.status === 204) resolve();
+          else reject(new Error(`Upload failed: ${xhr.status}`));
+        });
+        xhr.addEventListener('error', () => reject(new Error('Network error')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+        xhr.open('PUT', presign.upload_url);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.send(file);
+      });
+
+      setUploadProgress(100);
+      setUploadPhase('classifying');
+
+      const result = await apiRequest('/api/classify/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          s3_key: presign.s3_key,
+          filename: file.name,
+          institution: tenantConfig.orgName,
+        }),
+      });
+
+      if (result?.success || result?.record_id) {
+        setUploadPhase('complete');
+        setActiveStep(pipelineSteps.length);
+        setClassificationResult(`Created ${result.record_id || result.filename}`);
+        return result;
+      }
+
+      throw new Error(result?.error || 'Classification failed');
+    } catch (err) {
+      setUploadPhase('error');
+      setClassificationResult(err.message || 'Upload failed');
+      setActiveStep(-1);
+      console.error('Upload error:', err);
+      throw err;
+    }
+  }
+
+  async function startPipeline() {
+    setActiveStep(0);
+    setClassificationResult('');
+
     if (selectedFile) {
       try {
-        const form = new FormData();
-        form.append('document', selectedFile);
-        const result = await apiRequest('/api/classify/upload', {
-          method: 'POST',
-          body: form,
-        });
-        setClassificationResult(`Created ${result.record_id || result.filename}`);
+        await uploadAndClassify(selectedFile);
       } catch (error) {
-        setClassificationResult(`Local API upload failed: ${error.message}`);
+        setClassificationResult(`Upload failed: ${error.message}`);
       }
     } else if (driveFileId.trim()) {
       setClassificationResult('Drive file ID fallback is captured, but live classification now requires S3 upload.');
     }
-
-    window.setTimeout(() => setActiveStep(pipelineSteps.length), pipelineSteps.length * 360);
   }
 
-  function handleFile(file) {
+  async function handleFile(file) {
     if (!file) return;
-    setSelectedFile(file);
-    setActiveStep(-1);
+    try {
+      await uploadAndClassify(file);
+    } catch {
+      // User-facing state is set in uploadAndClassify.
+    }
   }
 
   const isComplete = activeStep >= pipelineSteps.length;
-  const canStart = selectedFile || driveFileId.trim();
+  const canStart = driveFileId.trim() || (selectedFile && ['idle', 'error'].includes(uploadPhase));
 
   return (
     <AppShell active="classify">
@@ -2025,7 +2093,50 @@ function ClassifyPage() {
             >
               <UploadCloud size={42} />
               <h2>Drop PDF, Word, or PowerPoint files here</h2>
-              <p>Uploads are routed to the Zenex private S3 storage area before classification starts.</p>
+              {uploadPhase === 'idle' && (
+                <p className="upload-hint">
+                  Drop PDF, Word, or PowerPoint files here. Any file size accepted.
+                </p>
+              )}
+              {uploadPhase === 'requesting' && (
+                <div className="pulse-loading">
+                  <span className="pulse-dot" />
+                  <span className="pulse-dot" />
+                  <span className="pulse-dot" />
+                  <span>Preparing secure upload...</span>
+                </div>
+              )}
+              {uploadPhase === 'uploading' && (
+                <div className="upload-progress-container">
+                  <div className="upload-progress-bar">
+                    <div
+                      className="upload-progress-fill"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <p className="upload-progress-label">
+                    {uploadProgress}% uploaded to secure storage
+                  </p>
+                </div>
+              )}
+              {uploadPhase === 'classifying' && (
+                <div className="pulse-loading">
+                  <span className="pulse-dot" />
+                  <span className="pulse-dot" />
+                  <span className="pulse-dot" />
+                  <span>Classifying document through 8-step pipeline...</span>
+                </div>
+              )}
+              {uploadPhase === 'complete' && (
+                <div className="upload-success">
+                  Document classified successfully. View in Evidence Library.
+                </div>
+              )}
+              {uploadPhase === 'error' && (
+                <div className="upload-error">
+                  Upload failed. Please try again or contact your system administrator.
+                </div>
+              )}
               <label className="secondary-action file-picker">
                 <input
                   type="file"
@@ -2063,7 +2174,7 @@ function ClassifyPage() {
             </div>
 
             <button className="primary-action classify-action" type="button" disabled={!canStart} onClick={startPipeline}>
-              <span>{isComplete ? 'Classification Complete' : 'Start Classification'}</span>
+              <span>{isComplete ? 'Classification Complete' : uploadPhase === 'error' ? 'Try Again' : 'Start Classification'}</span>
               <ArrowRight size={18} />
             </button>
           </article>

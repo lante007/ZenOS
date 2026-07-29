@@ -3,6 +3,8 @@
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const storage = require('../services/storage');
 const { classifyBuffer } = require('../services/pipeline');
 const { requireRoles } = require('../middleware/permissions');
@@ -10,6 +12,71 @@ const db = require('../services/db');
 
 const router = express.Router();
 const upload = multer({ dest: '/tmp/adei-uploads/' });
+const s3Client = new S3Client({
+  region: process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'us-east-1',
+});
+
+function safeUploadName(filename) {
+  return String(filename || 'document')
+    .replace(/[^a-zA-Z0-9._\-\s]/g, '_')
+    .replace(/\s+/g, '_');
+}
+
+async function classifyFromS3Key(tenant, s3Key, filename, institution, user) {
+  const meta = await storage.getFileMetadata(s3Key, { bucket: tenant.s3_vault_bucket });
+  const buffer = await storage.downloadFile(s3Key, meta.mimeType, { bucket: tenant.s3_vault_bucket });
+  const record = await classifyBuffer({
+    tenant,
+    buffer,
+    filename: filename || meta.name,
+    mimeType: meta.mimeType,
+    user,
+    s3Document: {
+      ...meta,
+      key: s3Key,
+      filename: filename || meta.name,
+    },
+    institution,
+  });
+
+  return {
+    success: true,
+    tenant: tenant.slug,
+    s3_key: s3Key,
+    record_id: record.id,
+    filename: record.filename,
+    confidence_tier: record.confidence_tier,
+    eqs_composite: record.eqs_composite,
+    fatima_queue_items: record.fatima_queue_items,
+  };
+}
+
+router.get('/presign', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (req, res, next) => {
+  try {
+    const { filename, content_type: contentType } = req.query;
+
+    if (!filename) {
+      return res.status(400).json({ error: 'filename required' });
+    }
+
+    const key = `raw/documents/${Date.now()}-${safeUploadName(filename)}`;
+    const command = new PutObjectCommand({
+      Bucket: req.tenant.s3_vault_bucket,
+      Key: key,
+      ContentType: contentType || 'application/octet-stream',
+    });
+
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 });
+
+    return res.json({
+      upload_url: uploadUrl,
+      s3_key: key,
+      expires_in: 900,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post('/upload', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), upload.single('document'), async (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -64,31 +131,45 @@ router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (r
   if (!key) return res.status(400).json({ error: 's3_key required' });
 
   try {
-    const meta = await storage.getFileMetadata(key, { bucket: req.tenant.s3_vault_bucket });
-    const buffer = await storage.downloadFile(key, meta.mimeType, { bucket: req.tenant.s3_vault_bucket });
-    const record = await classifyBuffer({
-      tenant: req.tenant,
-      buffer,
-      filename: meta.name,
-      mimeType: meta.mimeType,
-      user: req.user,
-      s3Document: meta,
-    });
+    const result = await classifyFromS3Key(req.tenant, key, req.body.filename, req.body.institution || req.tenant.name, req.user);
 
     await db.createAuditLog(req.tenant, 'classification_triggered', {
       s3_key: key,
-      record_id: record.id,
+      record_id: result.record_id,
     }, req.user.email || req.user.sub);
 
-    res.json({
-      success: true,
-      tenant: req.tenant.slug,
-      record_id: record.id,
-      filename: record.filename,
-      confidence_tier: record.confidence_tier,
-      eqs_composite: record.eqs_composite,
-      fatima_queue_items: record.fatima_queue_items,
-    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/process', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (req, res, next) => {
+  try {
+    const { s3_key: s3Key, filename, institution } = req.body;
+
+    if (!s3Key) {
+      return res.status(400).json({ error: 's3_key required' });
+    }
+
+    const result = await classifyFromS3Key(
+      req.tenant,
+      s3Key,
+      filename,
+      institution || req.tenant.name,
+      req.user
+    );
+
+    await db.createAuditLog(req.tenant, 'document_uploaded', {
+      s3_key: s3Key,
+      filename: filename || result.filename,
+    }, req.user.email || req.user.sub);
+    await db.createAuditLog(req.tenant, 'classification_triggered', {
+      s3_key: s3Key,
+      record_id: result.record_id,
+    }, req.user.email || req.user.sub);
+
+    return res.json(result);
   } catch (err) {
     next(err);
   }
