@@ -200,6 +200,23 @@ function formatRecordValue(value, suffix = '') {
   return `${value}${suffix}`;
 }
 
+function renderMarkdownParagraphs(text) {
+  const paragraphs = String(text || '')
+    .split(/\n{2,}/)
+    .map(part => part.trim())
+    .filter(Boolean);
+  return paragraphs.map((paragraph, paragraphIndex) => (
+    <p key={`paragraph-${paragraphIndex}`}>
+      {paragraph.split(/(\*\*[^*]+\*\*)/g).map((part, partIndex) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={`strong-${partIndex}`}>{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      })}
+    </p>
+  ));
+}
+
 function formatScore(value) {
   return value == null || value === '' ? 'Not recorded' : `${value}/5`;
 }
@@ -1434,16 +1451,20 @@ function RecordsPage() {
 
 const askPrompts = [
   'What do we know about coaching in Foundation Phase?',
-  'Which programmes have the strongest evidence in rural schools?',
+  'Which programmes have the strongest evidence?',
   'Where are our biggest evidence gaps?',
   'What should we commission next?',
 ];
 
 function SynthesisePage() {
   const user = currentUser();
-  const { records } = useLiveRecords();
   const canSynthesise = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
   const [selectedRecords, setSelectedRecords] = useState([]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [allRecords, setAllRecords] = useState([]);
+  const [selectionExpanded, setSelectionExpanded] = useState(true);
+  const [selectedRecord, setSelectedRecord] = useState(null);
   const [loading, setLoading] = useState(false);
   const [synthesis, setSynthesis] = useState(null);
   const [error, setError] = useState(null);
@@ -1453,11 +1474,14 @@ function SynthesisePage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ids = (params.get('records') || '').split(',').filter(Boolean).slice(0, 10);
-    if (!ids.length) return;
     apiRequest('/api/records')
       .then(all => {
         if (Array.isArray(all)) {
-          setSelectedRecords(all.map(normalizeRecord).filter(r => ids.includes(r.id) || ids.includes(r.adei_record_id)));
+          const normalized = all.map(normalizeRecord);
+          setAllRecords(normalized);
+          if (ids.length) {
+            setSelectedRecords(normalized.filter(r => ids.includes(r.id) || ids.includes(r.adei_record_id)));
+          }
         }
       })
       .catch(() => {});
@@ -1476,7 +1500,27 @@ function SynthesisePage() {
     );
   }
 
-  const addableRecords = records.filter(record => !selectedRecords.some(selected => recordId(selected) === recordId(record))).slice(0, 12);
+  const filteredPicker = allRecords.filter(record =>
+    !selectedRecords.find(selected => recordId(selected) === recordId(record)) &&
+    (
+      record.programme_name?.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+      record.document_type?.toLowerCase().includes(pickerSearch.toLowerCase())
+    )
+  );
+  const selectedNames = selectedRecords.map(record => record.programme_name).join(', ');
+
+  function addRecord(record) {
+    if (selectedRecords.length >= 10) return;
+    setSelectedRecords(prev => prev.some(item => recordId(item) === recordId(record)) ? prev : [...prev, record]);
+    setShowPicker(false);
+    setPickerSearch('');
+  }
+
+  function openSourceRecord(id) {
+    const record = allRecords.find(item => recordId(item) === id || item.id === id || item.adei_record_id === id)
+      || selectedRecords.find(item => recordId(item) === id || item.id === id || item.adei_record_id === id);
+    if (record) setSelectedRecord(record);
+  }
 
   const handleGenerate = async () => {
     if (selectedRecords.length === 0) return;
@@ -1491,7 +1535,11 @@ function SynthesisePage() {
           record_ids: selectedRecords.map(r => r.id || r.adei_record_id),
         }),
       });
-      if (data.success) setSynthesis(data);
+      if (data.success) {
+        setSynthesis(data);
+        setSelectionExpanded(false);
+        setShowPicker(false);
+      }
       else setError(data.error || 'Generation failed');
     } catch {
       setError('Unable to generate synthesis. Please try again.');
@@ -1528,52 +1576,98 @@ function SynthesisePage() {
         </header>
 
         <section className="selected-records-panel">
-          <div className="selected-records-chips">
-            {selectedRecords.map(r => (
-              <div key={recordId(r)} className="record-chip">
-                <span className="chip-programme">{r.programme_name}</span>
-                <span className="chip-tier">{r.eqs_tier} · EQS {r.eqs_composite}</span>
-                <button
-                  className="chip-remove"
-                  type="button"
-                  onClick={() => setSelectedRecords(prev => prev.filter(x => recordId(x) !== recordId(r)))}
-                  aria-label={`Remove ${r.programme_name}`}
-                >
-                  x
-                </button>
+          <div>
+            <p className="synthesis-step-header">Step 1: Select documents</p>
+            {synthesis && !selectionExpanded ? (
+              <div className="synthesis-compact-summary">
+                <span>Synthesis of {selectedRecords.length} records: {selectedNames}</span>
+                <button type="button" onClick={() => setSelectionExpanded(true)}>Edit selection</button>
               </div>
-            ))}
-            {selectedRecords.length < 10 && (
-              <div className="record-picker compact-picker">
-                {addableRecords.slice(0, 4).map(record => (
-                  <button type="button" key={recordId(record)} onClick={() => setSelectedRecords(prev => [...prev, record])}>
-                    <strong>{record.programme_name}</strong>
-                    <span>{record.eqs_tier} · EQS {record.eqs_composite}</span>
-                  </button>
-                ))}
-                <button className="chip-add" type="button" onClick={() => navigate('/records')}>
-                  + Add document
-                </button>
-              </div>
+            ) : (
+              <>
+                <div className="selected-records-chips">
+                  {selectedRecords.map(r => (
+                    <div key={recordId(r)} className="record-chip">
+                      <span className="chip-programme">{r.programme_name}</span>
+                      <span className="chip-tier">{r.eqs_tier} · EQS {r.eqs_composite}</span>
+                      <button
+                        className="chip-remove"
+                        type="button"
+                        onClick={() => setSelectedRecords(prev => prev.filter(x => recordId(x) !== recordId(r)))}
+                        aria-label={`Remove ${r.programme_name}`}
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+                  {selectedRecords.length < 10 && (
+                    <button className="chip-add" type="button" onClick={() => setShowPicker(open => !open)}>
+                      + Add document ▾
+                    </button>
+                  )}
+                </div>
+
+                {showPicker && (
+                  <div className="synthesis-record-picker">
+                    <input
+                      className="picker-search"
+                      type="search"
+                      placeholder="Search classified records"
+                      value={pickerSearch}
+                      onChange={event => setPickerSearch(event.target.value)}
+                    />
+                    {filteredPicker.length === 0 ? (
+                      <p className="muted">No available records match this search.</p>
+                    ) : filteredPicker.slice(0, 30).map(record => (
+                      <div className="picker-row" key={recordId(record)}>
+                        <div>
+                          <span className="picker-row-name">{record.programme_name}</span>
+                          <span className="picker-row-meta">{record.eqs_tier} · EQS {record.eqs_composite} · {record.document_type}</span>
+                        </div>
+                        <button className="picker-add-btn" type="button" onClick={() => addRecord(record)}>
+                          + Add
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="synthesis-selection-count">
+                  {selectedRecords.length} document{selectedRecords.length !== 1 ? 's' : ''} selected · max 10
+                </p>
+              </>
             )}
           </div>
 
-          <button
-            className="btn-primary btn-generate"
-            type="button"
-            disabled={selectedRecords.length === 0 || loading}
-            onClick={handleGenerate}
-          >
-            {loading ? `Analysing ${selectedRecords.length} records...` : 'Generate Synthesis'}
-          </button>
+          {(!synthesis || selectionExpanded) && (
+            <button
+              className="btn-primary btn-generate"
+              type="button"
+              disabled={selectedRecords.length === 0 || loading}
+              onClick={handleGenerate}
+            >
+              {loading ? (
+                <span className="button-loading">
+                  Analysing {selectedRecords.length} records...
+                  <span className="pulse-dot" />
+                  <span className="pulse-dot" />
+                  <span className="pulse-dot" />
+                </span>
+              ) : 'Generate Synthesis ▶'}
+            </button>
+          )}
         </section>
 
         {error && <div className="synthesis-error">{error}</div>}
 
         {synthesis && (
           <section className="synthesis-results">
+            <div className="synthesis-results-heading">
+              <p className="synthesis-step-header">Results</p>
+              <h2>Strategic synthesis output</h2>
+            </div>
             <div className="synthesis-section">
-              <h2>Key Findings</h2>
+              <h3>Key Findings</h3>
               <p className="section-meta">Confidence-rated across selected evaluations</p>
               {(synthesis.findings || []).map((f, i) => (
                 <article key={`${f.finding}-${i}`} className="finding-card">
@@ -1587,7 +1681,7 @@ function SynthesisePage() {
                   {f.contradiction_note && <div className="contradiction-note">{f.contradiction_note}</div>}
                   <div className="source-chips">
                     {(f.source_record_ids || []).map(id => (
-                      <button key={id} type="button" className="source-chip" onClick={() => navigate(`/records?record=${id}`)}>
+                      <button key={id} type="button" className="source-chip" onClick={() => openSourceRecord(id)}>
                         {id}
                       </button>
                     ))}
@@ -1597,7 +1691,7 @@ function SynthesisePage() {
             </div>
 
             <div className="synthesis-section">
-              <h2>Evidence Gaps</h2>
+              <h3>Evidence Gaps</h3>
               <p className="section-meta">What the selected evaluations did not measure</p>
               {(synthesis.evidence_gaps || []).map((g, i) => (
                 <article key={`${g.gap}-${i}`} className="gap-card">
@@ -1612,7 +1706,7 @@ function SynthesisePage() {
             </div>
 
             <div className="synthesis-section">
-              <h2>Strategic Leverage Points</h2>
+              <h3>Strategic Leverage Points</h3>
               <p className="section-meta">Recommended actions for {tenantConfig.orgName}</p>
               {(synthesis.leverage_points || []).map((l, i) => (
                 <article key={`${l.action}-${i}`} className="leverage-card">
@@ -1628,13 +1722,17 @@ function SynthesisePage() {
 
             {(synthesis.cross_patterns || []).length > 0 && (
               <div className="synthesis-section">
-                <h2>Cross-Document Patterns</h2>
+                <h3>Cross-document Patterns</h3>
                 <p className="section-meta">Patterns identified across {synthesis.record_count} records</p>
                 {synthesis.cross_patterns.map((p, i) => (
                   <article key={`${p.pattern}-${i}`} className="pattern-card">
                     <p className="pattern-text">{p.pattern}</p>
                     <div className="source-chips">
-                      {(p.records_involved || []).map(id => <span key={id} className="source-chip">{id}</span>)}
+                      {(p.records_involved || []).map(id => (
+                        <button key={id} type="button" className="source-chip" onClick={() => openSourceRecord(id)}>
+                          {id}
+                        </button>
+                      ))}
                     </div>
                     {p.implication && <p className="pattern-implication">{p.implication}</p>}
                   </article>
@@ -1652,6 +1750,7 @@ function SynthesisePage() {
             </div>
           </section>
         )}
+        <RecordDetailModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />
       </section>
     </AppShell>
   );
@@ -1665,6 +1764,8 @@ function AskZenexPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [supportOpen, setSupportOpen] = useState(true);
+  const [estateCount, setEstateCount] = useState(0);
   const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
 
   const supportingRecords = useMemo(() => {
@@ -1673,6 +1774,19 @@ function AskZenexPage() {
       .map(id => records.find(record => recordId(record) === id || record.id === id))
       .filter(Boolean);
   }, [records, result]);
+  const searchRecordCount = estateCount || records.length;
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/stats/estate')
+      .then(data => {
+        if (!cancelled) setEstateCount(data?.total_records || 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submitAsk(prompt = question) {
     const clean = String(prompt || '').trim();
@@ -1681,6 +1795,7 @@ function AskZenexPage() {
     setLoading(true);
     setError(false);
     setResult(null);
+    setSupportOpen(true);
     try {
       const data = await apiRequest('/api/synthesis', {
         method: 'POST',
@@ -1715,11 +1830,11 @@ function AskZenexPage() {
           <div>
             <p className="eyebrow">Evidence synthesis</p>
             <h1>Ask Zenex</h1>
-            <p>Search {records.length} classified intelligence records</p>
+            <p>Search {searchRecordCount} classified intelligence records</p>
           </div>
         </header>
 
-        {records.length < 5 && (
+        {searchRecordCount < 5 && (
           <article className="empty-panel compact">
             <p>Ask Zenex works best with a full evidence corpus. The full Zenex archive will be available once batch classification completes.</p>
           </article>
@@ -1746,15 +1861,20 @@ function AskZenexPage() {
         {!result && !loading && !error && (
           <section className="prompt-chip-grid" aria-label="Example prompts">
             {askPrompts.map(prompt => (
-              <button type="button" key={prompt} onClick={() => submitAsk(prompt)}>{prompt}</button>
+              <button type="button" key={prompt} onClick={() => {
+                setQuestion(prompt);
+                submitAsk(prompt);
+              }}>{prompt}</button>
             ))}
           </section>
         )}
 
         {loading && (
-          <section className="ask-loading">
+          <section className="pulse-loading">
             <span className="pulse-dot" />
-            <strong>Searching {records.length} records...</strong>
+            <span className="pulse-dot" />
+            <span className="pulse-dot" />
+            <strong>Searching {searchRecordCount} records...</strong>
           </section>
         )}
 
@@ -1764,44 +1884,49 @@ function AskZenexPage() {
 
         {result && (
           <section className="ask-results">
-            <span className={`confidence-badge ${String(result.confidence || 'LOW').toLowerCase()}`}>{result.confidence}</span>
-            <article className="answer-card">
-              <p>{result.answer}</p>
+            <div className="ask-result-meta">
+              <span className={`confidence-badge ${String(result.confidence || 'LOW').toLowerCase()}`}>{result.confidence}</span>
+              <span>Searched {result.records_searched || searchRecordCount} records · {dateTimeStamp(result.generated_at)}</span>
+            </div>
+
+            <article className="ask-answer-card">
+              <h2>Answer</h2>
+              {renderMarkdownParagraphs(result.answer)}
             </article>
 
-            <section className="supporting-records">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Supporting records</p>
-                  <h2>Based on {supportingRecords.length || result.supporting_record_ids?.length || 0} records</h2>
-                </div>
-              </div>
-              <div className="admin-record-grid">
-                {supportingRecords.map(record => (
-                  <button className="support-record-card" type="button" key={recordId(record)} onClick={() => setSelectedRecord(record)}>
-                    <strong>{record.programme_name}</strong>
-                    <span>{record.eqs_tier} · {record.year || record.publication_year}</span>
-                    <p>{record.key_finding_1}</p>
-                  </button>
-                ))}
-              </div>
-            </section>
+            {(supportingRecords.length > 0 || result.supporting_record_ids?.length > 0) && (
+              <section className="ask-supporting-records">
+                <button className="ask-supporting-toggle" type="button" onClick={() => setSupportOpen(open => !open)}>
+                  Based on these records ({supportingRecords.length || result.supporting_record_ids?.length || 0})
+                </button>
+                {supportOpen && (
+                  <div className="source-chips ask-source-chips">
+                    {supportingRecords.map(record => (
+                      <button className="source-chip" type="button" key={recordId(record)} onClick={() => setSelectedRecord(record)}>
+                        {record.programme_name} · {record.eqs_tier} · {record.year || record.publication_year}
+                      </button>
+                    ))}
+                    {supportingRecords.length === 0 && (result.supporting_record_ids || []).map(id => (
+                      <button className="source-chip" type="button" key={id}>
+                        {id}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
             {result.contradictions && (
-              <article className="contradiction-box">
-                <strong>Contradictory evidence noted</strong>
+              <article className="ask-contradiction-box">
+                <strong>⚠ Contradictory evidence found</strong>
                 <p>{result.contradictions}</p>
               </article>
             )}
 
-            <article className="recommended-action-box">
+            <article className="ask-recommendation-box">
               <strong>Recommended action</strong>
               <p>{result.recommended_action}</p>
             </article>
-
-            <footer className="ask-footer">
-              Searched {result.records_searched} records · {dateTimeStamp(result.generated_at)}
-            </footer>
           </section>
         )}
 
