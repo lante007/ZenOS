@@ -3459,7 +3459,8 @@ function adminAskApi(path, options = {}) {
 
 async function adminAskRequest(path, options = {}) {
   const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  const response = await fetch(`${API_BASE}/api/admin-ask${path}`, {
+  const adminApiPath = `${API_BASE || ''}/api/admin-ask${path}`;
+  const response = await fetch(adminApiPath, {
     ...options,
     headers: {
       'x-evidenceos-tenant': 'admin',
@@ -3482,18 +3483,17 @@ async function adminAskRequest(path, options = {}) {
   const rawText = await response.text();
   let payload = null;
   if (rawText) {
+    const looksLikeHtml = /^\s*<!doctype html/i.test(rawText) || /^\s*<html/i.test(rawText);
+    if (looksLikeHtml) {
+      throw new Error('Ask Auxeira received the frontend page instead of the API response. API routing is not reaching /api/admin-ask/ask.');
+    }
     try {
       payload = JSON.parse(rawText);
     } catch (err) {
       if (!response.ok) {
         throw new Error(rawText.slice(0, 300) || response.statusText || 'Ask Auxeira request failed');
       }
-      return {
-        success: true,
-        answer: rawText,
-        tenants_covered: 0,
-        generated_at: new Date().toISOString(),
-      };
+      throw new Error('Ask Auxeira returned a non-JSON response. Please try again.');
     }
   }
 

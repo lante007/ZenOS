@@ -32,6 +32,7 @@ router.post('/ask',
         SELECT slug, name, organisation_type,
           tier, is_active
         FROM master.tenants
+        WHERE is_active = true
         ORDER BY created_at ASC
       `);
 
