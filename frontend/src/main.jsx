@@ -3470,8 +3470,8 @@ function adminAskApi(path, options = {}) {
 
 async function adminAskRequest(path, options = {}) {
   const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  const ADMIN_API_BASE = 'https://zenex.auxeira.com';
-  const response = await fetch(`${ADMIN_API_BASE}/api/admin-ask${path}`, {
+  const ZENEX_API = 'https://zenex.auxeira.com';
+  const response = await fetch(`${ZENEX_API}/api/admin-ask${path}`, {
     ...options,
     headers: {
       'x-evidenceos-tenant': 'admin',
@@ -3481,6 +3481,13 @@ async function adminAskRequest(path, options = {}) {
       ...(options.headers || {}),
     },
   });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error(
+      'API routing error: received HTML instead of JSON. Check CloudFront configuration.'
+    );
+  }
 
   if (response.status === 401) {
     browserIdToken = '';
