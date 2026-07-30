@@ -3135,6 +3135,33 @@ button.estate-stat-tile {
   color: #FFB4A2;
 }
 
+.admin-ask-page {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-ask-subline {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: rgba(245, 242, 238, 0.58);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.admin-ask-prompts {
+  margin-top: 0;
+}
+
+.admin-ask-search {
+  border-radius: 8px;
+  background: rgba(245, 242, 238, 0.055);
+}
+
+.admin-ask-answer {
+  border-color: rgba(0, 180, 216, 0.22);
+  background: rgba(245, 242, 238, 0.055);
+}
+
 .btn-primary,
 .btn-secondary,
 .btn-ghost {

@@ -3451,6 +3451,20 @@ function adminApi(path, options = {}) {
   });
 }
 
+function adminAskApi(path, options = {}) {
+  const authHeaders = browserIdToken ? { Authorization: `Bearer ${browserIdToken}` } : {};
+  return apiRequest(`/api/admin-ask${path}`, {
+    ...options,
+    tenant: 'admin',
+    role: 'SUPER_ADMIN',
+    user: 'emmanuel@auxeira.com',
+    headers: {
+      ...authHeaders,
+      ...(options.headers || {}),
+    },
+  });
+}
+
 function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -3548,6 +3562,10 @@ function AdminShell({ active, children }) {
             <Gauge size={18} />
             <span>Dashboard</span>
           </a>
+          <a className={active === 'ask' ? 'active' : ''} href="/admin/ask">
+            <Search size={18} />
+            <span>Ask Auxeira</span>
+          </a>
           <a className={active === 'tenants' ? 'active' : ''} href="/admin/tenants">
             <Database size={18} />
             <span>Tenants</span>
@@ -3605,6 +3623,118 @@ function AdminDashboardPage() {
             </article>
           ))}
         </section>
+      </section>
+    </AdminShell>
+  );
+}
+
+function AdminAskPage() {
+  const examplePrompts = [
+    'Why did ADEI-ZF-004 score 2.73 on the Research pathway?',
+    'Compare Zenex and Optima corpus coverage',
+    'Explain the Three-Capital Cascade calculation',
+    'Why was a CURRENCY_ALERT generated for Funda Wande?',
+    'What is the Institutional Capital index formula?',
+  ];
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function askAuxeira(value = question) {
+    const trimmed = value.trim();
+    if (trimmed.length < 3) return;
+    setQuestion(trimmed);
+    setLoading(true);
+    setError('');
+    setAnswer(null);
+    try {
+      const data = await adminAskApi('/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: trimmed }),
+      });
+      setAnswer(data);
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Ask Auxeira could not respond. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    askAuxeira();
+  }
+
+  return (
+    <AdminShell active="ask">
+      <section className="dashboard-main admin-ask-page">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Founder intelligence</p>
+            <h1>Ask Auxeira</h1>
+            <p className="page-subheader">Platform intelligence for the Auxeira founder console</p>
+            <p className="admin-ask-subline">
+              Covers EQS methodology, cross-tenant analytics, scoring explanations, and system diagnostics
+            </p>
+          </div>
+        </header>
+
+        {!answer && !loading && (
+          <div className="prompt-chip-grid admin-ask-prompts">
+            {examplePrompts.map(prompt => (
+              <button key={prompt} type="button" onClick={() => askAuxeira(prompt)}>
+                {prompt}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <form className="ask-search-panel admin-ask-search" onSubmit={handleSubmit}>
+          <label className="ask-input">
+            <Search size={20} />
+            <input
+              value={question}
+              onChange={event => setQuestion(event.target.value)}
+              placeholder="Ask anything about the platform, methodology, or tenant performance..."
+            />
+          </label>
+          <button className="primary-action" type="submit" disabled={loading || question.trim().length < 3}>
+            <span>{loading ? 'Asking...' : 'Ask'}</span>
+          </button>
+        </form>
+
+        {loading && (
+          <div className="pulse-loading">
+            <span className="pulse-dot" />
+            <span className="pulse-dot" />
+            <span className="pulse-dot" />
+            <span>Analysing platform context...</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="brief-error">
+            <strong>Ask Auxeira failed</strong>
+            <p>{error}</p>
+            <button className="btn-ghost" type="button" onClick={() => askAuxeira()}>
+              Try again
+            </button>
+          </div>
+        )}
+
+        {answer?.answer && (
+          <article className="ask-answer-card admin-ask-answer">
+            <div
+              className="ask-answer-body"
+              dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(answer.answer) }}
+            />
+            <footer className="ask-result-meta">
+              Covering {answer.tenants_covered || 0} tenants · {dateTimeStamp(answer.generated_at)}
+            </footer>
+          </article>
+        )}
       </section>
     </AdminShell>
   );
@@ -4113,6 +4243,7 @@ function App() {
 
   if (path === '/admin/login') return <AdminLoginPage />;
   if (path === '/admin/dashboard') return <AdminDashboardPage />;
+  if (path === '/admin/ask') return <AdminAskPage />;
   if (path === '/admin/tenants') return <AdminTenantsPage />;
   if (path === '/admin/support') return <AdminSupportPage />;
   if (path === '/login') return <LoginPage />;

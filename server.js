@@ -21,6 +21,7 @@ const reportsRoutes = require('./api/routes/reports');
 const settingsRoutes = require('./api/routes/settings');
 const auditRoutes = require('./api/routes/audit');
 const adminRoutes = require('./api/routes/admin');
+const adminAskRoutes = require('./api/routes/admin-ask');
 const strategicSynthesisRoutes = require('./api/routes/strategic-synthesis');
 const synthesisRoutes = require('./api/routes/synthesis');
 const alertsRoutes = require('./api/routes/alerts');
@@ -75,6 +76,7 @@ app.get('/api/health', async (req, res, next) => {
 });
 
 app.use('/api/admin', authenticate(), adminRoutes);
+app.use('/api/admin-ask', authenticate(), adminAskRoutes);
 
 app.use('/api', authenticate(), assertNoBoardAccess);
 app.use('/api/stats', statsRoutes);
