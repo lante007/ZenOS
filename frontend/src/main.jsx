@@ -208,13 +208,17 @@ function briefContent(value) {
   return JSON.stringify(value || '');
 }
 
-function sanitiseAnswer(text) {
+const sanitise = (text) => {
   if (!text) return '';
   return String(text)
     .replace(/\u2014/g, ',')
     .replace(/\u2013/g, ',')
     .replace(/ --- /g, '. ')
     .replace(/---/g, '.');
+};
+
+function sanitiseAnswer(text) {
+  return sanitise(text);
 }
 
 function escapeHtml(value) {
@@ -302,10 +306,10 @@ function renderMarkdown(text) {
 
 function safeRenderMarkdown(text) {
   try {
-    return renderMarkdown(text || '');
+    return renderMarkdown(sanitise(text || ''));
   } catch (err) {
     console.error('Markdown render error:', err);
-    return `<p>${escapeHtml(text || '')}</p>`;
+    return `<p>${escapeHtml(sanitise(text || ''))}</p>`;
   }
 }
 
