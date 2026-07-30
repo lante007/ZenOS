@@ -15,6 +15,12 @@ function schemaFor(tenant) {
   return schema;
 }
 
+function costDataPresentForSource(source) {
+  if (source === 'AUDITED') return 'AUDITED';
+  if (source) return 'PROXY';
+  return 'ABSENT';
+}
+
 const SUMMARY_FIELDS = [
   'id',
   'adei_record_id',
@@ -141,7 +147,7 @@ router.put('/:id/financials', requireRoles('ORGANISATION_LEAD'), async (req, res
         sroi_ready, updated_at
     `, [
       total_cost_rand || null,
-      cost_data_source ? 'PRESENT' : 'ABSENT',
+      costDataPresentForSource(cost_data_source),
       cost_data_source || null,
       cost_per_learner || null,
       financial_year || null,
