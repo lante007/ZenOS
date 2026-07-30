@@ -29,8 +29,7 @@ router.post('/ask',
       if (!pool) return res.status(503).json({ error: 'Database is not configured' });
 
       const tenants = await pool.query(`
-        SELECT slug, name, organisation_type,
-          tier, is_active
+        SELECT slug, name, organisation_type
         FROM master.tenants
         WHERE is_active = true
         ORDER BY created_at ASC

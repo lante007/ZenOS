@@ -3058,6 +3058,10 @@ function KnowledgePage() {
         setBriefError('The evidence engine did not return a brief. Please try again.');
         return;
       }
+      if (!selectedRecord && !synthesisId) {
+        setBriefError('Record selection was lost. Please select a record and try again.');
+        return;
+      }
       setBrief(generatedBrief);
       setBriefProduct(product);
       return;
@@ -3231,28 +3235,28 @@ function KnowledgePage() {
             </div>
           </div>
 
-          {isGenerating ? (
-            <div className="brief-loading">
-              <span className="pulse-dot" />
-              <strong>Generating {selectedAudience.label} brief for {displayProgrammeName}...</strong>
-            </div>
-          ) : briefError ? (
-            <div className="brief-error">
-              <strong>Generation failed</strong>
-              <p>{briefError}</p>
-              <button
-                className="btn-ghost"
-                type="button"
-                onClick={() => {
-                  setBriefError('');
-                  generateBrief();
-                }}
-              >
-                Try again
-              </button>
-            </div>
-          ) : safeBrief ? (
-            <BriefErrorBoundary>
+          <BriefErrorBoundary>
+            {isGenerating ? (
+              <div className="brief-loading">
+                <span className="pulse-dot" />
+                <strong>Generating {selectedAudience.label} brief for {displayProgrammeName}...</strong>
+              </div>
+            ) : briefError ? (
+              <div className="brief-error">
+                <strong>Generation failed</strong>
+                <p>{briefError}</p>
+                <button
+                  className="btn-ghost"
+                  type="button"
+                  onClick={() => {
+                    setBriefError('');
+                    generateBrief();
+                  }}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : safeBrief ? (
               <article className="report-card brief-output">
                 <header>
                   <h2>ZENEX FOUNDATION - {selectedAudience.label.toUpperCase()} EVIDENCE BRIEF</h2>
@@ -3264,10 +3268,17 @@ function KnowledgePage() {
                     </>
                   ) : (
                     <>
-                      <p>Record: {recordId(selectedRecord)} | Classified: {formatDisplayDate(selectedRecord.classified_at || selectedRecord.classification_date)}</p>
-                      <p>Evidence tier: {selectedRecord.eqs_tier} | EQS: {selectedRecord.eqs_composite}/5.0</p>
+                      <p>Record: {recordId(selectedRecord)} | Classified: {formatDisplayDate(selectedRecord?.classified_at || selectedRecord?.classification_date)}</p>
+                      <p>
+                        {selectedRecord?.eqs_tier
+                          ? `Evidence tier: ${selectedRecord.eqs_tier} | EQS: ${selectedRecord.eqs_composite}/5.0`
+                          : briefProduct?.source_record_count
+                            ? `Based on synthesis of ${briefProduct.source_record_count} records`
+                            : ''}
+                      </p>
                     </>
                   )}
+                  {briefProduct?.word_count && <p>Word count: {briefProduct.word_count}</p>}
                 </header>
                 <section>
                   <div
@@ -3293,10 +3304,10 @@ function KnowledgePage() {
                   </button>
                 </div>
               </article>
-            </BriefErrorBoundary>
-          ) : (
-            <pre className="brief-body">Select a record and audience, then generate a brief.</pre>
-          )}
+            ) : (
+              <pre className="brief-body">Select a record and audience, then generate a brief.</pre>
+            )}
+          </BriefErrorBoundary>
         </section>
       </section>
     </AppShell>
@@ -3459,8 +3470,8 @@ function adminAskApi(path, options = {}) {
 
 async function adminAskRequest(path, options = {}) {
   const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  const adminApiPath = `${API_BASE || ''}/api/admin-ask${path}`;
-  const response = await fetch(adminApiPath, {
+  const ADMIN_API_BASE = 'https://zenex.auxeira.com';
+  const response = await fetch(`${ADMIN_API_BASE}/api/admin-ask${path}`, {
     ...options,
     headers: {
       'x-evidenceos-tenant': 'admin',
