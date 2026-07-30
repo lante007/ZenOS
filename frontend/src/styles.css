@@ -1812,6 +1812,103 @@ button.estate-stat-tile {
   line-height: 1.45;
 }
 
+.financial-edit-panel {
+  margin: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.financial-edit-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.financial-edit-header h4 {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.financial-edit-note {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.financial-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.financial-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.financial-field.full-width {
+  grid-column: 1 / -1;
+  margin-bottom: 12px;
+}
+
+.financial-field label {
+  color: var(--color-muted);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.financial-field input,
+.financial-field select,
+.financial-field textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.financial-field textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.sroi-eligible-notice {
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.financial-save-error {
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: rgba(239, 114, 24, 0.1);
+  color: #EF7218;
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.financial-save-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.financial-saved-confirm {
+  color: #4CAF50;
+  font-size: 12px;
+}
+
 .classify-grid {
   display: grid;
   grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);

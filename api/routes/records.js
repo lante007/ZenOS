@@ -7,6 +7,14 @@ const { requireRoles } = require('../middleware/permissions');
 
 const router = express.Router();
 
+function schemaFor(tenant) {
+  const schema = tenant.db_schema || tenant.slug || 'zenex';
+  if (!/^[a-z][a-z0-9_]*$/.test(schema)) {
+    throw new Error(`Unsafe tenant schema: ${schema}`);
+  }
+  return schema;
+}
+
 const SUMMARY_FIELDS = [
   'id',
   'adei_record_id',
@@ -77,6 +85,101 @@ router.get('/:id', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUN
     if (!record) return res.status(404).json({ error: 'Record not found' });
     const visible = visibleRecordsForRole([record], req.user.role)[0];
     res.json(visible);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/:id/financials', requireRoles('ORGANISATION_LEAD'), async (req, res, next) => {
+  try {
+    const pool = db.getPool();
+    if (!pool) {
+      return res.status(503).json({ error: 'Database is not configured' });
+    }
+
+    const schema = schemaFor(req.tenant);
+    const {
+      total_cost_rand,
+      cost_data_source,
+      cost_per_learner,
+      financial_year,
+      cost_notes,
+      audited_financials_used,
+    } = req.body || {};
+
+    const validSources = [
+      'AUDITED',
+      'GRANT_AGREEMENT',
+      'MANAGEMENT_ACCOUNTS',
+      'PROXY',
+      'UNKNOWN',
+    ];
+
+    if (cost_data_source && !validSources.includes(cost_data_source)) {
+      return res.status(400).json({ error: 'Invalid cost_data_source' });
+    }
+
+    const sroiReady = cost_data_source === 'AUDITED' || cost_data_source === 'PROXY';
+    const result = await pool.query(`
+      UPDATE ${schema}.intelligence_records
+      SET
+        total_cost_rand = $1,
+        cost_data_present = $2,
+        cost_data_source = $3,
+        cost_per_learner = $4,
+        financial_year = $5,
+        cost_notes = $6,
+        audited_financials_used = $7,
+        sroi_ready = $8,
+        updated_at = NOW()
+      WHERE id = $9
+        AND tenant_id = $10
+      RETURNING id, total_cost_rand,
+        cost_data_present, cost_data_source,
+        cost_per_learner, financial_year,
+        cost_notes, audited_financials_used,
+        sroi_ready, updated_at
+    `, [
+      total_cost_rand || null,
+      cost_data_source ? 'PRESENT' : 'ABSENT',
+      cost_data_source || null,
+      cost_per_learner || null,
+      financial_year || null,
+      cost_notes || null,
+      Boolean(audited_financials_used),
+      sroiReady,
+      req.params.id,
+      req.tenant.slug,
+    ]);
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    await pool.query(`
+      INSERT INTO ${schema}.audit_log (
+        event_type, user_id,
+        tenant_id, detail, created_at
+      ) VALUES (
+        'FINANCIAL_DATA_ADDED',
+        $1, $2, $3, NOW()
+      )
+    `, [
+      req.user?.sub,
+      req.tenant.slug,
+      JSON.stringify({
+        record_id: req.params.id,
+        cost_data_source,
+        total_cost_rand,
+        sroi_ready: sroiReady,
+        added_by: req.user?.email,
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      record: result.rows[0],
+    });
   } catch (err) {
     next(err);
   }

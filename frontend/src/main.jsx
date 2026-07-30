@@ -493,17 +493,86 @@ function fullRecordFields(record) {
   ];
 }
 
-function RecordDetailModal({ record, onClose }) {
+const financialSourceOptions = ['AUDITED', 'GRANT_AGREEMENT', 'MANAGEMENT_ACCOUNTS', 'PROXY', 'UNKNOWN'];
+
+function financialEditFromRecord(record) {
+  if (!record) {
+    return {
+      total_cost_rand: '',
+      cost_data_source: '',
+      cost_per_learner: '',
+      financial_year: '',
+      cost_notes: '',
+      audited_financials_used: false,
+    };
+  }
+  return {
+    total_cost_rand: record.total_cost_rand || '',
+    cost_data_source: financialSourceOptions.includes(record.cost_data_source) ? record.cost_data_source : '',
+    cost_per_learner: record.cost_per_learner || '',
+    financial_year: record.financial_year || '',
+    cost_notes: record.cost_notes || '',
+    audited_financials_used: Boolean(record.audited_financials_used),
+  };
+}
+
+function RecordDetailModal({ record, onClose, userRole = currentUser().role }) {
+  const [displayRecord, setDisplayRecord] = useState(record || {});
+  const [financialEdit, setFinancialEdit] = useState(() => financialEditFromRecord(record));
+  const [financialSaving, setFinancialSaving] = useState(false);
+  const [financialSaved, setFinancialSaved] = useState(false);
+  const [financialError, setFinancialError] = useState('');
+
+  useEffect(() => {
+    setDisplayRecord(record);
+    setFinancialEdit(financialEditFromRecord(record));
+    setFinancialSaved(false);
+    setFinancialError('');
+  }, [record]);
+
   if (!record) return null;
+
+  async function handleSaveFinancials() {
+    setFinancialSaving(true);
+    setFinancialSaved(false);
+    setFinancialError('');
+    try {
+      const payload = {
+        ...financialEdit,
+        audited_financials_used: financialEdit.cost_data_source === 'AUDITED' || Boolean(financialEdit.audited_financials_used),
+      };
+      const data = await apiRequest(`/api/records/${displayRecord.id || displayRecord.adei_record_id}/financials`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (data?.success && data.record) {
+        setDisplayRecord(current => ({ ...current, ...data.record }));
+        setFinancialEdit(current => ({ ...current, ...data.record }));
+        setFinancialSaved(true);
+        setTimeout(() => setFinancialSaved(false), 3000);
+      }
+    } catch (err) {
+      console.error('Financial save error:', err);
+      setFinancialError(err.payload?.error || err.message || 'Financial data could not be saved.');
+    } finally {
+      setFinancialSaving(false);
+    }
+  }
+
+  const sroiEligible = financialEdit.cost_data_source === 'AUDITED' || financialEdit.cost_data_source === 'PROXY';
+
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section className="record-modal" role="dialog" aria-modal="true" aria-label="ADEI record detail" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <p className="eyebrow">ADEI 55-field detail</p>
-            <h2>{record.programme_name}</h2>
-            <p>{record.filename}</p>
-            <PathwayBadge pathway={record.eqs_scoring_pathway} />
+            <h2>{displayRecord.programme_name}</h2>
+            <p>{displayRecord.filename}</p>
+            <PathwayBadge pathway={displayRecord.eqs_scoring_pathway} />
           </div>
           <button className="icon-button" type="button" aria-label="Close record detail" onClick={onClose}>
             <X size={18} />
@@ -511,13 +580,111 @@ function RecordDetailModal({ record, onClose }) {
         </div>
 
         <div className="field-grid">
-          {fullRecordFields(record).map(([label, value]) => (
+          {fullRecordFields(displayRecord).map(([label, value]) => (
             <div className="field-cell" key={label}>
               <span>{label}</span>
               <strong>{formatRecordValue(value)}</strong>
             </div>
           ))}
         </div>
+
+        {userRole === 'ORGANISATION_LEAD' && (
+          <div className="financial-edit-panel">
+            <div className="financial-edit-header">
+              <h4>Financial Data</h4>
+              <span className="financial-edit-note">
+                Manually entered by Organisation Lead. Not extracted from document.
+              </span>
+            </div>
+
+            <div className="financial-edit-grid">
+              <div className="financial-field">
+                <label>Total programme cost (R)</label>
+                <input
+                  type="number"
+                  value={financialEdit.total_cost_rand || ''}
+                  onChange={event => setFinancialEdit(prev => ({ ...prev, total_cost_rand: event.target.value }))}
+                  placeholder="e.g. 4500000"
+                />
+              </div>
+
+              <div className="financial-field">
+                <label>Cost data source</label>
+                <select
+                  value={financialEdit.cost_data_source || ''}
+                  onChange={event => setFinancialEdit(prev => ({ ...prev, cost_data_source: event.target.value }))}
+                >
+                  <option value="">Select source</option>
+                  <option value="AUDITED">Audited financials</option>
+                  <option value="GRANT_AGREEMENT">Grant agreement</option>
+                  <option value="MANAGEMENT_ACCOUNTS">Management accounts</option>
+                  <option value="PROXY">Approved proxy estimate</option>
+                  <option value="UNKNOWN">Unknown</option>
+                </select>
+              </div>
+
+              <div className="financial-field">
+                <label>Cost per learner (R)</label>
+                <input
+                  type="number"
+                  value={financialEdit.cost_per_learner || ''}
+                  onChange={event => setFinancialEdit(prev => ({ ...prev, cost_per_learner: event.target.value }))}
+                  placeholder="e.g. 1250"
+                />
+              </div>
+
+              <div className="financial-field">
+                <label>Financial year</label>
+                <input
+                  type="text"
+                  value={financialEdit.financial_year || ''}
+                  onChange={event => setFinancialEdit(prev => ({ ...prev, financial_year: event.target.value }))}
+                  placeholder="e.g. 2022/23"
+                />
+              </div>
+            </div>
+
+            <div className="financial-field full-width">
+              <label>Notes on cost data provenance</label>
+              <textarea
+                value={financialEdit.cost_notes || ''}
+                onChange={event => setFinancialEdit(prev => ({ ...prev, cost_notes: event.target.value }))}
+                placeholder="e.g. Sourced from Optimy grant management system. Confirmed by Finance Manager 29 July 2026."
+                rows={3}
+              />
+            </div>
+
+            {sroiEligible && (
+              <div className="sroi-eligible-notice">
+                This record will be marked SROI eligible after saving.
+              </div>
+            )}
+
+            {financialError && (
+              <div className="financial-save-error">
+                {financialError}
+              </div>
+            )}
+
+            <div className="financial-save-row">
+              <button
+                className="btn-primary"
+                type="button"
+                onClick={handleSaveFinancials}
+                disabled={financialSaving}
+              >
+                {financialSaving ? 'Saving...' : 'Save financial data'}
+              </button>
+
+              {financialSaved && (
+                <span className="financial-saved-confirm">
+                  Saved. Record updated.
+                  {sroiEligible ? ' SROI eligible.' : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
