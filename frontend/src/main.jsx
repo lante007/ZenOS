@@ -3474,8 +3474,7 @@ function adminAskApi(path, options = {}) {
 
 async function adminAskRequest(path, options = {}) {
   const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-  const ZENEX_API = 'https://zenex.auxeira.com';
-  const response = await fetch(`${ZENEX_API}/api/admin-ask${path}`, {
+  const response = await fetch(`/api/admin-ask${path}`, {
     ...options,
     headers: {
       'x-evidenceos-tenant': 'admin',
