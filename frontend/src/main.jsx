@@ -197,7 +197,15 @@ function formatRecordValue(value, suffix = '') {
   if (value == null || value === '') return 'Not recorded';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (Array.isArray(value)) return value.length ? value.join(', ') : 'Not recorded';
+  if (typeof value === 'object') return JSON.stringify(value);
   return `${value}${suffix}`;
+}
+
+function briefContent(value) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value?.brief) return value.brief;
+  if (typeof value === 'object' && value?.content) return value.content;
+  return JSON.stringify(value || '');
 }
 
 function sanitiseAnswer(text) {
@@ -290,6 +298,15 @@ function renderMarkdown(text) {
   }
 
   return output.join('');
+}
+
+function safeRenderMarkdown(text) {
+  try {
+    return renderMarkdown(text || '');
+  } catch (err) {
+    console.error('Markdown render error:', err);
+    return `<p>${escapeHtml(text || '')}</p>`;
+  }
 }
 
 function hasRealContradiction(text) {
@@ -2360,7 +2377,7 @@ function AskZenexPage() {
               <h2>Answer</h2>
               <div
                 className="ask-answer-body"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(result.answer) }}
+                dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(result.answer) }}
               />
             </article>
 
@@ -2918,6 +2935,43 @@ function downloadWord(filename, html) {
   URL.revokeObjectURL(url);
 }
 
+class BriefErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Brief render error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="brief-error">
+          <strong>Display error</strong>
+          <p>
+            The brief was generated but could not be displayed. This is a rendering issue, not a data loss.
+            Try again or contact your administrator.
+          </p>
+          <button
+            className="btn-ghost"
+            type="button"
+            onClick={() => this.setState({ hasError: false, error: null })}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function KnowledgePage() {
   const { records, source } = useLiveRecords();
   const querySynthesisId = new URLSearchParams(window.location.search).get('synthesis_id') || '';
@@ -2963,6 +3017,7 @@ function KnowledgePage() {
   const displayProgrammeName = synthesisId
     ? (briefProduct?.programme_name || synthesis?.title || 'Strategic synthesis')
     : selectedRecord?.programme_name;
+  const safeBrief = briefContent(brief);
 
   if (!selectedRecord && !synthesisId) {
     return (
@@ -2994,11 +3049,19 @@ function KnowledgePage() {
         body: JSON.stringify(body),
       });
       if (!product) return;
+      console.log('Brief API response:', {
+        success: product.success,
+        has_brief: Boolean(product.brief),
+        brief_type: typeof product.brief,
+        brief_length: product.brief?.length,
+        word_count: product.word_count,
+        keys: Object.keys(product),
+      });
       if (product.error) {
         setBriefError(product.error || product.message || 'Brief generation failed. Please try again.');
         return;
       }
-      const generatedBrief = product.brief || product.content || '';
+      const generatedBrief = briefContent(product);
       if (!generatedBrief) {
         setBriefError('The evidence engine did not return a brief. Please try again.');
         return;
@@ -3020,7 +3083,7 @@ function KnowledgePage() {
   function reportSections() {
     if (synthesisId) {
       return [
-        ['EXECUTIVE SUMMARY', brief || 'Synthesis brief pending generation.'],
+        ['EXECUTIVE SUMMARY', safeBrief || 'Synthesis brief pending generation.'],
         ['KEY FINDING', (synthesis?.findings || []).map(item => item.finding).join(' ')],
         ['INVESTMENT AND REACH', (synthesis?.leverage_points || []).map(item => item.rationale).join(' ')],
         ['DECISION IMPLICATION', (synthesis?.leverage_points || []).map(item => item.action).join(' ')],
@@ -3030,7 +3093,7 @@ function KnowledgePage() {
       ];
     }
     return [
-      ['EXECUTIVE SUMMARY', brief || `${selectedRecord.programme_name} is a ${selectedRecord.eqs_tier} record with EQS ${selectedRecord.eqs_composite}.`],
+      ['EXECUTIVE SUMMARY', safeBrief || `${selectedRecord.programme_name} is a ${selectedRecord.eqs_tier} record with EQS ${selectedRecord.eqs_composite}.`],
       ['KEY FINDING', selectedRecord.key_finding_1],
       ['INVESTMENT AND REACH', selectedRecord.decision_relevance || selectedRecord.population_served],
       ['DECISION IMPLICATION', selectedRecord.evidence_gap_1 || selectedRecord.evidence_gap || selectedRecord.decision_relevance],
@@ -3158,15 +3221,15 @@ function KnowledgePage() {
               {synthesisId && <p>Based on synthesis of {synthesis?.record_count || briefProduct?.source_record_count || 0} records</p>}
             </div>
             <div className="brief-actions">
-              <button className="secondary-action" type="button" disabled={!brief && !selectedRecord} onClick={copyBrief}>
+              <button className="secondary-action" type="button" disabled={!safeBrief && !selectedRecord} onClick={copyBrief}>
                 <ClipboardCopy size={17} />
                 <span>Copy</span>
               </button>
-              <button className="secondary-action" type="button" disabled={!brief} onClick={() => window.print()}>
+              <button className="secondary-action" type="button" disabled={!safeBrief} onClick={() => window.print()}>
                 <Download size={17} />
                 <span>Download PDF</span>
               </button>
-              <button className="secondary-action" type="button" disabled={!brief} onClick={() => downloadWord(`${synthesisId || recordId(selectedRecord)}-${audience}.doc`, reportText().replace(/\n/g, '<br>'))}>
+              <button className="secondary-action" type="button" disabled={!safeBrief} onClick={() => downloadWord(`${synthesisId || recordId(selectedRecord)}-${audience}.doc`, reportText().replace(/\n/g, '<br>'))}>
                 <Download size={17} />
                 <span>Download Word</span>
               </button>
@@ -3196,47 +3259,49 @@ function KnowledgePage() {
                 Try again
               </button>
             </div>
-          ) : brief ? (
-            <article className="report-card">
-              <header>
-                <h2>ZENEX FOUNDATION - {selectedAudience.label.toUpperCase()} EVIDENCE BRIEF</h2>
-                <p>Programme: {displayProgrammeName}</p>
-                {synthesisId ? (
-                  <>
-                    <p>Based on synthesis of {synthesis?.record_count || briefProduct?.source_record_count || 0} records</p>
-                    <p>Synthesis: {synthesisId}</p>
-                  </>
-                ) : (
-                  <>
-                    <p>Record: {recordId(selectedRecord)} | Classified: {formatDisplayDate(selectedRecord.classified_at || selectedRecord.classification_date)}</p>
-                    <p>Evidence tier: {selectedRecord.eqs_tier} | EQS: {selectedRecord.eqs_composite}/5.0</p>
-                  </>
-                )}
-              </header>
-              {reportSections().map(([title, body]) => (
-                <section key={title}>
-                  <h3>{title}</h3>
-                  <p>{formatRecordValue(body)}</p>
+          ) : safeBrief ? (
+            <BriefErrorBoundary>
+              <article className="report-card brief-output">
+                <header>
+                  <h2>ZENEX FOUNDATION - {selectedAudience.label.toUpperCase()} EVIDENCE BRIEF</h2>
+                  <p>Programme: {displayProgrammeName}</p>
+                  {synthesisId ? (
+                    <>
+                      <p>Based on synthesis of {synthesis?.record_count || briefProduct?.source_record_count || 0} records</p>
+                      <p>Synthesis: {synthesisId}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>Record: {recordId(selectedRecord)} | Classified: {formatDisplayDate(selectedRecord.classified_at || selectedRecord.classification_date)}</p>
+                      <p>Evidence tier: {selectedRecord.eqs_tier} | EQS: {selectedRecord.eqs_composite}/5.0</p>
+                    </>
+                  )}
+                </header>
+                <section>
+                  <div
+                    className="ask-answer-body"
+                    dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(safeBrief) }}
+                  />
                 </section>
-              ))}
-              <div className="report-export-row">
-                <button className="secondary-action" type="button" onClick={copyBrief}>
-                  <ClipboardCopy size={17} />
-                  <span>Copy</span>
-                </button>
-                <button className="secondary-action" type="button" onClick={() => window.print()}>
-                  <Download size={17} />
-                  <span>Download PDF</span>
-                </button>
-                <button className="secondary-action" type="button" onClick={() => downloadWord(`${synthesisId || recordId(selectedRecord)}-${audience}.doc`, reportText().replace(/\n/g, '<br>'))}>
-                  <Download size={17} />
-                  <span>Download Word</span>
-                </button>
-                <button className="btn-ghost" type="button" disabled={!briefProduct?.provenance_id} onClick={() => navigate(`/provenance/${briefProduct.provenance_id}`)}>
-                  View Provenance
-                </button>
-              </div>
-            </article>
+                <div className="report-export-row">
+                  <button className="secondary-action" type="button" onClick={copyBrief}>
+                    <ClipboardCopy size={17} />
+                    <span>Copy</span>
+                  </button>
+                  <button className="secondary-action" type="button" onClick={() => window.print()}>
+                    <Download size={17} />
+                    <span>Download PDF</span>
+                  </button>
+                  <button className="secondary-action" type="button" onClick={() => downloadWord(`${synthesisId || recordId(selectedRecord)}-${audience}.doc`, reportText().replace(/\n/g, '<br>'))}>
+                    <Download size={17} />
+                    <span>Download Word</span>
+                  </button>
+                  <button className="btn-ghost" type="button" disabled={!briefProduct?.provenance_id} onClick={() => navigate(`/provenance/${briefProduct.provenance_id}`)}>
+                    View Provenance
+                  </button>
+                </div>
+              </article>
+            </BriefErrorBoundary>
           ) : (
             <pre className="brief-body">Select a record and audience, then generate a brief.</pre>
           )}
