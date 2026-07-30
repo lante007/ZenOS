@@ -3535,6 +3535,71 @@ button.estate-stat-tile {
   margin-bottom: 0;
 }
 
+.ask-answer-body {
+  padding: 0;
+}
+
+.ask-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 13px;
+}
+
+.ask-table th {
+  background: rgba(255,255,255,0.06);
+  color: var(--color-text);
+  font-weight: 600;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.ask-table td {
+  padding: 8px 12px;
+  color: var(--color-text);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 12px;
+}
+
+.ask-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ask-h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 20px 0 8px;
+}
+
+.ask-h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 16px 0 6px;
+}
+
+.ask-h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 12px 0 4px;
+}
+
+.ask-hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin: 16px 0;
+}
+
+.ask-p {
+  margin: 0 0 8px;
+  line-height: 1.65;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
 .ask-supporting-records {
   margin-top: 16px;
   padding-top: 16px;

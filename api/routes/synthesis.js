@@ -64,6 +64,8 @@ Answer the question using ONLY the evidence in these records. For each finding c
 
 Write in UK English, senior consultant register. No contractions. No em dashes.
 
+When no contradictions exist between the classified records, set the contradictions field to null exactly. Do not write any text. Return null.
+
 Attribution rule: This organisation is a ${organisationType}. ${attributionContext}`;
 
     const user = `${question}

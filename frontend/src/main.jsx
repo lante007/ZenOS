@@ -200,21 +200,105 @@ function formatRecordValue(value, suffix = '') {
   return `${value}${suffix}`;
 }
 
-function renderMarkdownParagraphs(text) {
-  const paragraphs = String(text || '')
-    .split(/\n{2,}/)
-    .map(part => part.trim())
-    .filter(Boolean);
-  return paragraphs.map((paragraph, paragraphIndex) => (
-    <p key={`paragraph-${paragraphIndex}`}>
-      {paragraph.split(/(\*\*[^*]+\*\*)/g).map((part, partIndex) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={`strong-${partIndex}`}>{part.slice(2, -2)}</strong>;
-        }
-        return part;
-      })}
-    </p>
-  ));
+function sanitiseAnswer(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/\u2014/g, ',')
+    .replace(/\u2013/g, ',')
+    .replace(/ --- /g, '. ')
+    .replace(/---/g, '.');
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderInlineMarkdown(text) {
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+function renderMarkdown(text) {
+  if (!text) return '';
+
+  const lines = sanitiseAnswer(text).split('\n');
+  const output = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (
+      line.includes('|')
+      && lines[i + 1]
+      && /^\|?[\s\-\|]+\|?$/.test(lines[i + 1])
+    ) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].includes('|')) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+
+      const headers = tableLines[0]
+        .split('|')
+        .filter(cell => cell.trim())
+        .map(cell => cell.trim());
+
+      const rows = tableLines
+        .slice(2)
+        .map(row => row
+          .split('|')
+          .filter(cell => cell.trim())
+          .map(cell => cell.trim()));
+
+      output.push(
+        '<table class="ask-table">'
+        + '<thead><tr>'
+        + headers.map(header => `<th>${renderInlineMarkdown(header)}</th>`).join('')
+        + '</tr></thead>'
+        + '<tbody>'
+        + rows.map(row => (
+          '<tr>'
+          + row.map(cell => `<td>${renderInlineMarkdown(cell)}</td>`).join('')
+          + '</tr>'
+        )).join('')
+        + '</tbody></table>'
+      );
+      continue;
+    }
+
+    if (line.startsWith('### ')) {
+      output.push(`<h4 class="ask-h4">${renderInlineMarkdown(line.slice(4))}</h4>`);
+    } else if (line.startsWith('## ')) {
+      output.push(`<h3 class="ask-h3">${renderInlineMarkdown(line.slice(3))}</h3>`);
+    } else if (line.startsWith('# ')) {
+      output.push(`<h2 class="ask-h2">${renderInlineMarkdown(line.slice(2))}</h2>`);
+    } else if (line.startsWith('---')) {
+      output.push('<hr class="ask-hr" />');
+    } else if (line.trim() === '') {
+      output.push('<br />');
+    } else {
+      output.push(`<p class="ask-p">${renderInlineMarkdown(line)}</p>`);
+    }
+    i++;
+  }
+
+  return output.join('');
+}
+
+function hasRealContradiction(text) {
+  const contradiction = sanitiseAnswer(text).trim();
+  const lower = contradiction.toLowerCase();
+  return contradiction.length > 20
+    && !lower.startsWith('no contradiction')
+    && !lower.startsWith('none')
+    && !lower.startsWith('exists between');
 }
 
 function formatScore(value) {
@@ -1913,6 +1997,7 @@ function AskZenexPage() {
       .filter(Boolean);
   }, [records, result]);
   const searchRecordCount = estateCount || records.length;
+  const hasContradiction = hasRealContradiction(result?.contradictions);
 
   useEffect(() => {
     let cancelled = false;
@@ -2029,7 +2114,10 @@ function AskZenexPage() {
 
             <article className="ask-answer-card">
               <h2>Answer</h2>
-              {renderMarkdownParagraphs(result.answer)}
+              <div
+                className="ask-answer-body"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(result.answer) }}
+              />
             </article>
 
             {(supportingRecords.length > 0 || result.supporting_record_ids?.length > 0) && (
@@ -2054,16 +2142,16 @@ function AskZenexPage() {
               </section>
             )}
 
-            {result.contradictions && (
+            {hasContradiction && (
               <article className="ask-contradiction-box">
                 <strong>⚠ Contradictory evidence found</strong>
-                <p>{result.contradictions}</p>
+                <p>{sanitiseAnswer(result.contradictions)}</p>
               </article>
             )}
 
             <article className="ask-recommendation-box">
               <strong>Recommended action</strong>
-              <p>{result.recommended_action}</p>
+              <p>{sanitiseAnswer(result.recommended_action)}</p>
             </article>
           </section>
         )}
