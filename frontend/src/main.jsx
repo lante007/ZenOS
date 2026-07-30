@@ -3049,14 +3049,6 @@ function KnowledgePage() {
         body: JSON.stringify(body),
       });
       if (!product) return;
-      console.log('Brief API response:', {
-        success: product.success,
-        has_brief: Boolean(product.brief),
-        brief_type: typeof product.brief,
-        brief_length: product.brief?.length,
-        word_count: product.word_count,
-        keys: Object.keys(product),
-      });
       if (product.error) {
         setBriefError(product.error || product.message || 'Brief generation failed. Please try again.');
         return;
@@ -3465,6 +3457,53 @@ function adminAskApi(path, options = {}) {
   });
 }
 
+async function adminAskRequest(path, options = {}) {
+  const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  const response = await fetch(`${API_BASE}/api/admin-ask${path}`, {
+    ...options,
+    headers: {
+      'x-evidenceos-tenant': 'admin',
+      'x-evidenceos-role': 'SUPER_ADMIN',
+      'x-evidenceos-user': 'emmanuel@auxeira.com',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  if (response.status === 401) {
+    browserIdToken = '';
+    browserAccessToken = '';
+    sessionStorage.removeItem(ID_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    window.location.href = '/admin/login?reason=expired';
+    return undefined;
+  }
+
+  const rawText = await response.text();
+  let payload = null;
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText);
+    } catch (err) {
+      if (!response.ok) {
+        throw new Error(rawText.slice(0, 300) || response.statusText || 'Ask Auxeira request failed');
+      }
+      return {
+        success: true,
+        answer: rawText,
+        tenants_covered: 0,
+        generated_at: new Date().toISOString(),
+      };
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || response.statusText || 'Ask Auxeira request failed');
+  }
+
+  return payload || {};
+}
+
 function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -3649,14 +3688,15 @@ function AdminAskPage() {
     setError('');
     setAnswer(null);
     try {
-      const data = await adminAskApi('/ask', {
+      const data = await adminAskRequest('/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: trimmed }),
       });
+      if (!data) return;
       setAnswer(data);
     } catch (err) {
-      setError(err.payload?.error || err.message || 'Ask Auxeira could not respond. Please try again.');
+      setError(err.message || 'Ask Auxeira could not respond. Please try again.');
     } finally {
       setLoading(false);
     }
