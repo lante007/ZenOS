@@ -2759,6 +2759,7 @@ function KnowledgePage() {
   const [audience, setAudience] = useState(knowledgeAudiences[0].id);
   const [brief, setBrief] = useState('');
   const [briefProduct, setBriefProduct] = useState(null);
+  const [briefError, setBriefError] = useState('');
   const [synthesisId, setSynthesisId] = useState(querySynthesisId);
   const [synthesis, setSynthesis] = useState(null);
   const [synthesisLoading, setSynthesisLoading] = useState(Boolean(querySynthesisId));
@@ -2813,6 +2814,8 @@ function KnowledgePage() {
   async function generateBrief() {
     if (!selectedRecord && !synthesisId) return;
     setIsGenerating(true);
+    setBriefError('');
+    setBrief('');
     setBriefProduct(null);
     try {
       const body = synthesisId
@@ -2823,30 +2826,28 @@ function KnowledgePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      setBrief(product.brief || product.content || '');
+      if (!product) return;
+      if (product.error) {
+        setBriefError(product.error || product.message || 'Brief generation failed. Please try again.');
+        return;
+      }
+      const generatedBrief = product.brief || product.content || '';
+      if (!generatedBrief) {
+        setBriefError('The evidence engine did not return a brief. Please try again.');
+        return;
+      }
+      setBrief(generatedBrief);
       setBriefProduct(product);
       return;
-    } catch {
-      // Keep the interface usable if the local API is offline or Anthropic is unavailable.
+    } catch (err) {
+      console.error('Brief generation error:', err);
+      setBriefError(err?.payload?.error
+        || err?.payload?.message
+        || err?.message
+        || 'Unable to generate brief. Check your connection and try again.');
     } finally {
       setIsGenerating(false);
     }
-    const output = [
-      `${selectedAudience.label} Brief: ${selectedRecord.programme_name}`,
-      '',
-      `Evidence confidence: ${selectedRecord.eqs_tier} | EQS ${selectedRecord.eqs_composite}`,
-      '',
-      `Core finding: ${selectedRecord.key_finding_1}`,
-      '',
-      `Decision implication: ${selectedRecord.decision_relevance}`,
-      '',
-      `Why this matters for ${selectedAudience.label}: ${selectedAudience.focus}.`,
-      '',
-      `Caveat: ${selectedRecord.limitations}`,
-      '',
-      `Recommended next action: ${selectedRecord.evidence_gap}`,
-    ].join('\n');
-    setBrief(output);
   }
 
   function reportSections() {
@@ -2945,6 +2946,7 @@ function KnowledgePage() {
                       setRecordId(record.adei_record_id);
                       setBrief('');
                       setBriefProduct(null);
+                      setBriefError('');
                     }}
                   >
                     <strong>{record.programme_name}</strong>
@@ -2970,6 +2972,7 @@ function KnowledgePage() {
                     setAudience(item.id);
                     setBrief('');
                     setBriefProduct(null);
+                    setBriefError('');
                   }}
                 >
                   <strong>{item.label}</strong>
@@ -3010,6 +3013,21 @@ function KnowledgePage() {
             <div className="brief-loading">
               <span className="pulse-dot" />
               <strong>Generating {selectedAudience.label} brief for {displayProgrammeName}...</strong>
+            </div>
+          ) : briefError ? (
+            <div className="brief-error">
+              <strong>Generation failed</strong>
+              <p>{briefError}</p>
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={() => {
+                  setBriefError('');
+                  generateBrief();
+                }}
+              >
+                Try again
+              </button>
             </div>
           ) : brief ? (
             <article className="report-card">
