@@ -1202,11 +1202,6 @@ button.estate-stat-tile {
   color: #4CAF50;
 }
 
-.explanation-coverage {
-  font-size: 12px;
-  color: #FF9800;
-}
-
 .explanation-note {
   font-size: 11px;
   color: var(--color-muted);

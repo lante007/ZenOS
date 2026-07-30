@@ -935,6 +935,8 @@ function DashboardPage() {
   const [estate, setEstate] = useState(null);
   const [estateLoading, setEstateLoading] = useState(true);
   const [estateTypesOpen, setEstateTypesOpen] = useState(false);
+  const [showProvincesModal, setShowProvincesModal] = useState(false);
+  const [showYearsModal, setShowYearsModal] = useState(false);
   const [portfolio, setPortfolio] = useState(null);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [portfolioProgrammesOpen, setPortfolioProgrammesOpen] = useState(false);
@@ -967,9 +969,7 @@ function DashboardPage() {
   const avgEqs = (
     (dimRigour + dimDataQuality + dimTransparency + dimReplicability + dimPolicyRelevance) / 5
   ).toFixed(1);
-  const expected = 74;
   const totalRecords = cascade?.corpus_size || estate?.total_records || stats?.records || records.length || 0;
-  const coveragePct = Math.round((totalRecords / expected) * 100);
 
   useEffect(() => {
     let cancelled = false;
@@ -1150,16 +1150,16 @@ function DashboardPage() {
               <span>Programmes</span>
               <small className="estate-tile-subtitle">Across the portfolio</small>
             </article>
-            <article className="estate-stat-tile">
+            <button className="estate-stat-tile" type="button" onClick={() => setShowProvincesModal(true)}>
               <strong>{estateLoading ? '...' : estate?.total_provinces || 0}</strong>
               <span>Provinces</span>
               <small className="estate-tile-subtitle">Geographic reach</small>
-            </article>
-            <article className="estate-stat-tile">
+            </button>
+            <button className="estate-stat-tile" type="button" onClick={() => setShowYearsModal(true)}>
               <strong>{estateLoading ? '...' : estate?.years_span || 0}</strong>
               <span>Years of evidence</span>
               <small className="estate-tile-subtitle">{estateLoading ? '...' : estateYearSubtitle}</small>
-            </article>
+            </button>
           </div>
           <p>Last document ingested: {estate?.last_ingestion ? formatDisplayDate(estate.last_ingestion) : 'Not recorded'}</p>
         </section>
@@ -1203,6 +1203,86 @@ function DashboardPage() {
           </div>
         )}
 
+        {showProvincesModal && (
+          <div className="modal-overlay" role="presentation" onClick={() => setShowProvincesModal(false)}>
+            <section className="modal-panel" role="dialog" aria-modal="true" aria-label="Provincial coverage" onClick={event => event.stopPropagation()}>
+              <button className="modal-close" type="button" aria-label="Close provincial coverage" onClick={() => setShowProvincesModal(false)}>
+                ×
+              </button>
+              <h2 className="modal-title">Provincial Coverage</h2>
+              <p className="modal-subtitle">
+                {estate?.total_provinces || 0} provinces represented across {estate?.total_records || 0} classified documents
+              </p>
+
+              {(estate?.province_breakdown || []).map(item => (
+                <div className="type-row" key={item.province}>
+                  <span className="type-name">{item.province}</span>
+                  <span className="type-bar-wrap">
+                    <span className="type-bar-fill" style={{ width: `${item.pct || 0}%` }} />
+                  </span>
+                  <span className="type-count">{item.count}</span>
+                  <span className="type-percent">{item.pct || 0}%</span>
+                </div>
+              ))}
+
+              <div className="modal-doc-list">
+                <div className="breakdown-header">Documents by province</div>
+                {records
+                  .filter(record => Array.isArray(record.provinces) && record.provinces.length > 0)
+                  .map(record => (
+                    <div className="modal-doc-item" key={recordId(record)}>
+                      <span className="modal-tier-badge">{record.eqs_tier || 'N/A'}</span>
+                      <span style={{ flex: 1 }}>{record.programme_name}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+                        {record.provinces.join(', ')}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {showYearsModal && (
+          <div className="modal-overlay" role="presentation" onClick={() => setShowYearsModal(false)}>
+            <section className="modal-panel" role="dialog" aria-modal="true" aria-label="Evidence by year" onClick={event => event.stopPropagation()}>
+              <button className="modal-close" type="button" aria-label="Close evidence by year" onClick={() => setShowYearsModal(false)}>
+                ×
+              </button>
+              <h2 className="modal-title">Evidence by Year</h2>
+              <p className="modal-subtitle">
+                {estate?.years_span || 0} years represented across {estate?.total_records || 0} classified documents
+              </p>
+
+              {(estate?.year_breakdown || []).map(item => (
+                <div className="type-row" key={item.year}>
+                  <span className="type-name">{item.year || 'Not recorded'}</span>
+                  <span className="type-bar-wrap">
+                    <span className="type-bar-fill" style={{ width: `${item.pct || 0}%` }} />
+                  </span>
+                  <span className="type-count">{item.count}</span>
+                  <span className="type-percent">{item.pct || 0}%</span>
+                </div>
+              ))}
+
+              <div className="modal-doc-list">
+                <div className="breakdown-header">Documents by year</div>
+                {[...records]
+                  .sort((left, right) => String(left.year || left.publication_year || '').localeCompare(String(right.year || right.publication_year || '')))
+                  .map(record => (
+                    <div className="modal-doc-item" key={recordId(record)}>
+                      <span className="modal-tier-badge">{record.eqs_tier || 'N/A'}</span>
+                      <span style={{ flex: 1 }}>{record.programme_name}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+                        {record.year || record.publication_year || 'Not recorded'} · EQS {record.eqs_composite || 'N/A'}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          </div>
+        )}
+
         <section className="dashboard-grid" aria-label="Evidence health summary">
           <article className="health-panel">
             <div className="panel-title">
@@ -1220,11 +1300,8 @@ function DashboardPage() {
               <span className="explanation-quality">
                 Quality: {avgEqs}/5.0 across {totalRecords} classified documents
               </span>
-              <span className="explanation-coverage">
-                Coverage: {totalRecords} of {expected} documents classified ({coveragePct}% of archive)
-              </span>
               <span className="explanation-note">
-                Health score combines quality and coverage. Increases as more documents are classified.
+                Health score reflects evidence quality and currency. Increases as more documents are classified.
               </span>
             </div>
             <div className="score-track" aria-hidden="true">

@@ -63,6 +63,44 @@ router.get('/estate',
         ORDER BY count DESC, document_type
       `, [req.tenant.slug]);
 
+      const provincesResult = await pool.query(`
+        SELECT
+          province,
+          COUNT(*)::int AS count
+        FROM (
+          SELECT UNNEST(provinces) AS province
+          FROM ${schema}.intelligence_records
+          WHERE tenant_id = $1
+            AND record_status = 'ACTIVE'
+            AND provinces IS NOT NULL
+        ) p
+        WHERE province IS NOT NULL
+          AND province <> ''
+        GROUP BY province
+        ORDER BY count DESC, province
+      `, [req.tenant.slug]);
+
+      const yearsResult = await pool.query(`
+        SELECT
+          year,
+          COUNT(*)::int AS count
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+          AND year IS NOT NULL
+        GROUP BY year
+        ORDER BY year ASC
+      `, [req.tenant.slug]);
+
+      const totalProvinceRecords = provincesResult.rows.reduce(
+        (sum, province) => sum + Number(province.count || 0),
+        0
+      );
+      const totalYearRecords = yearsResult.rows.reduce(
+        (sum, year) => sum + Number(year.count || 0),
+        0
+      );
+
       const row = summary.rows[0] || {};
       const yearsSpan = row.latest_year && row.earliest_year
         ? row.latest_year - row.earliest_year
@@ -80,6 +118,20 @@ router.get('/estate',
           type: row.document_type,
           document_type: row.document_type,
           count: row.count,
+        })),
+        province_breakdown: provincesResult.rows.map(row => ({
+          province: row.province,
+          count: row.count,
+          pct: totalProvinceRecords > 0
+            ? Math.round((Number(row.count || 0) / totalProvinceRecords) * 100)
+            : 0,
+        })),
+        year_breakdown: yearsResult.rows.map(row => ({
+          year: row.year,
+          count: row.count,
+          pct: totalYearRecords > 0
+            ? Math.round((Number(row.count || 0) / totalYearRecords) * 100)
+            : 0,
         })),
       });
     } catch (err) {
