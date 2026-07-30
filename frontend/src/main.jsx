@@ -2976,7 +2976,7 @@ function KnowledgePage() {
   const { records, source } = useLiveRecords();
   const querySynthesisId = new URLSearchParams(window.location.search).get('synthesis_id') || '';
   const eligibleRecords = records.filter(record => ['Tier 1', 'Tier 2'].includes(record.eqs_tier));
-  const [recordId, setRecordId] = useState(eligibleRecords[0]?.adei_record_id || '');
+  const [selectedRecordId, setSelectedRecordId] = useState(eligibleRecords[0]?.adei_record_id || '');
   const [audience, setAudience] = useState(knowledgeAudiences[0].id);
   const [brief, setBrief] = useState('');
   const [briefProduct, setBriefProduct] = useState(null);
@@ -2989,10 +2989,10 @@ function KnowledgePage() {
   useEffect(() => {
     if (synthesisId) return;
     if (!eligibleRecords.length) return;
-    if (!eligibleRecords.some(record => record.adei_record_id === recordId)) {
-      setRecordId(eligibleRecords[0].adei_record_id);
+    if (!eligibleRecords.some(record => record.adei_record_id === selectedRecordId)) {
+      setSelectedRecordId(eligibleRecords[0].adei_record_id);
     }
-  }, [eligibleRecords, recordId, synthesisId]);
+  }, [eligibleRecords, selectedRecordId, synthesisId]);
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('synthesis_id') || '';
@@ -3009,7 +3009,7 @@ function KnowledgePage() {
       .finally(() => setSynthesisLoading(false));
   }, []);
 
-  const selectedRecord = eligibleRecords.find(record => record.adei_record_id === recordId) || eligibleRecords[0];
+  const selectedRecord = eligibleRecords.find(record => record.adei_record_id === selectedRecordId) || eligibleRecords[0];
   const selectedAudience = knowledgeAudiences.find(item => item.id === audience) || knowledgeAudiences[0];
   const synthesisRecords = synthesis?.record_ids
     ? records.filter(record => synthesis.record_ids.includes(record.id) || synthesis.record_ids.includes(record.adei_record_id))
@@ -3165,11 +3165,11 @@ function KnowledgePage() {
               <div className="record-picker">
                 {eligibleRecords.map((record) => (
                   <button
-                    className={record.adei_record_id === recordId ? 'selected' : ''}
+                    className={record.adei_record_id === selectedRecordId ? 'selected' : ''}
                     type="button"
                     key={record.adei_record_id}
                     onClick={() => {
-                      setRecordId(record.adei_record_id);
+                      setSelectedRecordId(record.adei_record_id);
                       setBrief('');
                       setBriefProduct(null);
                       setBriefError('');
