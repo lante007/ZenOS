@@ -38,6 +38,27 @@ function signingKeyFor(tenant) {
   };
 }
 
+function getCandidatePools(req) {
+  const pools = [
+    req.tenant?.cognito_pool_id,
+    process.env.COGNITO_USER_POOL_ID || process.env.ZENEX_COGNITO_POOL_ID || 'us-east-1_a4QBPMV0D',
+    process.env.ADMIN_COGNITO_POOL_ID || process.env.EVIDENCEOS_ADMIN_POOL_ID || 'us-east-1_RR62sMTY0',
+  ];
+  return [...new Set(pools.filter(Boolean))];
+}
+
+function verifyWithPool(token, poolId) {
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
+  const tenant = { cognito_pool_id: poolId };
+  const issuer = `https://cognito-idp.${region}.amazonaws.com/${poolId}`;
+  return new Promise((resolve, reject) => {
+    jwt.verify(token, signingKeyFor(tenant), { issuer }, (err, verified) => {
+      if (err) reject(err);
+      else resolve(verified);
+    });
+  });
+}
+
 function toUser(payload, tenantSlug) {
   const role = payload['custom:role'] || payload['custom:custom:role'] || payload.role || 'EVIDENCE_ANALYST';
   return {
@@ -68,22 +89,28 @@ function authenticate(options = {}) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      if (!req.tenant?.cognito_pool_id) {
-        if (process.env.NODE_ENV === 'production') {
-          return res.status(500).json({ error: 'Tenant auth is not configured' });
-        }
-        const decoded = jwt.decode(token) || {};
-        req.user = toUser(decoded, req.tenant?.slug);
-        return next();
+      const pools = getCandidatePools(req);
+      if (!pools.length) {
+        return res.status(500).json({ error: 'Tenant auth is not configured' });
       }
 
-      const issuer = `https://cognito-idp.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${req.tenant.cognito_pool_id}`;
-      const payload = await new Promise((resolve, reject) => {
-        jwt.verify(token, signingKeyFor(req.tenant), { issuer }, (err, verified) => {
-          if (err) reject(err);
-          else resolve(verified);
+      let payload = null;
+      let lastAuthError = null;
+      for (const poolId of pools) {
+        try {
+          payload = await verifyWithPool(token, poolId);
+          break;
+        } catch (err) {
+          lastAuthError = err;
+        }
+      }
+
+      if (!payload) {
+        return res.status(401).json({
+          error: 'Invalid authentication token',
+          detail: process.env.NODE_ENV === 'production' ? undefined : lastAuthError?.message,
         });
-      });
+      }
 
       req.user = toUser(payload, req.tenant.slug);
       if (req.user.tenant_id !== req.tenant.slug) {
