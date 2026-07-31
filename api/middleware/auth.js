@@ -59,13 +59,25 @@ function verifyWithPool(token, poolId) {
   });
 }
 
-function toUser(payload, tenantSlug) {
-  const role = payload['custom:role'] || payload['custom:custom:role'] || payload.role || 'EVIDENCE_ANALYST';
+function normaliseRole(role, isAdminConsole) {
+  if (!isAdminConsole) return role || 'EVIDENCE_ANALYST';
+  const value = String(role || '').toUpperCase();
+  if (['SUPERADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(value)) return 'SUPER_ADMIN';
+  if (['FOUNDER', 'AUXEIRA_FOUNDER'].includes(value)) return 'AUXEIRA_FOUNDER';
+  return value || 'SUPER_ADMIN';
+}
+
+function toUser(payload, tenantSlug, options = {}) {
+  const rawRole = payload['custom:role'] || payload['custom:custom:role'] || payload.role;
+  const role = normaliseRole(rawRole, options.isAdminConsole);
+  const tenantId = options.isAdminConsole
+    ? 'admin'
+    : payload['custom:tenant_id'] || payload['custom:custom:tenant_id'] || payload['custom:tenant'] || tenantSlug;
   return {
     sub: payload.sub,
     email: payload.email,
     role,
-    tenant_id: payload['custom:tenant_id'] || payload['custom:custom:tenant_id'] || payload['custom:tenant'] || tenantSlug,
+    tenant_id: tenantId,
     name: payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(' '),
   };
 }
@@ -112,7 +124,9 @@ function authenticate(options = {}) {
         });
       }
 
-      req.user = toUser(payload, req.tenant.slug);
+      req.user = toUser(payload, req.tenant.slug, {
+        isAdminConsole: Boolean(req.tenant?.is_admin_console),
+      });
       if (req.user.tenant_id !== req.tenant.slug) {
         return res.status(403).json({ error: 'Token tenant does not match request tenant' });
       }
