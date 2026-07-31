@@ -7,7 +7,6 @@
 
 require('dotenv').config();
 const express = require('express');
-const path = require('path');
 
 const { tenantMiddleware } = require('./api/middleware/tenant');
 const { authenticate } = require('./api/middleware/auth');
@@ -59,7 +58,6 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'web')));
 
 app.use(tenantMiddleware);
 
@@ -158,10 +156,6 @@ app.get('/api/exec-summary', authenticate(), assertNoBoardAccess, async (req, re
   } catch (err) {
     next(err);
   }
-});
-
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'web', 'index.html'));
 });
 
 app.use((err, req, res, _next) => {
