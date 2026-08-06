@@ -1,12 +1,18 @@
 'use strict';
 /**
- * ADEI Text Extractor
- * Layered pipeline: metadata → structure detection → synopsis → classify
- * Falls back to chunked extraction for scanned/unstructured PDFs
+ * ADEI Text Extractor (Phase B3 rebuild)
+ * PDF: pdf-parse + chars-per-page NEEDS_OCR gate, no retry-and-chunk fallback.
+ * PPTX: python-pptx subprocess (slides + speaker notes), fed into the same
+ *       length-based quality gate as PDF.
+ * DOCX: mammoth body text + tables rendered as tab-separated rows.
  */
 
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const crypto = require('crypto');
 
 const SUPPORTED_TYPES = [
@@ -18,9 +24,6 @@ const SUPPORTED_TYPES = [
   'text/plain',
 ];
 
-/**
- * Determine if a MIME type is supported
- */
 function isSupportedType(mimeType) {
   return SUPPORTED_TYPES.includes(mimeType) ||
     mimeType.includes('wordprocessingml') ||
@@ -29,72 +32,146 @@ function isSupportedType(mimeType) {
     mimeType.startsWith('text/');
 }
 
-/**
- * Extract text from PDF buffer
- */
-async function extractFromPDF(buffer) {
-  try {
-    const data = await pdfParse(buffer, { max: 0 }); // 0 = all pages
-    return {
-      text: data.text,
-      pageCount: data.numpages,
-      method: 'pdf-parse',
-    };
-  } catch (err) {
-    // Fallback: chunked extraction — first 5k + middle 5k + last 5k chars
-    try {
-      const data = await pdfParse(buffer, { max: 5 });
-      const firstChunk = data.text.substring(0, 5000);
-      const lastData = await pdfParse(buffer, { max: 0 });
-      const fullText = lastData.text;
-      const mid = Math.floor(fullText.length / 2);
-      const midChunk = fullText.substring(mid - 2500, mid + 2500);
-      const lastChunk = fullText.substring(fullText.length - 5000);
-      return {
-        text: firstChunk + '\n\n[...]\n\n' + midChunk + '\n\n[...]\n\n' + lastChunk,
-        pageCount: lastData.numpages,
-        method: 'chunked-fallback',
-        quality: 'CHUNKED',
-      };
-    } catch (e2) {
-      throw new Error(`PDF extraction failed: ${err.message}`);
-    }
-  }
+function qualityFromLength(len) {
+  if (len < 2000) return 'FAILED';
+  if (len < 5000) return 'LOW';
+  if (len < 15000) return 'ADEQUATE';
+  return 'GOOD';
 }
 
 /**
- * Extract text from DOCX buffer
+ * Extract text from PDF buffer.
+ * charsPerPage < 100 signals a scanned/image PDF (no OCR available) rather
+ * than a generic FAILED, so downstream can route it differently.
  */
+async function extractFromPDF(buffer) {
+  let data;
+  try {
+    data = await pdfParse(buffer, { max: 0 });
+  } catch (err) {
+    throw new Error(`PDF extraction failed: ${err.message}`);
+  }
+
+  const text = data.text || '';
+  const pageCount = data.numpages || 1;
+  const charsPerPage = text.length / (pageCount || 1);
+
+  if (charsPerPage < 100) {
+    return {
+      text: '',
+      quality: 'NEEDS_OCR',
+      reason: 'scanned_or_image_pdf',
+      charCount: text.length,
+      charsPerPage: Math.round(charsPerPage),
+      pageCount,
+      method: 'pdf-parse',
+    };
+  }
+
+  return {
+    text,
+    quality: qualityFromLength(text.length),
+    charsPerPage: Math.round(charsPerPage),
+    pageCount,
+    method: 'pdf-parse',
+  };
+}
+
+/**
+ * Extract text from DOCX buffer: raw body text via mammoth, plus any
+ * tables rendered separately as tab-separated rows and appended after
+ * the body. Mammoth converts tables to HTML natively (no style map is
+ * needed to get the structure); we read that HTML and join cells with
+ * tabs rather than reconstructing Markdown formatting.
+ */
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function cellText(cellHtml) {
+  return decodeHtmlEntities(cellHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function htmlTableToTabSeparated(tableHtml) {
+  const rowMatches = tableHtml.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
+  const rows = rowMatches
+    .map(rowHtml => {
+      const cellMatches = rowHtml.match(/<t[hd][^>]*>[\s\S]*?<\/t[hd]>/gi) || [];
+      return cellMatches.map(cellText).join('\t');
+    })
+    .filter(row => row.length > 0);
+  return rows.join('\n');
+}
+
+async function extractTablesAsTabSeparated(buffer) {
+  const { value: html } = await mammoth.convertToHtml({ buffer });
+  const tableMatches = html.match(/<table[^>]*>[\s\S]*?<\/table>/gi) || [];
+  return tableMatches
+    .map(htmlTableToTabSeparated)
+    .filter(Boolean);
+}
+
 async function extractFromDOCX(buffer) {
   const result = await mammoth.extractRawText({ buffer });
+  const bodyText = result.value || '';
+
+  let tables = [];
+  try {
+    tables = await extractTablesAsTabSeparated(buffer);
+  } catch {
+    tables = [];
+  }
+
+  const text = tables.length
+    ? `${bodyText}\n\n--- TABLES ---\n\n${tables.join('\n\n')}`
+    : bodyText;
+
   return {
-    text: result.value,
-    method: 'mammoth',
+    text,
+    tableCount: tables.length,
+    method: 'mammoth+tables',
     warnings: result.messages,
   };
 }
 
 /**
- * Extract text from PPTX buffer (basic XML extraction)
+ * Extract text from PPTX buffer via a python-pptx subprocess: slide body
+ * text plus speaker notes, in slide order, with explicit slide separators.
+ * Output is plain text fed into the same length-based quality gate as PDF.
  */
+const PPTX_SCRIPT = path.join(__dirname, 'pptx_extract.py');
+
 async function extractFromPPTX(buffer) {
-  // Basic extraction from PPTX XML
-  const str = buffer.toString('utf8', 0, Math.min(buffer.length, 500000));
-  // Extract text between <a:t> tags (PowerPoint text runs)
-  const matches = str.match(/<a:t[^>]*>([^<]+)<\/a:t>/g) || [];
-  const text = matches
-    .map(m => m.replace(/<[^>]+>/g, ''))
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const tmpFile = path.join(os.tmpdir(), `pptx-${crypto.randomUUID()}.pptx`);
+  fs.writeFileSync(tmpFile, buffer);
+
+  let text;
+  try {
+    text = execFileSync('python3', [PPTX_SCRIPT, tmpFile], {
+      encoding: 'utf8',
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (err) {
+    throw new Error(`python-pptx extraction failed: ${err.stderr || err.message}`);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+
   return {
-    text: text || str.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').substring(0, 15000),
-    method: 'pptx-xml',
+    text,
+    quality: qualityFromLength(text.length),
+    method: 'python-pptx',
   };
 }
 
 /**
- * Main extraction function — returns cleaned text and quality metadata
+ * Main extraction function - returns cleaned text and quality metadata.
  */
 async function extractText(buffer, mimeType, filename) {
   if (!isSupportedType(mimeType)) {
@@ -118,34 +195,46 @@ async function extractText(buffer, mimeType, filename) {
   ) {
     result = await extractFromPPTX(buffer);
   } else {
-    // Last resort: raw text
     result = { text: buffer.toString('utf8').substring(0, 30000), method: 'raw' };
   }
 
-  // Clean the text
+  // Preserve structural whitespace (slide separators, DOCX table tabs) -
+  // only collapse runs of plain spaces and excess blank lines, not tabs/newlines.
   let text = (result.text || '')
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // control chars
-    .replace(/\s+/g, ' ')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/ +/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  // Compute content hash for duplicate detection
   const hash = crypto.createHash('sha256').update(buffer).digest('hex');
 
-  // Assess quality
-  let quality = 'GOOD';
-  if (text.length < 200) quality = 'FAILED';
-  else if (text.length < 1000) quality = 'LOW';
-  else if (text.length < 3000) quality = 'ADEQUATE';
-
-  // PII scan
   const piiPatterns = [
-    /\b\d{13}\b/,                            // SA ID number
-    /\b[A-Z][0-9]{8}\b/,                     // Passport
-    /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/, // Email
+    /\b\d{13}\b/,
+    /\b[A-Z][0-9]{8}\b/,
+    /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/,
   ];
   const hasPII = piiPatterns.some(p => p.test(text));
 
-  // Truncate for classification (keep first 8000 + last 2000 chars)
+  // Final content-quality backstop: applies regardless of file type,
+  // except NEEDS_OCR which is a more specific signal than generic FAILED.
+  if (result.quality !== 'NEEDS_OCR' && text.length < 2000) {
+    return {
+      text: '',
+      quality: 'FAILED',
+      reason: result.reason || 'insufficient_content',
+      charCount: text.length,
+      hash,
+      rights: hasPII ? 'RESTRICTED' : 'CLEAR',
+      method: result.method,
+      pageCount: result.pageCount || null,
+      flag: 'EXTRACTION_POOR',
+    };
+  }
+
+  const quality = result.quality || qualityFromLength(text.length);
+
+  // Known limitation: pure head+tail slicing discards appended tables/notes
+  // for large documents. Flagged for B4 - see docs/B4_NOTES.md.
   const classificationText = text.length > 10000
     ? text.substring(0, 8000) + '\n\n[...]\n\n' + text.substring(text.length - 2000)
     : text;
@@ -158,7 +247,9 @@ async function extractText(buffer, mimeType, filename) {
     rights: hasPII ? 'RESTRICTED' : 'CLEAR',
     method: result.method,
     pageCount: result.pageCount || null,
-    flag: quality === 'FAILED' ? 'EXTRACTION_POOR' : null,
+    charsPerPage: result.charsPerPage || null,
+    tableCount: result.tableCount || null,
+    flag: quality === 'FAILED' || quality === 'NEEDS_OCR' ? 'EXTRACTION_POOR' : null,
   };
 }
 
