@@ -256,7 +256,7 @@ async function createRecord(tenant, record, document = {}) {
         dosage_documented, publication_status, policy_relevance_score,
         strategic_value_score, nls_alignment, funrs_alignment, dbe_adoption_status,
         audience_relevance, evidence_gap_1, evidence_gap_2,
-        commissioning_standards_met, eqs_composite, eqs_tier,
+        commissioning_standards_count, eqs_composite, eqs_tier,
         dim_methodological_rigour, dim_data_quality, dim_transparency,
         dim_replicability, dim_context_relevance, half_life_rating,
         evidence_capital_score, policy_relevance_weight, sroi_eligible,
