@@ -57,6 +57,7 @@ router.post('/ask',
               )::int AS active,
               MAX(classified_at) AS last_ingestion
             FROM ${schema}.intelligence_records
+            WHERE record_status = 'ACTIVE'
           `);
           const queueStats = await pool.query(`
             SELECT COUNT(*)::int AS pending

@@ -583,7 +583,7 @@ async function tenantCounts(row) {
       SELECT
         (SELECT COUNT(*)::int FROM ${schema}.users) AS users,
         (SELECT COUNT(*)::int FROM ${schema}.documents) AS documents,
-        (SELECT COUNT(*)::int FROM ${schema}.intelligence_records) AS records,
+        (SELECT COUNT(*)::int FROM ${schema}.intelligence_records WHERE record_status != 'SOFT_DELETED') AS records,
         (SELECT COALESCE(SUM(claude_input_tokens), 0)::int FROM ${schema}.ingestion_jobs WHERE created_at >= date_trunc('month', NOW())) AS monthly_input_tokens,
         (SELECT COALESCE(SUM(claude_output_tokens), 0)::int FROM ${schema}.ingestion_jobs WHERE created_at >= date_trunc('month', NOW())) AS monthly_output_tokens
     `);
@@ -646,6 +646,7 @@ async function adminTenantSummaries() {
       (
         SELECT COUNT(*)::int
         FROM zenex.intelligence_records
+        WHERE record_status != 'SOFT_DELETED'
       ) AS documents
     FROM master.tenants t
     WHERE t.slug = 'zenex'

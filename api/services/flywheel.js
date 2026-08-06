@@ -79,7 +79,8 @@ async function detectCommissioningGaps(tenant, pool) {
        WHERE tenant_id = $1
          AND programme_name = $2
          AND document_type = 'Impact Evaluation'
-         AND year::int >= 2021`,
+         AND year::int >= 2021
+         AND record_status = 'ACTIVE'`,
       [tenant.slug, prog]
     );
     if (Number(result.rows[0].count) === 0) {

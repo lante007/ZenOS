@@ -46,8 +46,10 @@ router.get('/:id',
              document_type, eqs_composite,
              classified_at
            FROM ${schema}.intelligence_records
-           WHERE id = ANY($1)`,
-          [record.source_record_ids]
+           WHERE id = ANY($1)
+             AND tenant_id = $2
+             AND record_status = 'ACTIVE'`,
+          [record.source_record_ids, req.tenant.slug]
         )).rows
         : [];
 
