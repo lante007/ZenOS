@@ -1,6 +1,6 @@
 'use strict';
 /**
- * ADEI EQS Scorer
+ * ADEI EQS Scorer (Phase B5 rebuild)
  * Evidence Quality Score - three-pathway v2.0 scoring for new classifications.
  *
  * Methodology rule: score each document against its intended evidentiary
@@ -92,7 +92,20 @@ function detectEQSPathway(documentType, evaluationSubtype) {
   };
 }
 
-function scoreMethodologicalRigour(record) {
+// Phase B5: scores by the B4 Pass 2 evaluation_design enum first (the
+// precise field), falling back to the old free-text evaluation_subtype
+// lookup only when evaluation_design is absent.
+const DESIGN_SCORES = {
+  'RCT': 4.5,
+  'Quasi-Experimental': 3.5,
+  'Longitudinal Panel': 3.2,
+  'Mixed Methods': 3.0,
+  'Pre-Post Without Comparison': 2.5,
+  'Cross-Sectional': 2.0,
+  'Qualitative': 1.8,
+};
+
+function scoreFromSubtype(record) {
   const subtype = (record.evaluation_subtype || '').toLowerCase();
   const hasControl = record.has_control_group;
 
@@ -110,8 +123,28 @@ function scoreMethodologicalRigour(record) {
   return 2.0;
 }
 
+function scoreMethodologicalRigour(record) {
+  let score;
+  if (record.evaluation_design && DESIGN_SCORES[record.evaluation_design] != null) {
+    score = DESIGN_SCORES[record.evaluation_design];
+  } else if (record.evaluation_subtype) {
+    score = scoreFromSubtype(record);
+  } else {
+    score = 1.0;
+  }
+
+  if (record.has_control_group !== true && !record.comparison_group) {
+    score *= 0.9;
+  }
+
+  return score;
+}
+
 function scoreDataQuality(record) {
-  let score = 2.0;
+  const learnersNull = record.sample_size_learners == null;
+  const schoolsNull = record.sample_size_schools == null;
+  let score = (learnersNull && schoolsNull) ? 1.5 : 2.0;
+
   const learners = parseInt(record.sample_size_learners || '0', 10);
   const schools = parseInt(record.sample_size_schools || '0', 10);
 
@@ -185,15 +218,27 @@ function scoreImpactEvaluation(record) {
   };
 }
 
+// Phase B5: fidelity_reported === null now contributes -1 (not 0) to the
+// checklist score, since "not stated" should score worse than
+// "explicitly reported false". Floor re-normalised to 1.0.
+function processImplementationChecklistScore(record) {
+  let score = 0;
+  score += record.theory_of_change_explicit ? 1 : 0;
+
+  if (record.fidelity_reported === true) score += 1;
+  else if (record.fidelity_reported === false) score += 0;
+  else score -= 1;
+
+  score += record.dosage_documented ? 1 : 0;
+  score += record.intervention_type != null ? 1 : 0;
+  score += record.implementation_period != null ? 1 : 0;
+
+  return score;
+}
+
 function scoreProcessEvaluation(record) {
-  const implScore = [
-    record.theory_of_change_explicit,
-    record.fidelity_reported,
-    record.dosage_documented,
-    record.intervention_type != null,
-    record.implementation_period != null,
-  ].filter(Boolean).length;
-  const dim1 = 1 + (implScore / 5) * 4;
+  const checklistScore = processImplementationChecklistScore(record);
+  const dim1 = Math.max(1.0, 1 + (checklistScore / 5) * 4);
 
   const dim2 = scoreDataQuality(record);
   const dim3 = scoreTransparency(record);
@@ -203,7 +248,7 @@ function scoreProcessEvaluation(record) {
     record.population_served != null,
     record.implementing_organisation_name != null,
     record.external_evaluator,
-    (record.commissioning_standards_met || 0) >= 5,
+    (record.commissioning_standards_met === true) || (record.commissioning_standards_count >= 5),
   ].filter(Boolean).length;
   const dim5 = 1 + (stakeholderScore / 4) * 4;
 
@@ -232,7 +277,13 @@ function scoreResearchStudy(record) {
     record.evidence_gap_1 != null,
     record.limitations != null,
   ].filter(Boolean).length;
-  const dim1 = 1 + (synthesisScore / 5) * 4;
+  let dim1 = 1 + (synthesisScore / 5) * 4;
+
+  // Phase B5: null methodology_description caps dim1 regardless of how
+  // many other checklist items are populated.
+  if (!record.methodology_description) {
+    dim1 = Math.min(dim1, 2.0);
+  }
 
   const sourceScore = [
     parseInt(record.year || 0, 10) >= 2020,
@@ -263,15 +314,59 @@ function scoreResearchStudy(record) {
   };
 }
 
-function computeEQS(record) {
+const NULL_DIMENSIONS = {
+  methodological_rigour: null,
+  data_quality: null,
+  transparency: null,
+  replicability: null,
+  context_relevance: null,
+};
+
+/**
+ * Phase B5: accepts options = { flags: [], extractionQuality: 'GOOD' }.
+ * FAILED/NEEDS_OCR short-circuits to a null-scored, non-citable record.
+ * LOW applies a 0.85 composite multiplier. CAP_AT_TIER_2 in flags forces
+ * a computed TIER_1 down to TIER_2 and caps the composite at 3.49.
+ */
+function computeEQS(record, options = {}) {
+  const { flags = [], extractionQuality = 'GOOD' } = options;
   const pathway = getEvaluationPathway(record);
+  const legacyPathway = legacyPathwayFor(record, pathway);
+
+  if (extractionQuality === 'FAILED' || extractionQuality === 'NEEDS_OCR') {
+    return {
+      applicable: true,
+      partial: false,
+      pathway,
+      eqs_scoring_pathway: pathway,
+      eqs_pathway: legacyPathway,
+      eqs_version: 'v2.0',
+      pathway_multiplier: pathwayMultiplier(pathway),
+      dimensions: NULL_DIMENSIONS,
+      eqs_composite: null,
+      confidence_tier: 'N_A',
+      board_citable: false,
+      sroi_eligible: false,
+      publishable: false,
+    };
+  }
+
   let result;
   if (pathway === 'PROCESS') result = scoreProcessEvaluation(record);
   else if (pathway === 'RESEARCH') result = scoreResearchStudy(record);
   else result = scoreImpactEvaluation(record);
 
-  const tier = tierForComposite(result.composite);
-  const legacyPathway = legacyPathwayFor(record, pathway);
+  let composite = result.composite;
+  if (extractionQuality === 'LOW') {
+    composite = Math.round(composite * 0.85 * 100) / 100;
+  }
+
+  let tier = tierForComposite(composite);
+  const capNote = flags.find(f => f.action === 'CAP_AT_TIER_2');
+  if (capNote && tier === 'TIER_1') {
+    tier = 'TIER_2';
+    composite = Math.min(composite, 3.49);
+  }
 
   return {
     applicable: true,
@@ -282,7 +377,7 @@ function computeEQS(record) {
     eqs_version: 'v2.0',
     pathway_multiplier: pathwayMultiplier(pathway),
     dimensions: result.dimensions,
-    eqs_composite: result.composite,
+    eqs_composite: composite,
     confidence_tier: tier,
     board_citable: tier === 'TIER_1',
     sroi_eligible: tier !== 'EXCLUDED' && record.cost_data_present !== 'ABSENT',
