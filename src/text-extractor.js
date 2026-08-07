@@ -233,14 +233,19 @@ async function extractText(buffer, mimeType, filename) {
 
   const quality = result.quality || qualityFromLength(text.length);
 
-  // Known limitation: pure head+tail slicing discards appended tables/notes
-  // for large documents. Flagged for B4 - see docs/B4_NOTES.md.
+  // classificationText: legacy head+tail slice, kept for any caller that
+  // still wants a pre-truncated string. fullText: the untruncated cleaned
+  // text - callers doing their own budgeting (claude-classifier.js Pass 1/
+  // Pass 2's buildStructuredExcerpt(), wired in B6) should use this instead,
+  // otherwise the structured budget never gets more than 10000 chars to
+  // work with and never actually engages. See docs/B4_NOTES.md.
   const classificationText = text.length > 10000
     ? text.substring(0, 8000) + '\n\n[...]\n\n' + text.substring(text.length - 2000)
     : text;
 
   return {
     text: classificationText,
+    fullText: text,
     fullTextLength: text.length,
     quality,
     hash,

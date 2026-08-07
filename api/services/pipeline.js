@@ -3,7 +3,13 @@
 const crypto = require('crypto');
 const { extractText } = require('../../src/text-extractor');
 const { detectProgramme } = require('../../src/programme-detector');
-const { classifyDocument } = require('../../src/claude-classifier');
+const {
+  classifyPass1,
+  classifyPass2,
+  mergeClassification,
+  validateClassification,
+  needsPass2: checkNeedsPass2,
+} = require('../../src/claude-classifier');
 const { computeEQS, computeEvidenceCapital } = require('../../src/eqs-scorer');
 const db = require('./db');
 const localStore = require('./local-store');
@@ -48,22 +54,51 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
   }
 
   const detection = detectProgramme(filename, extraction.text.substring(0, 500));
-  const { classification, usage } = await classifyDocument({
+
+  // Minimum text gate before Claude call. Use fullText (not the legacy
+  // pre-truncated extraction.text) so this reflects genuine content volume.
+  const fullText = extraction.fullText || extraction.text;
+  if (fullText.length < 2000) {
+    throw new Error(`Insufficient text for classification: ${fullText.length} chars`);
+  }
+
+  const { pass1, usage: usage1 } = await classifyPass1({
     filename,
-    text: extraction.text,
+    text: fullText,
     programme: detection.programme,
     role: detection.role,
     phase: detection.phase,
     institution: tenant.name,
   });
 
-  const eqs = computeEQS(classification);
+  const requiresPass2 = checkNeedsPass2(pass1.document_type);
+  let pass2 = null;
+  let usage2 = null;
+  if (requiresPass2) {
+    const result2 = await classifyPass2({ text: fullText, pass1 });
+    pass2 = result2.pass2;
+    usage2 = result2.usage;
+  }
+
+  const flags = validateClassification(pass1, pass2, extraction.quality);
+  const classification = mergeClassification(pass1, pass2, flags);
+  const usage = {
+    input_tokens: usage1.input_tokens + (usage2 ? usage2.input_tokens : 0),
+    output_tokens: usage1.output_tokens + (usage2 ? usage2.output_tokens : 0),
+    input_words: usage1.input_words + (usage2 ? usage2.input_words : 0),
+    output_words: usage1.output_words + (usage2 ? usage2.output_words : 0),
+    latency_ms: usage1.latency_ms + (usage2 ? usage2.latency_ms : 0),
+    model: usage1.model,
+    bedrock_agent: false,
+  };
+
+  const eqs = computeEQS(classification, { flags, extractionQuality: extraction.quality });
   const evidenceCapital = computeEvidenceCapital(eqs, classification);
   const queueItems = [];
   const confs = classification.confidence_scores || {};
 
   for (const [field, value] of Object.entries(classification)) {
-    if (field === 'confidence_scores') continue;
+    if (field === 'confidence_scores' || field === 'validation_flags') continue;
     const confidence = confs[field] == null ? 0.75 : confs[field];
     if (confidence < 0.5) {
       queueItems.push({
@@ -113,6 +148,7 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
     scoring_logic_version: eqs.eqs_version || 'v0.2',
     status: queueItems.length > 0 ? 'PENDING_REVIEW' : 'COMPLETE',
     classified_by: user?.email || 'system',
+    extraction_pass: 1,
   };
 
   await storage.uploadProcessedText({ tenant, recordId, text: extraction.text });
@@ -136,4 +172,22 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
   return record;
 }
 
-module.exports = { classifyBuffer };
+/**
+ * Phase B8 utility: skip re-classifying a record a human has already
+ * confirmed. Not used during B6 new-document ingestion (new documents
+ * always create new records, so there is nothing to preserve yet).
+ */
+function shouldSkipManuallyConfirmed(existingRecord) {
+  if (!existingRecord) return false;
+  if (existingRecord.manually_confirmed === true) {
+    console.log('Skipping manually confirmed record:', existingRecord.id);
+    return true;
+  }
+  if (existingRecord.manually_confirmed_at != null) {
+    console.log('Skipping manually confirmed record:', existingRecord.id);
+    return true;
+  }
+  return false;
+}
+
+module.exports = { classifyBuffer, shouldSkipManuallyConfirmed };

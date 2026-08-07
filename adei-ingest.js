@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 /**
+ * DEPRECATED: This file does not write to the database and should not be
+ * used for production ingestion. Use api/routes/classify.js and
+ * api/services/pipeline.js instead. Retained for reference only.
+ * Last audited: 7 August 2026
+ */
+/**
  * ADEI Ingestion Engine — Main Orchestrator
  * Auxeira EvidenceOS v1.0
  *

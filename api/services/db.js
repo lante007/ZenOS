@@ -4,6 +4,17 @@ const { Pool } = require('pg');
 
 let pool;
 
+// Phase B6: defensive truncation for VARCHAR columns. B4's Pass 1/Pass 2
+// prompts ask for free-text descriptions on several fields the old
+// single-pass prompt constrained to short enums (e.g. evaluation_subtype
+// was sized for values like "RCT" / "Mixed methods" - VARCHAR(100) - but
+// now regularly receives full-sentence descriptions that overflow it).
+function truncate(value, maxLen) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return value;
+  return value.length > maxLen ? value.substring(0, maxLen) : value;
+}
+
 function shouldUseSsl(connectionString) {
   if (process.env.PGSSLMODE === 'disable') return false;
   if (process.env.PGSSLMODE === 'require' || process.env.DATABASE_SSL === 'true') return true;
@@ -246,84 +257,131 @@ async function createRecord(tenant, record, document = {}) {
     }
 
     const dims = record.dimensions || {};
+
+    // Phase B6: field-array pattern rather than ~80 hand-maintained
+    // positional $N placeholders, which would be very easy to silently
+    // misalign. Includes both the columns explicitly requested for this
+    // phase (validation_flags, extraction_pass, canonical_programme_name,
+    // secondary_document_type, baseline_year, endline_year, record_series,
+    // districts/grades, subject_area, commissioning_standards_met [new
+    // boolean], programme_family_id, manually_confirmed) AND a further
+    // ~20 pre-existing schema columns (evaluation_design, comparison_group,
+    // limitations, etc.) discovered while implementing this: they were
+    // never wired into this INSERT at all, even before B4, so the old
+    // single-pass classifier's occasional output for them was always
+    // discarded. Leaving them out now would defeat the actual point of
+    // this phase, since B4's Pass 1/Pass 2 produce real values for nearly
+    // all of them - most notably evaluation_design, the field whose
+    // permanent nullness was Phase A's headline finding.
+    const fields = [
+      ['id', truncate(record.id, 50)],
+      ['tenant_id', truncate(tenant.slug, 50)],
+      ['document_id', documentId],
+      ['document_type', truncate(record.document_type, 50)],
+      ['evaluation_subtype', truncate(record.evaluation_subtype, 100)],
+      ['programme_name', truncate(record.programme_name, 200)],
+      ['phase', truncate(record.phase, 100)],
+      ['year', record.year],
+      ['provinces', record.provinces || []],
+      ['sample_size_learners', record.sample_size_learners || null],
+      ['sample_size_schools', record.sample_size_schools || null],
+      ['has_control_group', record.has_control_group],
+      ['methodology_description', record.methodology_description],
+      ['key_finding_1', record.key_finding_1],
+      ['key_finding_2', record.key_finding_2],
+      ['key_finding_3', record.key_finding_3],
+      ['null_findings_reported', record.null_findings_reported],
+      ['cost_data_present', truncate(record.cost_data_present || 'ABSENT', 20)],
+      ['theory_of_change_explicit', record.theory_of_change_explicit],
+      ['external_evaluator', record.external_evaluator],
+      ['fidelity_reported', record.fidelity_reported],
+      ['dosage_documented', record.dosage_documented],
+      ['publication_status', truncate(record.publication_status, 30)],
+      ['policy_relevance_score', record.policy_relevance_score || null],
+      ['strategic_value_score', record.strategic_value_score || null],
+      ['nls_alignment', record.nls_alignment],
+      ['funrs_alignment', record.funrs_alignment],
+      ['dbe_adoption_status', truncate(record.dbe_adoption_status || 'UNKNOWN', 20)],
+      ['audience_relevance', record.audience_relevance || []],
+      ['evidence_gap_1', record.evidence_gap_1],
+      ['evidence_gap_2', record.evidence_gap_2],
+      // Legacy 0-9 count: the two-pass classifier no longer produces this,
+      // only the new boolean commissioning_standards_met below. Previously
+      // (B1) this was incorrectly bound to record.commissioning_standards_met,
+      // which after B4 holds a boolean, not a count - would have thrown a
+      // type error against this INTEGER column.
+      ['commissioning_standards_count', null],
+      ['eqs_composite', record.eqs_composite],
+      ['eqs_tier', truncate(record.confidence_tier || record.eqs_tier || 'N_A', 20)],
+      ['dim_methodological_rigour', dims.methodological_rigour || null],
+      ['dim_data_quality', dims.data_quality || null],
+      ['dim_transparency', dims.transparency || null],
+      ['dim_replicability', dims.replicability || null],
+      ['dim_context_relevance', dims.context_relevance || null],
+      ['half_life_rating', truncate(record.half_life_rating, 20)],
+      ['evidence_capital_score', record.evidence_capital_score],
+      ['policy_relevance_weight', record.policy_relevance_weight || null],
+      ['sroi_eligible', record.sroi_eligible || false],
+      ['board_citable', record.board_citable || false],
+      ['classified_by', truncate(record.classified_by || 'claude-sonnet-4-6', 50)],
+      ['classification_confidence', record.classification_confidence || record.confidence_scores || {}],
+      ['taxonomy_version', truncate(record.taxonomy_version || 'v2.1', 10)],
+      ['scoring_logic_version', truncate(record.scoring_logic_version || record.eqs_version || 'v0.2', 10)],
+      ['eqs_pathway', truncate(record.eqs_pathway, 30)],
+      ['eqs_version', truncate(record.eqs_version || (record.eqs_pathway ? 'v2.0' : 'v1.0'), 10)],
+      ['pathway_multiplier', record.pathway_multiplier == null ? null : record.pathway_multiplier],
+      ['eqs_scoring_pathway', truncate(record.eqs_scoring_pathway, 20)],
+      ['record_status', truncate(record.status === 'PENDING_REVIEW' ? 'PENDING_REVIEW' : 'ACTIVE', 20)],
+      // Pre-existing columns, never previously wired into this INSERT
+      ['evaluation_design', truncate(record.evaluation_design, 100)],
+      ['unit_of_analysis', truncate(record.unit_of_analysis, 100)],
+      ['district', record.districts || []],
+      ['subject_area', truncate(record.subject_area, 100)],
+      ['population_served', record.population_served || null],
+      ['record_series', truncate(record.record_series, 50)],
+      ['implementing_organisation_name', truncate(record.implementing_organisation_name, 200)],
+      ['classified_at', record.classified_at || null],
+      ['comparison_group', record.comparison_group || null],
+      // data_sources is TEXT (singular); Pass 2 produces an array
+      ['data_sources', (record.data_sources || []).length ? record.data_sources.join('; ') : null],
+      ['baseline_available', record.baseline_available],
+      ['endline_available', record.endline_available],
+      ['non_significant_variables', record.non_significant_variables || null],
+      ['effect_direction', truncate(record.effect_direction, 20)],
+      ['effect_size_composite', record.effect_size_composite || null],
+      ['cost_data_source', truncate(record.cost_data_source, 100)],
+      ['replication_conditions', record.replication_conditions || null],
+      ['limitations', record.limitations || null],
+      ['equity_considerations', record.equity_considerations || null],
+      ['funder_names', record.funder_names || []],
+      // New B2/B4 columns
+      // JSON.stringify explicitly: pg serialises bare JS arrays using
+      // Postgres array-literal syntax (correct for native ARRAY columns,
+      // wrong for JSONB - an empty array becomes the string '{}', which
+      // jsonb then parses as an empty OBJECT, and a populated array of
+      // flag objects would come out corrupted, not just cosmetically off.
+      ['validation_flags', JSON.stringify(record.validation_flags || [])],
+      ['extraction_pass', record.extraction_pass || 1],
+      ['canonical_programme_name', truncate(record.canonical_programme_name, 300)],
+      ['secondary_document_type', truncate(record.secondary_document_type, 100)],
+      ['baseline_year', record.baseline_year || null],
+      ['endline_year', record.endline_year || null],
+      // grade is VARCHAR (singular); Pass 1 produces a grades array
+      ['grade', truncate((record.grades || []).length ? record.grades.join(', ') : null, 50)],
+      ['commissioning_standards_met', typeof record.commissioning_standards_met === 'boolean' ? record.commissioning_standards_met : null],
+      ['programme_family_id', truncate(record.programme_family_id, 100)],
+      ['manually_confirmed', false],
+    ];
+
+    const columnNames = fields.map(([name]) => name).join(', ');
+    const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
+    const values = fields.map(([, value]) => value);
+
     await client.query(`
-      INSERT INTO intelligence_records (
-        id, tenant_id, document_id, document_type, evaluation_subtype, programme_name,
-        phase, year, provinces, sample_size_learners, sample_size_schools,
-        has_control_group, methodology_description, key_finding_1, key_finding_2,
-        key_finding_3, null_findings_reported, cost_data_present,
-        theory_of_change_explicit, external_evaluator, fidelity_reported,
-        dosage_documented, publication_status, policy_relevance_score,
-        strategic_value_score, nls_alignment, funrs_alignment, dbe_adoption_status,
-        audience_relevance, evidence_gap_1, evidence_gap_2,
-        commissioning_standards_count, eqs_composite, eqs_tier,
-        dim_methodological_rigour, dim_data_quality, dim_transparency,
-        dim_replicability, dim_context_relevance, half_life_rating,
-        evidence_capital_score, policy_relevance_weight, sroi_eligible,
-        board_citable, classified_by, classification_confidence,
-        taxonomy_version, scoring_logic_version, eqs_pathway,
-        eqs_version, pathway_multiplier, eqs_scoring_pathway, record_status
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,
-        $38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53
-      )
+      INSERT INTO intelligence_records (${columnNames})
+      VALUES (${placeholders})
       ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
-    `, [
-      record.id,
-      tenant.slug,
-      documentId,
-      record.document_type,
-      record.evaluation_subtype,
-      record.programme_name,
-      record.phase,
-      record.year,
-      record.provinces || [],
-      record.sample_size_learners || null,
-      record.sample_size_schools || null,
-      record.has_control_group,
-      record.methodology_description,
-      record.key_finding_1,
-      record.key_finding_2,
-      record.key_finding_3,
-      record.null_findings_reported,
-      record.cost_data_present || 'ABSENT',
-      record.theory_of_change_explicit,
-      record.external_evaluator,
-      record.fidelity_reported,
-      record.dosage_documented,
-      record.publication_status,
-      record.policy_relevance_score || null,
-      record.strategic_value_score || null,
-      record.nls_alignment,
-      record.funrs_alignment,
-      record.dbe_adoption_status || 'UNKNOWN',
-      record.audience_relevance || [],
-      record.evidence_gap_1,
-      record.evidence_gap_2,
-      record.commissioning_standards_met || null,
-      record.eqs_composite,
-      record.confidence_tier || record.eqs_tier || 'N_A',
-      dims.methodological_rigour || null,
-      dims.data_quality || null,
-      dims.transparency || null,
-      dims.replicability || null,
-      dims.context_relevance || null,
-      record.half_life_rating,
-      record.evidence_capital_score,
-      record.policy_relevance_weight || null,
-      record.sroi_eligible || false,
-      record.board_citable || false,
-      'CLAUDE_SONNET',
-      record.classification_confidence || record.confidence_scores || {},
-      record.taxonomy_version || 'v2.1',
-      record.scoring_logic_version || record.eqs_version || 'v0.2',
-      record.eqs_pathway || null,
-      record.eqs_version || (record.eqs_pathway ? 'v2.0' : 'v1.0'),
-      record.pathway_multiplier == null ? null : record.pathway_multiplier,
-      record.eqs_scoring_pathway || null,
-      record.status === 'PENDING_REVIEW' ? 'PENDING_REVIEW' : 'ACTIVE',
-    ]);
+    `, values);
 
     await client.query(`
       INSERT INTO ingestion_jobs (
