@@ -1145,19 +1145,26 @@ function DashboardPage() {
   console.log('User object:', user);
   const firstName = greetingNameFor(user);
   const today = formatDisplayDate(new Date(), { weekday: 'long' });
-  const evidenceHealthScore = stats?.records
-    ? Math.round(((stats.tier_counts?.TIER_1 || stats.tier_counts?.['Tier 1'] || 0) / stats.records) * 100)
-    : 82;
-  const healthLabel = getHealthLabel(evidenceHealthScore);
-  const dimRigour = healthDimensions.find(item => item.label === 'Method rigour')?.score || 0;
-  const dimDataQuality = healthDimensions.find(item => item.label === 'Data quality')?.score || 0;
-  const dimTransparency = healthDimensions.find(item => item.label === 'Transparency')?.score || 0;
-  const dimReplicability = healthDimensions.find(item => item.label === 'Replicability')?.score || 0;
-  const dimPolicyRelevance = healthDimensions.find(item => item.label === 'Policy relevance')?.score || 0;
-  const avgEqs = (
-    (dimRigour + dimDataQuality + dimTransparency + dimReplicability + dimPolicyRelevance) / 5
-  ).toFixed(1);
   const totalRecords = cascade?.corpus_size || estate?.total_records || stats?.records || records.length || 0;
+  const avgEqsReal = cascade?.evidence_capital?.avg_eqs != null ? Number(cascade.evidence_capital.avg_eqs) : 0;
+  const avgEqs = avgEqsReal.toFixed(2);
+  const gapsIdentified = portfolio?.evidence_gaps || 0;
+
+  // Health Score: three-component additive model, max 100.
+  // Quality (60): avg_eqs across ACTIVE records with non-null eqs_composite.
+  // Maturity (30): corpus depth by record-count band.
+  // Coverage (10): placeholder until Phase 2 gap analysis - full marks
+  // when no open gaps are identified, partial marks otherwise.
+  const qualityScore = (avgEqsReal / 5.0) * 60;
+  const maturity = totalRecords <= 10 ? { score: 6, band: 1 }
+    : totalRecords <= 25 ? { score: 12, band: 2 }
+    : totalRecords <= 50 ? { score: 18, band: 3 }
+    : totalRecords <= 75 ? { score: 24, band: 4 }
+    : totalRecords <= 150 ? { score: 28, band: 5 }
+    : { score: 30, band: 5 };
+  const coverageScore = gapsIdentified > 0 ? 5 : 10;
+  const evidenceHealthScore = Math.round(qualityScore + maturity.score + coverageScore);
+  const healthLabel = getHealthLabel(evidenceHealthScore);
 
   useEffect(() => {
     let cancelled = false;
@@ -1488,8 +1495,11 @@ function DashboardPage() {
               <span className="explanation-quality">
                 Quality: {avgEqs}/5.0 across {totalRecords} classified documents
               </span>
+              <span className="explanation-maturity">
+                Corpus maturity: {totalRecords} documents classified (Band {maturity.band} of 5)
+              </span>
               <span className="explanation-note">
-                Health score reflects evidence quality and currency. Increases as more documents are classified.
+                Health score combines evidence quality, corpus depth, and coverage. Increases as more documents are classified.
               </span>
             </div>
             <div className="score-track" aria-hidden="true">
