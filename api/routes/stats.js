@@ -373,6 +373,99 @@ router.get('/cascade',
   }
 );
 
+router.get('/',
+  requireRoles(
+    'ORGANISATION_LEAD',
+    'EVIDENCE_ANALYST',
+    'COMMUNICATIONS',
+    'CEO_EXEC'
+  ),
+  async (req, res, next) => {
+    try {
+      const pool = getPool();
+      if (!pool) return res.status(503).json({ error: 'Database is not configured' });
+
+      const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+      assertSchema(schema);
+      const tenantId = req.tenant.slug;
+
+      const result = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE')::int AS documents_classified,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND parent_record_id IS NULL)::int AS independent_evaluations,
+          COUNT(DISTINCT programme_name) FILTER (WHERE record_status = 'ACTIVE')::int AS programmes,
+          MIN(CASE WHEN record_status = 'ACTIVE' AND year ~ '^[0-9]{4}$' THEN year::int ELSE NULL END) AS earliest_year,
+          MAX(CASE WHEN record_status = 'ACTIVE' AND year ~ '^[0-9]{4}$' THEN year::int ELSE NULL END) AS latest_year,
+          ROUND(AVG(eqs_composite) FILTER (WHERE record_status = 'ACTIVE' AND eqs_composite IS NOT NULL)::numeric, 2) AS avg_eqs,
+          ROUND(AVG(dim_methodological_rigour) FILTER (WHERE record_status = 'ACTIVE' AND dim_methodological_rigour IS NOT NULL)::numeric, 2) AS dim_methodological_rigour,
+          ROUND(AVG(dim_data_quality) FILTER (WHERE record_status = 'ACTIVE' AND dim_data_quality IS NOT NULL)::numeric, 2) AS dim_data_quality,
+          ROUND(AVG(dim_transparency) FILTER (WHERE record_status = 'ACTIVE' AND dim_transparency IS NOT NULL)::numeric, 2) AS dim_transparency,
+          ROUND(AVG(dim_replicability) FILTER (WHERE record_status = 'ACTIVE' AND dim_replicability IS NOT NULL)::numeric, 2) AS dim_replicability,
+          ROUND(AVG(dim_context_relevance) FILTER (WHERE record_status = 'ACTIVE' AND dim_context_relevance IS NOT NULL)::numeric, 2) AS dim_context_relevance,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND half_life_rating = 'CURRENT')::int AS freshness_current,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND half_life_rating = 'AGING')::int AS freshness_aging,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND half_life_rating = 'HISTORICAL')::int AS freshness_historical,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND eqs_tier = 'TIER_1')::int AS tier_1,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND eqs_tier = 'TIER_2')::int AS tier_2,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND eqs_tier = 'TIER_3')::int AS tier_3,
+          COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND eqs_tier = 'N_A')::int AS tier_n_a,
+          COUNT(*) FILTER (WHERE record_status = 'PENDING_REVIEW')::int AS pending_review
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+      `, [tenantId]);
+
+      const provinceResult = await pool.query(`
+        SELECT COUNT(DISTINCT p.province)::int AS provinces
+        FROM ${schema}.intelligence_records r
+        LEFT JOIN LATERAL unnest(COALESCE(r.provinces, ARRAY[]::text[])) AS p(province) ON true
+        WHERE r.tenant_id = $1
+          AND r.record_status = 'ACTIVE'
+      `, [tenantId]);
+
+      const row = result.rows[0] || {};
+      const yearsOfEvidence = row.earliest_year && row.latest_year
+        ? (row.latest_year - row.earliest_year + 1)
+        : 0;
+      const activeTotal = row.documents_classified || 0;
+
+      return res.json({
+        tenant: req.tenant.slug,
+        organisation: req.tenant.name,
+        documents_classified: row.documents_classified || 0,
+        independent_evaluations: row.independent_evaluations || 0,
+        programmes: row.programmes || 0,
+        provinces: provinceResult.rows[0]?.provinces || 0,
+        years_of_evidence: yearsOfEvidence,
+        avg_eqs: row.avg_eqs != null ? Number(row.avg_eqs) : null,
+        quality_dimensions: {
+          methodological_rigour: row.dim_methodological_rigour != null ? Number(row.dim_methodological_rigour) : null,
+          data_quality: row.dim_data_quality != null ? Number(row.dim_data_quality) : null,
+          transparency: row.dim_transparency != null ? Number(row.dim_transparency) : null,
+          replicability: row.dim_replicability != null ? Number(row.dim_replicability) : null,
+          context_relevance: row.dim_context_relevance != null ? Number(row.dim_context_relevance) : null,
+        },
+        evidence_freshness: {
+          current: row.freshness_current || 0,
+          aging: row.freshness_aging || 0,
+          historical: row.freshness_historical || 0,
+          current_pct: activeTotal > 0 ? Math.round(((row.freshness_current || 0) / activeTotal) * 100) : 0,
+          aging_pct: activeTotal > 0 ? Math.round(((row.freshness_aging || 0) / activeTotal) * 100) : 0,
+          historical_pct: activeTotal > 0 ? Math.round(((row.freshness_historical || 0) / activeTotal) * 100) : 0,
+        },
+        tier_counts: {
+          TIER_1: row.tier_1 || 0,
+          TIER_2: row.tier_2 || 0,
+          TIER_3: row.tier_3 || 0,
+          N_A: row.tier_n_a || 0,
+        },
+        pending_review: row.pending_review || 0,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 router.get('/portfolio',
   requireRoles(
     'ORGANISATION_LEAD',

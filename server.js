@@ -112,27 +112,6 @@ app.use('/api/alerts', alertsRoutes);
 app.use('/api/provenance', provenanceRoutes);
 app.use('/api', knowledgeRoutes);
 
-app.get('/api/stats', authenticate(), assertNoBoardAccess, async (req, res, next) => {
-  try {
-    const { records, queue } = await loadTenantRecordsAndQueue(req.tenant);
-    const tierCounts = records.reduce((acc, record) => {
-      const tier = record.confidence_tier || record.eqs_tier || 'N_A';
-      acc[tier] = (acc[tier] || 0) + 1;
-      return acc;
-    }, {});
-
-    res.json({
-      tenant: req.tenant.slug,
-      organisation: req.tenant.name,
-      records: records.length,
-      queue: queue.length,
-      tier_counts: tierCounts,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
 app.get('/api/exec-summary', authenticate(), assertNoBoardAccess, async (req, res, next) => {
   if (req.user.role !== 'CEO_EXEC' && req.user.role !== 'ORGANISATION_LEAD') {
     return res.status(403).json({ error: 'Executive view only' });

@@ -30,12 +30,12 @@ import {
 import { tenantConfig } from './config';
 import './styles.css';
 
-const healthDimensions = [
-  { label: 'Method rigour', score: 4.3 },
-  { label: 'Data quality', score: 4.1 },
-  { label: 'Transparency', score: 3.9 },
-  { label: 'Replicability', score: 3.7 },
-  { label: 'Policy relevance', score: 4.6 },
+const qualityDimensionFields = [
+  { label: 'Methodological rigour', key: 'methodological_rigour' },
+  { label: 'Data quality', key: 'data_quality' },
+  { label: 'Transparency', key: 'transparency' },
+  { label: 'Replicability', key: 'replicability' },
+  { label: 'Context relevance', key: 'context_relevance' },
 ];
 
 const FALLBACK_QUEUE_EMPTY = [];
@@ -1120,6 +1120,7 @@ function AppShell({ active, children, queueBadge }) {
 function DashboardPage() {
   const { records } = useLiveRecords();
   const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [estate, setEstate] = useState(null);
   const [estateLoading, setEstateLoading] = useState(true);
   const [estateTypesOpen, setEstateTypesOpen] = useState(false);
@@ -1145,7 +1146,7 @@ function DashboardPage() {
   console.log('User object:', user);
   const firstName = greetingNameFor(user);
   const today = formatDisplayDate(new Date(), { weekday: 'long' });
-  const totalRecords = cascade?.corpus_size || estate?.total_records || stats?.records || records.length || 0;
+  const totalRecords = cascade?.corpus_size || estate?.total_records || stats?.documents_classified || records.length || 0;
   const avgEqsReal = cascade?.evidence_capital?.avg_eqs != null ? Number(cascade.evidence_capital.avg_eqs) : 0;
   const avgEqs = avgEqsReal.toFixed(2);
   const gapsIdentified = portfolio?.evidence_gaps || 0;
@@ -1170,9 +1171,14 @@ function DashboardPage() {
     let cancelled = false;
     apiRequest('/api/stats')
       .then(data => {
-        if (!cancelled) setStats(data);
+        if (!cancelled) {
+          setStats(data);
+          setStatsLoading(false);
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setStatsLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -1337,9 +1343,14 @@ function DashboardPage() {
           <div className="estate-stat-grid">
             <button className="estate-stat-tile" type="button" onClick={() => setEstateTypesOpen(true)}>
               <strong>{estateLoading ? '...' : estate?.total_records || 0}</strong>
-              <span>Evaluations</span>
+              <span>Documents Classified</span>
               <small className="estate-tile-subtitle">Classified and scored</small>
             </button>
+            <article className="estate-stat-tile">
+              <strong>{statsLoading ? '...' : stats?.independent_evaluations || 0}</strong>
+              <span>Independent Evaluations</span>
+              <small className="estate-tile-subtitle">Standalone assessments</small>
+            </article>
             <article className="estate-stat-tile">
               <strong>{estateLoading ? '...' : estate?.total_programmes || 0}</strong>
               <span>Programmes</span>
@@ -1514,15 +1525,19 @@ function DashboardPage() {
               <span>Quality Dimensions</span>
             </div>
             <div className="dimension-list">
-              {healthDimensions.map((item) => (
-                <div className="dimension-row" key={item.label}>
-                  <span>{item.label}</span>
-                  <div className="mini-track" aria-hidden="true">
-                    <span style={{ width: `${(item.score / 5) * 100}%` }} />
+              {qualityDimensionFields.map((item) => {
+                const score = stats?.quality_dimensions?.[item.key];
+                const displayScore = statsLoading ? null : (score != null ? Number(score) : 0);
+                return (
+                  <div className="dimension-row" key={item.label}>
+                    <span>{item.label}</span>
+                    <div className="mini-track" aria-hidden="true">
+                      <span style={{ width: `${((displayScore || 0) / 5) * 100}%` }} />
+                    </div>
+                    <strong>{statsLoading ? '...' : displayScore.toFixed(1)}</strong>
                   </div>
-                  <strong>{item.score.toFixed(1)}</strong>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </article>
         </section>
