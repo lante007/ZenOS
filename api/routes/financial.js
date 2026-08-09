@@ -24,15 +24,16 @@ router.get('/unconfirmed',
 
       const result = await pool.query(`
         SELECT
-          id, programme_name, document_type, filename,
-          total_cost_rand, cost_data_source, cost_data_present,
-          cost_per_learner, financial_year, cost_notes
-        FROM ${schema}.intelligence_records
-        WHERE tenant_id = $1
-          AND record_status = 'ACTIVE'
-          AND total_cost_rand IS NOT NULL
-          AND manually_confirmed IS NOT TRUE
-        ORDER BY total_cost_rand DESC
+          r.id, r.programme_name, r.document_type, d.filename,
+          r.total_cost_rand, r.cost_data_source, r.cost_data_present,
+          r.cost_per_learner, r.financial_year, r.cost_notes
+        FROM ${schema}.intelligence_records r
+        LEFT JOIN ${schema}.documents d ON d.id = r.document_id
+        WHERE r.tenant_id = $1
+          AND r.record_status = 'ACTIVE'
+          AND r.total_cost_rand IS NOT NULL
+          AND r.manually_confirmed IS NOT TRUE
+        ORDER BY r.total_cost_rand DESC
       `, [req.tenant.slug]);
 
       const items = result.rows.map(row => ({
