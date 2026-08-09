@@ -1674,61 +1674,60 @@ function DashboardPage() {
             </div>
           </div>
 
-          <div className="intelligence-summary-grid">
-            <article className="completeness-card">
-              <h3>DATA COMPLETENESS</h3>
-              <strong className="completeness-pct">
-                {completenessData ? `${completenessData.overall_completeness_pct ?? completenessData.completeness_score ?? 0}%` : '...'}
-              </strong>
+          <div className="intelligence-summary-panel">
+            <div className="completeness-banner">
+              <div className="completeness-banner-left">
+                <h3>Data Completeness</h3>
+                <strong className="completeness-pct">
+                  {completenessData ? `${completenessData.overall_completeness_pct ?? completenessData.completeness_score ?? 0}%` : '...'}
+                </strong>
+              </div>
               <div className="completeness-bar-track" aria-hidden="true">
                 <div
                   className="completeness-bar-fill"
                   style={{ width: `${completenessData?.overall_completeness_pct ?? completenessData?.completeness_score ?? 0}%` }}
                 />
               </div>
-              <p className="completeness-detail">
-                {completenessData
-                  ? `${completenessData.critical_gaps_count ?? 0} of ${completenessData.total_active_records ?? 0} records have critical missing fields`
-                  : 'Checking corpus completeness...'}
-              </p>
-              <p className="completeness-subtext">
-                Affects EQS accuracy, board citation eligibility, and Ask Zenex reliability
-              </p>
-              <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
-                Complete records in Workspace →
-              </a>
-            </article>
+              <div className="completeness-banner-right">
+                <p className="completeness-detail">
+                  {completenessData
+                    ? `${completenessData.critical_gaps_count ?? 0} of ${completenessData.total_active_records ?? 0} records have critical missing fields`
+                    : 'Checking corpus completeness...'}
+                </p>
+                <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
+                  Complete in Workspace →
+                </a>
+              </div>
+            </div>
 
-            <article className="gaps-card">
-              <h3>EVIDENCE GAPS</h3>
-              <p className="gaps-subheader">Priority commissioning opportunities</p>
+            <div className="intelligence-summary-divider" />
 
+            <div className="gap-priority-rows">
               {gapsLoading ? (
                 <p className="workspace-loading">Identifying priority gaps...</p>
               ) : gaps.length === 0 ? (
                 <p className="workspace-clear">No priority evidence gaps identified.</p>
               ) : (
-                <div className="gap-priority-list">
-                  {gaps.map(gap => (
-                    <article className="gap-priority-card" key={`${gap.rank}-${gap.programme_name}`}>
-                      <span className="gap-priority-label">PRIORITY {gap.rank}</span>
+                gaps.map(gap => (
+                  <article className="gap-priority-row" key={`${gap.rank}-${gap.programme_name}`}>
+                    <span className="gap-priority-circle">{gap.rank}</span>
+                    <div className="gap-priority-text">
                       <h4>{gap.programme_name}</h4>
-                      <p className="gap-priority-description">{gap.gap_description}</p>
-                      <p className="gap-priority-meta">
-                        Last evidence: {gap.last_evaluation_year || 'Unknown'} · {formatRand(gap.total_grant_rand)} invested
+                      <p className="gap-priority-description">
+                        {gap.gap_description} (last: {gap.last_evaluation_year || 'Unknown'}) · {formatRand(gap.total_grant_rand)} invested
                       </p>
-                      <a
-                        className="generate-tor-button"
-                        href={`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`}
-                        onClick={(event) => { event.preventDefault(); navigate(`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`); }}
-                      >
-                        Generate TOR →
-                      </a>
-                    </article>
-                  ))}
-                </div>
+                    </div>
+                    <a
+                      className="generate-tor-button"
+                      href={`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`}
+                      onClick={(event) => { event.preventDefault(); navigate(`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`); }}
+                    >
+                      Generate TOR →
+                    </a>
+                  </article>
+                ))
               )}
-            </article>
+            </div>
           </div>
         </section>
 
