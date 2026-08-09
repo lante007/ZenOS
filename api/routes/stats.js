@@ -374,7 +374,12 @@ router.get('/cascade',
 );
 
 router.get('/completeness',
-  requireRoles('ORGANISATION_LEAD'),
+  requireRoles(
+    'ORGANISATION_LEAD',
+    'EVIDENCE_ANALYST',
+    'COMMUNICATIONS',
+    'CEO_EXEC'
+  ),
   async (req, res, next) => {
     try {
       const pool = getPool();
@@ -398,6 +403,7 @@ router.get('/completeness',
       const totalCells = records.rows.length * ALL_WORKSPACE_FIELDS.length;
       const criticalGaps = [];
       const financialGaps = [];
+      const incompleteRecordIds = new Set();
 
       for (const record of records.rows) {
         for (const def of ALL_WORKSPACE_FIELDS) {
@@ -414,6 +420,7 @@ router.get('/completeness',
             document_type: record.document_type,
             missing_fields: missingCritical,
           });
+          incompleteRecordIds.add(record.id);
         }
 
         const missingFinancial = FINANCIAL_FIELDS
@@ -426,20 +433,151 @@ router.get('/completeness',
             document_type: record.document_type,
             missing_fields: missingFinancial,
           });
+          incompleteRecordIds.add(record.id);
         }
       }
 
       criticalGaps.sort((a, b) => b.missing_fields.length - a.missing_fields.length);
       financialGaps.sort((a, b) => b.missing_fields.length - a.missing_fields.length);
 
+      const completenessScore = totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0;
+      const incompleteRecordCount = incompleteRecordIds.size;
+      const fullyCompleteCount = records.rows.length - incompleteRecordCount;
+
       return res.json({
-        completeness_score: totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0,
+        completeness_score: completenessScore,
+        overall_completeness_pct: completenessScore,
         total_active_records: records.rows.length,
+        fully_complete_count: fullyCompleteCount,
+        incomplete_record_count: incompleteRecordCount,
         critical_gaps_count: criticalGaps.length,
         financial_gaps_count: financialGaps.length,
         critical_gaps: criticalGaps.slice(0, 50),
         financial_gaps: financialGaps.slice(0, 50),
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+const GAP_AREA_WEIGHTS = {
+  'Early Grade Literacy and Numeracy': 10,
+  'Early Grade Numeracy': 9,
+  'System Wide Initiatives': 8,
+  'Schools Programme': 6,
+  'Thought Leadership': 4,
+  'Research and Evaluations': 3,
+};
+
+// Internal prioritisation model. Not exposed via the API - only the
+// resulting rank/description are returned, per product decision.
+function computeGapPriorityScore(r) {
+  const areaScore = GAP_AREA_WEIGHTS[r.programme_area] || 5;
+  const w1 = areaScore * 0.30;
+
+  const yearsOld = 2026 - (parseInt(r.last_year, 10) || 2020);
+  const ageScore = yearsOld >= 7 ? 10 : yearsOld >= 5 ? 8 : yearsOld >= 3 ? 5 : 2;
+  const w2 = ageScore * 0.25;
+
+  const grant = parseFloat(r.total_cost_rand) || 0;
+  const grantScore = grant >= 50000000 ? 10
+    : grant >= 20000000 ? 8
+    : grant >= 10000000 ? 6
+    : grant >= 5000000 ? 4
+    : grant > 0 ? 2 : 1;
+  const w3 = grantScore * 0.20;
+
+  const missingScore = (r.has_baseline && !r.has_endline) ? 10
+    : (!r.has_baseline && !r.has_endline) ? 8
+    : (!r.has_process) ? 5 : 3;
+  const w4 = missingScore * 0.15;
+
+  const policyScore = (r.nls_alignment && r.funrs_alignment) ? 10
+    : (r.nls_alignment || r.funrs_alignment) ? 6 : 2;
+  const w5 = policyScore * 0.10;
+
+  return Math.round((w1 + w2 + w3 + w4 + w5) * 10);
+}
+
+function gapDescription(r) {
+  const years = 2026 - (parseInt(r.last_year, 10) || 2020);
+  if (r.has_baseline && !r.has_endline) {
+    return `Baseline exists. No endline evaluation commissioned in ${years} years.`;
+  }
+  if (!r.has_baseline && !r.has_endline) {
+    return 'No impact evaluation exists despite significant investment.';
+  }
+  if (!r.has_process) {
+    return 'Impact data present. No implementation evaluation exists.';
+  }
+  return `Evidence base incomplete. Last evaluation ${r.last_year}.`;
+}
+
+router.get('/gaps',
+  requireRoles(
+    'ORGANISATION_LEAD',
+    'EVIDENCE_ANALYST',
+    'COMMUNICATIONS',
+    'CEO_EXEC'
+  ),
+  async (req, res, next) => {
+    try {
+      const pool = getPool();
+      if (!pool) return res.status(503).json({ error: 'Database is not configured' });
+
+      const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+      assertSchema(schema);
+      const tenantId = req.tenant.slug;
+
+      const result = await pool.query(`
+        SELECT
+          programme_name,
+          programme_area,
+          MAX(year) as last_year,
+          MAX(total_cost_rand) as total_cost_rand,
+          bool_or(
+            record_series = 'BASELINE'
+            OR baseline_available = true
+          ) as has_baseline,
+          bool_or(
+            record_series = 'ENDLINE'
+            OR endline_available = true
+          ) as has_endline,
+          bool_or(
+            document_type = 'Process Evaluation'
+          ) as has_process,
+          bool_or(nls_alignment = true) as nls_alignment,
+          bool_or(funrs_alignment = true) as funrs_alignment,
+          COUNT(*) as eval_count
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+          AND programme_name IS NOT NULL
+        GROUP BY programme_name, programme_area
+        HAVING NOT bool_or(
+          record_series = 'ENDLINE'
+          OR endline_available = true
+        )
+        AND COUNT(*) >= 1
+        ORDER BY MAX(year) ASC
+      `, [tenantId]);
+
+      const gaps = result.rows
+        .map(r => ({ ...r, priority_score: computeGapPriorityScore(r) }))
+        .sort((a, b) => b.priority_score - a.priority_score)
+        .slice(0, 3)
+        .map((r, index) => ({
+          rank: index + 1,
+          programme_name: r.programme_name,
+          programme_area: r.programme_area,
+          last_evaluation_year: r.last_year != null ? parseInt(r.last_year, 10) : null,
+          total_grant_rand: r.total_cost_rand != null ? Number(r.total_cost_rand) : 0,
+          gap_description: gapDescription(r),
+          eval_count: Number(r.eval_count),
+        }));
+
+      return res.json({ gaps });
     } catch (err) {
       next(err);
     }

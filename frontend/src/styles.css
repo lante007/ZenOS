@@ -7,7 +7,7 @@
   --green: #2D7D46;
   --amber: #D97706;
   --red: #C53030;
-  --teal: #14B8A6;
+  --teal: #00B4D8;
   --primary: #EF7218;
   --secondary: #311F47;
   --color-primary: var(--primary);
@@ -1518,6 +1518,158 @@ button.estate-stat-tile {
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;
+}
+
+/* ─── Intelligence Summary (Dashboard) ────────────────────────────────── */
+
+.intelligence-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.completeness-card,
+.gaps-card {
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+    rgba(15, 32, 64, 0.72);
+}
+
+.completeness-card h3,
+.gaps-card h3 {
+  margin: 0;
+  color: rgba(245, 242, 238, 0.7);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.completeness-pct {
+  display: block;
+  margin: 10px 0 14px;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 48px;
+  line-height: 1;
+  color: #ffffff;
+}
+
+.completeness-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #E2E2E2;
+  overflow: hidden;
+}
+
+.completeness-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 0.4s ease;
+}
+
+.completeness-detail {
+  margin: 12px 0 0;
+  color: rgba(245, 242, 238, 0.85);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.completeness-subtext {
+  margin: 6px 0 16px;
+  color: rgba(245, 242, 238, 0.5);
+  font-size: 13px;
+}
+
+.teal-link {
+  display: inline-block;
+  color: var(--teal);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.teal-link:hover {
+  text-decoration: underline;
+}
+
+.gaps-subheader {
+  margin: 6px 0 18px;
+  color: rgba(245, 242, 238, 0.5);
+  font-size: 13px;
+}
+
+.gap-priority-list {
+  display: grid;
+  gap: 12px;
+}
+
+.gap-priority-card {
+  position: relative;
+  padding: 14px 16px 14px 18px;
+  border-left: 3px solid var(--primary);
+  background: var(--white);
+}
+
+.gap-priority-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 900;
+  font-variant: small-caps;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.gap-priority-card h4 {
+  margin: 0 0 6px;
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.gap-priority-description {
+  margin: 0 0 8px;
+  color: #3A3A3A;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.gap-priority-meta {
+  margin: 0 0 10px;
+  color: #767676;
+  font-size: 12px;
+}
+
+.generate-tor-button {
+  display: block;
+  width: fit-content;
+  margin-left: auto;
+  color: var(--teal);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.generate-tor-button:hover {
+  text-decoration: underline;
+}
+
+.earlier-alerts-link {
+  display: inline-block;
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .intelligence-summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .secondary-action,

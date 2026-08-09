@@ -1137,6 +1137,9 @@ function DashboardPage() {
   const [cascadeLoading, setCascadeLoading] = useState(true);
   const [formulaModal, setFormulaModal] = useState(null);
   const [workspaceExtra, setWorkspaceExtra] = useState({ corpus: 0, financial: 0 });
+  const [completenessData, setCompletenessData] = useState(null);
+  const [gaps, setGaps] = useState([]);
+  const [gapsLoading, setGapsLoading] = useState(true);
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
   const [seedAttempted, setSeedAttempted] = useState(false);
@@ -1263,11 +1266,29 @@ function DashboardPage() {
       apiRequest('/api/financial/unconfirmed').catch(() => null),
     ]).then(([completeness, financial]) => {
       if (cancelled) return;
+      setCompletenessData(completeness);
       setWorkspaceExtra({
         corpus: completeness ? (completeness.critical_gaps_count || 0) + (completeness.financial_gaps_count || 0) : 0,
         financial: financial ? (financial.count || 0) : 0,
       });
     });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/stats/gaps')
+      .then(data => {
+        if (!cancelled) setGaps(Array.isArray(data?.gaps) ? data.gaps : []);
+      })
+      .catch(() => {
+        if (!cancelled) setGaps([]);
+      })
+      .finally(() => {
+        if (!cancelled) setGapsLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -1645,44 +1666,69 @@ function DashboardPage() {
           </div>
         </section>
 
-        <section className="work-section" aria-label="Evidence work queue">
+        <section className="intelligence-summary-section" aria-label="Intelligence summary">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Operational queue</p>
-              <h2>Next evidence actions</h2>
+              <p className="eyebrow">Intelligence Summary</p>
+              <h2>Where to focus next</h2>
             </div>
           </div>
 
-          <div className="queue-list">
-            {queueLoading ? (
-              <article className="queue-item">
-                <Clock3 size={18} />
-                <div>
-                  <h3>Loading evidence actions...</h3>
-                  <p>Checking the expert review queue</p>
+          <div className="intelligence-summary-grid">
+            <article className="completeness-card">
+              <h3>DATA COMPLETENESS</h3>
+              <strong className="completeness-pct">
+                {completenessData ? `${completenessData.overall_completeness_pct ?? completenessData.completeness_score ?? 0}%` : '...'}
+              </strong>
+              <div className="completeness-bar-track" aria-hidden="true">
+                <div
+                  className="completeness-bar-fill"
+                  style={{ width: `${completenessData?.overall_completeness_pct ?? completenessData?.completeness_score ?? 0}%` }}
+                />
+              </div>
+              <p className="completeness-detail">
+                {completenessData
+                  ? `${completenessData.incomplete_record_count ?? 0} of ${completenessData.total_active_records ?? 0} records have critical missing fields`
+                  : 'Checking corpus completeness...'}
+              </p>
+              <p className="completeness-subtext">
+                Affects EQS accuracy, board citation eligibility, and Ask Zenex reliability
+              </p>
+              <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
+                Complete records in Workspace →
+              </a>
+            </article>
+
+            <article className="gaps-card">
+              <h3>EVIDENCE GAPS</h3>
+              <p className="gaps-subheader">Priority commissioning opportunities</p>
+
+              {gapsLoading ? (
+                <p className="workspace-loading">Identifying priority gaps...</p>
+              ) : gaps.length === 0 ? (
+                <p className="workspace-clear">No priority evidence gaps identified.</p>
+              ) : (
+                <div className="gap-priority-list">
+                  {gaps.map(gap => (
+                    <article className="gap-priority-card" key={`${gap.rank}-${gap.programme_name}`}>
+                      <span className="gap-priority-label">PRIORITY {gap.rank}</span>
+                      <h4>{gap.programme_name}</h4>
+                      <p className="gap-priority-description">{gap.gap_description}</p>
+                      <p className="gap-priority-meta">
+                        Last evidence: {gap.last_evaluation_year || 'Unknown'} · {formatRand(gap.total_grant_rand)} invested
+                      </p>
+                      <a
+                        className="generate-tor-button"
+                        href={`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`}
+                        onClick={(event) => { event.preventDefault(); navigate(`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`); }}
+                      >
+                        Generate TOR →
+                      </a>
+                    </article>
+                  ))}
                 </div>
-              </article>
-            ) : queueItems.length === 0 ? (
-              <article className="queue-item">
-                <CheckCircle2 size={18} />
-                <div>
-                  <h3>No pending evidence actions.</h3>
-                  <p>Evidence base is current.</p>
-                </div>
-              </article>
-            ) : queueItems.map((item) => (
-              <article className="queue-item" key={item.id}>
-                <CheckCircle2 size={18} />
-                <div>
-                  <h3>{item.programmeName}</h3>
-                  <p>
-                    {item.fieldName} · {formatQueueConfidence(item.confidence)} · {roleLabel(item.targetRole)}
-                    {item.recordId && ` · ${item.recordId}`}
-                  </p>
-                </div>
-                <span>{item.state}</span>
-              </article>
-            ))}
+              )}
+            </article>
           </div>
         </section>
 
@@ -1702,25 +1748,32 @@ function DashboardPage() {
               <p>No active alerts. Your evidence base is current.</p>
             </article>
           ) : (
-            <div className="alert-grid">
-              {alerts.map(alert => (
-                <article className={`alert-card priority-${String(alert.priority || 'MEDIUM').toLowerCase()}`} key={alert.id}>
-                  <div className="alert-icon" aria-hidden="true">{alertIcons[alert.alert_type] || '📢'}</div>
-                  <div>
-                    <h3>{alert.title}</h3>
-                    <p>{alert.body}</p>
-                    {alert.record_id && <a href={`/records?record=${alert.record_id}`}>Open record {alert.record_id}</a>}
-                    <footer>
-                      <span>{roleLabel(alert.target_role)}</span>
-                      <span>{dateTimeStamp(alert.created_at)}</span>
-                    </footer>
-                  </div>
-                  <button className="secondary-action mark-read-action" type="button" onClick={() => markRead(alert.id)}>
-                    Mark as read
-                  </button>
-                </article>
-              ))}
-            </div>
+            <>
+              <div className="alert-grid">
+                {(alerts || []).slice(0, 3).map(alert => (
+                  <article className={`alert-card priority-${String(alert.priority || 'MEDIUM').toLowerCase()}`} key={alert.id}>
+                    <div className="alert-icon" aria-hidden="true">{alertIcons[alert.alert_type] || '📢'}</div>
+                    <div>
+                      <h3>{alert.title}</h3>
+                      <p>{alert.body}</p>
+                      {alert.record_id && <a href={`/records?record=${alert.record_id}`}>Open record {alert.record_id}</a>}
+                      <footer>
+                        <span>{roleLabel(alert.target_role)}</span>
+                        <span>{dateTimeStamp(alert.created_at)}</span>
+                      </footer>
+                    </div>
+                    <button className="secondary-action mark-read-action" type="button" onClick={() => markRead(alert.id)}>
+                      Mark as read
+                    </button>
+                  </article>
+                ))}
+              </div>
+              {alerts.length > 3 && (
+                <a className="teal-link earlier-alerts-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
+                  + {alerts.length - 3} earlier alerts in your Workspace →
+                </a>
+              )}
+            </>
           )}
         </section>
         <CascadeFormulaModal item={formulaModal} onClose={() => setFormulaModal(null)} />
