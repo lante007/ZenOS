@@ -328,10 +328,10 @@ router.get('/cascade',
 
       const stdPct = parseFloat(standardsResult.rows[0]?.pct || 0);
       const standardsScore = Math.round((stdPct / 100) * 25);
-      const icIndex = qualityScore + currencyScore + coverageScore + standardsScore;
+      const eroiIndex = qualityScore + currencyScore + coverageScore + standardsScore;
 
-      const institutionalCapital = {
-        index: icIndex,
+      const eroi = {
+        index: eroiIndex,
         dimensions: {
           evidence_quality: {
             score: qualityScore,
@@ -355,15 +355,15 @@ router.get('/cascade',
           },
         },
         has_data: ec.total_records > 0,
-        label: ec.total_records > 0 ? `${icIndex} / 100` : 'N/A',
-        formula: 'Index 0–100. Four dimensions (25 pts each): Evidence Quality, Currency, Coverage, Commissioning Standards. Recalculates as corpus grows.',
+        label: ec.total_records > 0 ? `${eroiIndex} / 100` : 'N/A',
+        formula: 'EROI: Evidence Return on Investment. Index 0–100. Four dimensions (25 pts each): Evidence Quality, Currency, Coverage, Commissioning Standards. Recalculates as corpus grows.',
       };
 
       return res.json({
         financial_capital: financialCapital,
         evidence_capital: evidenceCapital,
         decision_capital: decisionCapital,
-        institutional_capital: institutionalCapital,
+        eroi,
         generated_at: new Date().toISOString(),
         corpus_size: ec.total_records,
       });

@@ -361,7 +361,7 @@ function greetingNameFor(user) {
 }
 
 function cascadeDimensions(cascade) {
-  const dims = cascade?.institutional_capital?.dimensions || {};
+  const dims = cascade?.eroi?.dimensions || {};
   return [
     ['Quality', dims.evidence_quality?.score],
     ['Currency', dims.currency?.score],
@@ -1315,10 +1315,10 @@ function DashboardPage() {
       formula: cascade?.decision_capital?.formula,
     },
     {
-      title: 'Institutional Capital',
-      value: cascadeLoading ? 'Calculating...' : cascade?.institutional_capital?.label || 'N/A',
+      title: 'EROI',
+      value: cascadeLoading ? 'Calculating...' : cascade?.eroi?.label || 'N/A',
       note: '',
-      formula: cascade?.institutional_capital?.formula,
+      formula: cascade?.eroi?.formula,
       dimensions: cascadeDimensions(cascade),
     },
   ];
@@ -2867,7 +2867,7 @@ const WORKSPACE_LOSS_FRAMING = {
   sample_size_learners: "No sample size recorded — this evaluation can't be weighted against comparable studies.",
   baseline_available: "Baseline availability is unconfirmed — causal claims can't be verified.",
   endline_available: "Endline availability is unconfirmed — the evidence chain is incomplete.",
-  commissioning_standards_met: "Commissioning standards are unconfirmed — this record is excluded from the Institutional Capital score.",
+  commissioning_standards_met: "Commissioning standards are unconfirmed — this record is excluded from the EROI score.",
   total_cost_rand: 'No cost recorded — this programme is invisible to Financial Capital.',
   cost_data_source: "No cost data source recorded — this figure can't be trusted for SROI.",
   cost_per_learner: "No per-learner cost — this programme can't be benchmarked for cost-effectiveness.",
@@ -4169,7 +4169,7 @@ function AdminAskPage() {
     'Compare Zenex and Optima corpus coverage',
     'Explain the Three-Capital Cascade calculation',
     'Why was a CURRENCY_ALERT generated for Funda Wande?',
-    'What is the Institutional Capital index formula?',
+    'What is the EROI index formula?',
   ];
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState(null);

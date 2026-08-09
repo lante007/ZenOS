@@ -100,7 +100,7 @@ const PLATFORM_KNOWLEDGE = {
     financial_capital: 'Balance sheet investment. Calculable only from classified financial records.',
     evidence_capital: 'Net quality-adjusted score. Formula: sum of (EQS/5 x depreciation_factor) across all active records.',
     decision_capital: 'Confirmed instances where evidence changed decisions. Requires manual ratification by Organisation Lead.',
-    institutional_capital: 'Index 0-100 across four dimensions: Evidence Quality (25), Currency (25), Coverage (25), Standards (25).',
+    eroi: 'EROI: Evidence Return on Investment. Index 0-100 across four dimensions: Evidence Quality (25), Currency (25), Coverage (25), Standards (25).',
   },
   duplicate_detection: 'On classify/process, system checks file_hash and filename against existing documents. Returns 409 with duplicate_detected error if match found.',
   flywheel_alerts: {
