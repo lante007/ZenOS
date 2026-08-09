@@ -1688,7 +1688,7 @@ function DashboardPage() {
               </div>
               <p className="completeness-detail">
                 {completenessData
-                  ? `${completenessData.incomplete_record_count ?? 0} of ${completenessData.total_active_records ?? 0} records have critical missing fields`
+                  ? `${completenessData.critical_gaps_count ?? 0} of ${completenessData.total_active_records ?? 0} records have critical missing fields`
                   : 'Checking corpus completeness...'}
               </p>
               <p className="completeness-subtext">
