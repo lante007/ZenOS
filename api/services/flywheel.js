@@ -200,6 +200,22 @@ async function insertAlertIfNew(tenant, pool, alert) {
   return inserted.rows[0];
 }
 
+const DAILY_ALERT_CAP_PER_ROLE = 3;
+const PRIORITY_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+async function countAlertsToday(tenant, pool, targetRole) {
+  const schema = schemaFor(tenant);
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS count
+     FROM ${schema}.alerts
+     WHERE tenant_id = $1
+       AND target_role = $2
+       AND created_at >= date_trunc('day', NOW())`,
+    [tenant.slug, targetRole]
+  );
+  return Number(result.rows[0].count);
+}
+
 async function runFlywheel(tenant, pool) {
   const batches = await Promise.all([
     detectAudienceGaps(tenant, pool),
@@ -210,10 +226,24 @@ async function runFlywheel(tenant, pool) {
     detectBoardProximity(tenant, pool),
   ]);
 
+  const candidates = batches.flat().sort(
+    (a, b) => (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1)
+  );
+
+  const roleCountsToday = {};
   const inserted = [];
-  for (const alert of batches.flat()) {
+  for (const alert of candidates) {
+    const role = alert.target_role;
+    if (roleCountsToday[role] === undefined) {
+      roleCountsToday[role] = await countAlertsToday(tenant, pool, role);
+    }
+    if (roleCountsToday[role] >= DAILY_ALERT_CAP_PER_ROLE) continue;
+
     const row = await insertAlertIfNew(tenant, pool, alert);
-    if (row) inserted.push(row);
+    if (row) {
+      inserted.push(row);
+      roleCountsToday[role] += 1;
+    }
   }
   return inserted;
 }

@@ -429,7 +429,9 @@ async function listQueue(tenant) {
       FROM queue_items q
       LEFT JOIN intelligence_records r ON r.id = q.record_id
       LEFT JOIN documents d ON d.id = q.document_id
-      WHERE q.tenant_id = $1 AND q.resolved_at IS NULL
+      WHERE q.tenant_id = $1
+        AND q.resolved_at IS NULL
+        AND (r.record_status IS NULL OR r.record_status <> 'SOFT_DELETED')
       ORDER BY q.created_at DESC
       LIMIT 100
     `, [tenant.slug]);

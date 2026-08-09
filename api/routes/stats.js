@@ -158,33 +158,26 @@ router.get('/cascade',
 
       const fcResult = await pool.query(`
         SELECT
-          COUNT(*)::int AS financial_docs,
-          COALESCE(SUM(
-            CASE
-              WHEN cost_data_present = 'AUDITED'
-              THEN 1 ELSE 0
-            END
-          ), 0)::int AS audited_count
+          COUNT(*) FILTER (WHERE total_cost_rand IS NOT NULL)::int AS audited_count,
+          COALESCE(SUM(total_cost_rand) FILTER (WHERE total_cost_rand IS NOT NULL), 0)::bigint AS total_rand
         FROM ${schema}.intelligence_records
         WHERE tenant_id = $1
           AND record_status = 'ACTIVE'
-          AND document_type IN (
-            'Financial Record',
-            'Annual Report',
-            'Audited Financials',
-            'Budget Document'
-          )
       `, [tenantId]);
 
       const fc = fcResult.rows[0];
+      const fcAuditedCount = toNumber(fc.audited_count);
+      const fcTotalRand = toNumber(fc.total_rand);
       const financialCapital = {
-        has_data: fc.financial_docs > 0,
-        value: null,
-        label: fc.financial_docs > 0
-          ? 'From classified financial records'
+        has_data: fcAuditedCount > 0,
+        value: fcAuditedCount > 0 ? fcTotalRand : null,
+        label: fcAuditedCount > 0
+          ? `R${fcTotalRand >= 1000000
+            ? `${(fcTotalRand / 1000000).toFixed(1)}m`
+            : fcTotalRand.toLocaleString()}`
           : 'N/A',
-        note: fc.financial_docs > 0
-          ? `${fc.audited_count} audited source documents`
+        note: fcAuditedCount > 0
+          ? `${fcAuditedCount} audited source documents`
           : 'Upload audited financial records to calculate Financial Capital',
         formula: 'Total funds deployed for evidence-related activities. Source: classified financial documents only.',
       };
@@ -200,10 +193,10 @@ router.get('/cascade',
           COUNT(*) FILTER (WHERE half_life_rating = 'AGING')::int AS aging_count,
           COUNT(*) FILTER (WHERE half_life_rating = 'HISTORICAL')::int AS historical_count,
           ROUND(AVG(eqs_composite) FILTER (WHERE eqs_composite IS NOT NULL), 2) AS avg_eqs,
-          ROUND(SUM(
+          ROUND(AVG(
             CASE
               WHEN eqs_composite IS NULL
-                THEN 0
+                THEN NULL
               ELSE
                 (eqs_composite / 5.0)
                 * CASE
@@ -242,8 +235,8 @@ router.get('/cascade',
         historical: ec.historical_count,
         has_data: ec.total_records > 0,
         label: ec.total_records > 0
-          ? (ec.net_ec_index
-              ? `${parseFloat(ec.net_ec_index).toFixed(2)} / 5.0`
+          ? (ec.avg_eqs != null
+              ? `${parseFloat(ec.avg_eqs).toFixed(2)} / 5.0`
               : 'N/A')
           : 'N/A',
         note: ec.total_records > 0
@@ -505,9 +498,11 @@ router.get('/portfolio',
 
       const queue = await pool.query(`
         SELECT COUNT(*)::int AS pending
-        FROM ${schema}.queue_items
-        WHERE tenant_id = $1
-          AND resolved_at IS NULL
+        FROM ${schema}.queue_items q
+        LEFT JOIN ${schema}.intelligence_records r ON r.id = q.record_id
+        WHERE q.tenant_id = $1
+          AND q.resolved_at IS NULL
+          AND (r.record_status IS NULL OR r.record_status <> 'SOFT_DELETED')
       `, [req.tenant.slug]);
 
       const programmes = await pool.query(`
