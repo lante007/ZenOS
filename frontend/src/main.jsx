@@ -1382,7 +1382,8 @@ function DashboardPage() {
     {
       title: 'EROI',
       value: cascadeLoading ? 'Calculating...' : cascade?.eroi?.label || 'N/A',
-      note: '',
+      note: 'Evidence Quality Index',
+      costDataNote: 'Converts to true EROI when Decision Capital instances are confirmed',
       formula: cascade?.eroi?.formula,
       dimensions: cascadeDimensions(cascade),
     },
@@ -1646,11 +1647,15 @@ function DashboardPage() {
                 <h3>{stage.title}</h3>
                 <strong>{stage.value}</strong>
                 {stage.dimensions ? (
-                  <div className="dimension-pills">
-                    {stage.dimensions.map(([label, score]) => (
-                      <span key={label}>{label} {score ?? 0}/25</span>
-                    ))}
-                  </div>
+                  <>
+                    <div className="dimension-pills">
+                      {stage.dimensions.map(([label, score]) => (
+                        <span key={label}>{label} {score ?? 0}/25</span>
+                      ))}
+                    </div>
+                    {stage.note && <p>{stage.note}</p>}
+                    {stage.costDataNote && <p className="cascade-cost-note cascade-conversion-note">{stage.costDataNote}</p>}
+                  </>
                 ) : (
                   <>
                     <p>{stage.note || 'N/A'}</p>

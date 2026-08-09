@@ -1405,6 +1405,10 @@ button.estate-stat-tile {
   line-height: 1.45;
 }
 
+.cascade-card .cascade-conversion-note {
+  font-style: italic;
+}
+
 .dimension-pills {
   display: flex;
   flex-wrap: wrap;
@@ -1569,7 +1573,8 @@ button.estate-stat-tile {
   margin-top: 22px;
   padding: 20px;
   border-radius: 8px;
-  background: #F2F5F8;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .completeness-banner {
@@ -1600,14 +1605,14 @@ button.estate-stat-tile {
   font-size: 32px;
   font-weight: 700;
   line-height: 1;
-  color: var(--navy);
+  color: #ffffff;
 }
 
 .completeness-bar-track {
   flex: 1 1 auto;
   height: 8px;
   border-radius: 4px;
-  background: #DDE3EA;
+  background: rgba(255, 255, 255, 0.12);
   overflow: hidden;
 }
 
@@ -1626,7 +1631,7 @@ button.estate-stat-tile {
 
 .completeness-detail {
   margin: 0;
-  color: #3A3A3A;
+  color: rgba(245, 242, 238, 0.75);
   font-size: 13px;
   font-weight: 700;
 }
@@ -1652,7 +1657,7 @@ button.estate-stat-tile {
 .intelligence-summary-divider {
   height: 1px;
   margin: 0 20px;
-  background: #DDE3EA;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .gap-priority-rows {
@@ -1665,12 +1670,12 @@ button.estate-stat-tile {
   align-items: center;
   gap: 16px;
   padding: 14px 20px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #DDE3EA;
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .gap-priority-row:nth-child(2) {
-  background: #F8F9FA;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .gap-priority-row:last-child {
@@ -1698,14 +1703,14 @@ button.estate-stat-tile {
 
 .gap-priority-text h4 {
   margin: 0;
-  color: var(--navy);
+  color: #ffffff;
   font-size: 14px;
   font-weight: 800;
 }
 
 .gap-priority-description {
   margin: 2px 0 0;
-  color: #666666;
+  color: rgba(245, 242, 238, 0.6);
   font-size: 12px;
   line-height: 1.4;
 }

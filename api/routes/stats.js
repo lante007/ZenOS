@@ -356,7 +356,7 @@ router.get('/cascade',
         },
         has_data: ec.total_records > 0,
         label: ec.total_records > 0 ? `${eroiIndex} / 100` : 'N/A',
-        formula: 'EROI: Evidence Return on Investment. Index 0–100. Four dimensions (25 pts each): Evidence Quality, Currency, Coverage, Commissioning Standards. Recalculates as corpus grows.',
+        formula: 'Composite index of evidence quality, currency, coverage and commissioning standards. Converts to true EROI once Decision Capital instances are confirmed by the Director of Research.',
       };
 
       return res.json({
