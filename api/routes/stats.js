@@ -532,8 +532,8 @@ router.get('/gaps',
 
       const result = await pool.query(`
         SELECT
-          programme_name,
-          programme_area,
+          COALESCE(canonical_programme_name, programme_name) as programme_name,
+          MAX(programme_area) as programme_area,
           MAX(year) as last_year,
           MAX(total_cost_rand) as total_cost_rand,
           bool_or(
@@ -554,7 +554,7 @@ router.get('/gaps',
         WHERE tenant_id = $1
           AND record_status = 'ACTIVE'
           AND programme_name IS NOT NULL
-        GROUP BY programme_name, programme_area
+        GROUP BY COALESCE(canonical_programme_name, programme_name)
         HAVING NOT bool_or(
           record_series = 'ENDLINE'
           OR endline_available = true
