@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  Banknote,
   Check,
   CheckCircle2,
   ClipboardCopy,
@@ -22,6 +23,7 @@ import {
   Mail,
   Search,
   ShieldCheck,
+  SkipForward,
   TrendingUp,
   UploadCloud,
   Users,
@@ -1094,7 +1096,7 @@ function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() 
           </a>
           <a className={active === 'queue' ? 'active' : ''} href="/queue">
             <CheckCircle2 size={18} />
-            <span>Queue</span>
+            <span>Workspace</span>
             <strong className="nav-badge">{queueBadge}</strong>
           </a>
           <a className={active === 'settings' ? 'active' : ''} href="/settings">
@@ -1134,6 +1136,7 @@ function DashboardPage() {
   const [cascade, setCascade] = useState(null);
   const [cascadeLoading, setCascadeLoading] = useState(true);
   const [formulaModal, setFormulaModal] = useState(null);
+  const [workspaceExtra, setWorkspaceExtra] = useState({ corpus: 0, financial: 0 });
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
   const [seedAttempted, setSeedAttempted] = useState(false);
@@ -1254,6 +1257,23 @@ function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      apiRequest('/api/stats/completeness').catch(() => null),
+      apiRequest('/api/financial/unconfirmed').catch(() => null),
+    ]).then(([completeness, financial]) => {
+      if (cancelled) return;
+      setWorkspaceExtra({
+        corpus: completeness ? (completeness.critical_gaps_count || 0) + (completeness.financial_gaps_count || 0) : 0,
+        financial: financial ? (financial.count || 0) : 0,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (seedAttempted || alertsLoading || alerts.length > 0 || user.role !== 'ORGANISATION_LEAD') return;
     setSeedAttempted(true);
     apiRequest('/api/admin/flywheel/run', { method: 'POST' })
@@ -1310,7 +1330,7 @@ function DashboardPage() {
     : 'Not recorded';
 
   return (
-    <AppShell active="dashboard" queueBadge={queueItems.length}>
+    <AppShell active="dashboard" queueBadge={queueItems.length + workspaceExtra.corpus + workspaceExtra.financial}>
       <section className="dashboard-main">
         <header className="dashboard-header">
           <div>
@@ -2833,27 +2853,310 @@ function ClassifyPage() {
   );
 }
 
-function QueuePage() {
-  const [items, setItems] = useState(FALLBACK_QUEUE_EMPTY);
+function formatRand(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 'R0';
+  return `R${num >= 1000000 ? `${(num / 1000000).toFixed(1)}m` : num.toLocaleString()}`;
+}
+
+const WORKSPACE_LOSS_FRAMING = {
+  methodology_description: "Without a methodology description, this evaluation can't be cited as rigorous evidence.",
+  null_findings_reported: "Unreported null findings break Protocol Amendment 1 — this record can't be board-cited until confirmed.",
+  limitations: "Undocumented limitations mean this finding can't be defended under scrutiny.",
+  effect_size_composite: "No effect size recorded — this evaluation can't support an impact claim.",
+  sample_size_learners: "No sample size recorded — this evaluation can't be weighted against comparable studies.",
+  baseline_available: "Baseline availability is unconfirmed — causal claims can't be verified.",
+  endline_available: "Endline availability is unconfirmed — the evidence chain is incomplete.",
+  commissioning_standards_met: "Commissioning standards are unconfirmed — this record is excluded from the Institutional Capital score.",
+  total_cost_rand: 'No cost recorded — this programme is invisible to Financial Capital.',
+  cost_data_source: "No cost data source recorded — this figure can't be trusted for SROI.",
+  cost_per_learner: "No per-learner cost — this programme can't be benchmarked for cost-effectiveness.",
+  financial_year: "No financial year recorded — this cost figure can't be placed in context.",
+};
+
+function workspaceLossFraming(field, label) {
+  return WORKSPACE_LOSS_FRAMING[field] || `Missing ${(label || field).toLowerCase()} — this record is incomplete.`;
+}
+
+function WorkspaceFieldEditor({ recordId, entry, onSave }) {
+  const [value, setValue] = useState(entry.suggested_value ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(finalValue) {
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(recordId, entry.field, finalValue);
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Could not save.');
+      setSaving(false);
+    }
+  }
+
+  if (entry.type === 'boolean') {
+    return (
+      <div className="workspace-field-editor">
+        <div className="workspace-field-radios">
+          <label>
+            <input type="radio" name={`${recordId}-${entry.field}`} checked={value === true} onChange={() => setValue(true)} />
+            <span>Yes</span>
+          </label>
+          <label>
+            <input type="radio" name={`${recordId}-${entry.field}`} checked={value === false} onChange={() => setValue(false)} />
+            <span>No</span>
+          </label>
+        </div>
+        <button className="secondary-action" type="button" disabled={value === '' || saving} onClick={() => submit(value)}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        {error && <span className="workspace-field-error">{error}</span>}
+      </div>
+    );
+  }
+
+  if (entry.type === 'enum') {
+    return (
+      <div className="workspace-field-editor">
+        <div className="workspace-field-radios">
+          {entry.options.map(option => (
+            <label key={option}>
+              <input type="radio" name={`${recordId}-${entry.field}`} checked={value === option} onChange={() => setValue(option)} />
+              <span>{option.replace(/_/g, ' ')}</span>
+            </label>
+          ))}
+        </div>
+        <button className="secondary-action" type="button" disabled={!value || saving} onClick={() => submit(value)}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        {error && <span className="workspace-field-error">{error}</span>}
+      </div>
+    );
+  }
+
+  if (entry.type === 'number') {
+    return (
+      <div className="workspace-field-editor">
+        <input
+          type="number"
+          value={value}
+          onChange={event => setValue(event.target.value)}
+          placeholder={`Enter ${(entry.label || entry.field).toLowerCase()}`}
+        />
+        <button className="secondary-action" type="button" disabled={value === '' || saving} onClick={() => submit(value)}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        {error && <span className="workspace-field-error">{error}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="workspace-field-editor">
+      {entry.multiline ? (
+        <textarea
+          rows={3}
+          value={value}
+          onChange={event => setValue(event.target.value)}
+          placeholder={`Enter ${(entry.label || entry.field).toLowerCase()}`}
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={event => setValue(event.target.value)}
+          placeholder={`Enter ${(entry.label || entry.field).toLowerCase()}`}
+        />
+      )}
+      <button className="secondary-action" type="button" disabled={!value || saving} onClick={() => submit(value)}>
+        {saving ? 'Saving...' : 'Save'}
+      </button>
+      {error && <span className="workspace-field-error">{error}</span>}
+    </div>
+  );
+}
+
+function WorkspaceGapCard({ gap, onSaveField }) {
+  return (
+    <article className="workspace-gap-card">
+      <div className="workspace-gap-card-header">
+        <div>
+          <p className="eyebrow">{gap.document_type || 'Evidence record'}</p>
+          <h3>{gap.programme_name || gap.record_id}</h3>
+        </div>
+        <span className="workspace-gap-count">{gap.missing_fields.length} missing</span>
+      </div>
+      <div className="workspace-gap-fields">
+        {gap.missing_fields.map(entry => (
+          <div className="workspace-gap-field" key={entry.field}>
+            <p className="workspace-loss-framing">{workspaceLossFraming(entry.field, entry.label)}</p>
+            {entry.suggested_value != null && (
+              <p className="workspace-suggestion">
+                Suggested from {entry.suggested_source}: <strong>{String(entry.suggested_value)}</strong>
+              </p>
+            )}
+            <WorkspaceFieldEditor recordId={gap.record_id} entry={entry} onSave={onSaveField} />
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function WorkspaceFinancialCard({ item, onConfirm, onMarkUnknown }) {
+  const [mode, setMode] = useState('view');
+  const [customValue, setCustomValue] = useState(item.suggested_value ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const validSources = ['AUDITED', 'GRANT_AGREEMENT', 'MANAGEMENT_ACCOUNTS', 'PROXY', 'UNKNOWN'];
+
+  async function handleConfirm() {
+    setBusy(true);
+    setError('');
+    try {
+      await onConfirm(item.record_id, item.suggested_value, validSources.includes(item.source) ? item.source : undefined);
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Could not confirm.');
+      setBusy(false);
+    }
+  }
+
+  async function handleSubmitDifferent() {
+    setBusy(true);
+    setError('');
+    try {
+      await onConfirm(item.record_id, customValue, undefined);
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Could not save.');
+      setBusy(false);
+    }
+  }
+
+  async function handleUnknown() {
+    setBusy(true);
+    setError('');
+    try {
+      await onMarkUnknown(item.record_id);
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Could not update.');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <article className="workspace-financial-card">
+      <div className="workspace-gap-card-header">
+        <div>
+          <p className="eyebrow">{item.document_type || 'Evidence record'}</p>
+          <h3>{item.programme_name || item.record_id}</h3>
+        </div>
+        <span className="workspace-financial-value">{formatRand(item.suggested_value)}</span>
+      </div>
+      <p className="workspace-suggestion">
+        Suggested value from <strong>{item.source || 'document extraction'}</strong>
+        {item.financial_year ? ` · ${item.financial_year}` : ''}
+      </p>
+
+      {mode === 'view' ? (
+        <div className="workspace-financial-actions">
+          <button className="secondary-action confirm" type="button" disabled={busy} onClick={handleConfirm}>
+            <Check size={16} />
+            <span>Confirm {formatRand(item.suggested_value)}</span>
+          </button>
+          <button className="secondary-action" type="button" disabled={busy} onClick={() => setMode('different')}>
+            <Edit3 size={16} />
+            <span>Enter different value</span>
+          </button>
+          <button className="secondary-action" type="button" disabled={busy} onClick={handleUnknown}>
+            <span>Mark as unknown</span>
+          </button>
+        </div>
+      ) : (
+        <div className="workspace-financial-actions">
+          <input
+            type="number"
+            value={customValue}
+            onChange={event => setCustomValue(event.target.value)}
+            placeholder="Enter correct total (R)"
+          />
+          <button className="secondary-action confirm" type="button" disabled={busy || customValue === ''} onClick={handleSubmitDifferent}>
+            <Check size={16} />
+            <span>Save</span>
+          </button>
+          <button className="secondary-action" type="button" disabled={busy} onClick={() => setMode('view')}>
+            <span>Cancel</span>
+          </button>
+        </div>
+      )}
+
+      {error && <p className="workspace-field-error">{error}</p>}
+    </article>
+  );
+}
+
+function WorkspacePage() {
+  const [queueItems, setQueueItems] = useState(FALLBACK_QUEUE_EMPTY);
+  const [queueLoading, setQueueLoading] = useState(true);
   const [overrideValues, setOverrideValues] = useState({});
+  const [completeness, setCompleteness] = useState(null);
+  const [completenessLoading, setCompletenessLoading] = useState(true);
+  const [financial, setFinancial] = useState(null);
+  const [financialLoading, setFinancialLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     apiRequest('/api/queue')
       .then(data => {
-        if (!cancelled && Array.isArray(data)) setItems(data.map(normalizeQueueItem));
+        if (!cancelled && Array.isArray(data)) setQueueItems(data.map(normalizeQueueItem));
       })
       .catch(() => {
-        if (!cancelled) setItems(FALLBACK_QUEUE_EMPTY);
+        if (!cancelled) setQueueItems(FALLBACK_QUEUE_EMPTY);
+      })
+      .finally(() => {
+        if (!cancelled) setQueueLoading(false);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  async function resolveItem(id, value, override = false) {
-    const item = items.find(entry => entry.id === id);
-    setItems(current => current.filter(entry => entry.id !== id));
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/stats/completeness')
+      .then(data => {
+        if (!cancelled) setCompleteness(data);
+      })
+      .catch(() => {
+        if (!cancelled) setCompleteness(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCompletenessLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/financial/unconfirmed')
+      .then(data => {
+        if (!cancelled) setFinancial(data);
+      })
+      .catch(() => {
+        if (!cancelled) setFinancial(null);
+      })
+      .finally(() => {
+        if (!cancelled) setFinancialLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function resolveQueueItem(id, value, override = false) {
+    const item = queueItems.find(entry => entry.id === id);
+    setQueueItems(current => current.filter(entry => entry.id !== id));
     setOverrideValues(current => ({ ...current, [id]: override ? value : '' }));
     try {
       await apiRequest(`/api/queue/${id}/resolve`, {
@@ -2866,74 +3169,221 @@ function QueuePage() {
     }
   }
 
+  function skipQueueItem(id) {
+    // Snooze only - no DB write, same as before. It will resurface next visit.
+    setQueueItems(current => current.filter(entry => entry.id !== id));
+  }
+
+  async function saveCorpusField(recordId, field, value) {
+    await apiRequest(`/api/records/${recordId}/field`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field, value }),
+    });
+    setCompleteness(current => {
+      if (!current) return current;
+      const stripField = gaps => gaps
+        .map(gap => (gap.record_id === recordId
+          ? { ...gap, missing_fields: gap.missing_fields.filter(entry => entry.field !== field) }
+          : gap))
+        .filter(gap => gap.missing_fields.length > 0);
+      const nextCritical = stripField(current.critical_gaps);
+      const nextFinancial = stripField(current.financial_gaps);
+      return {
+        ...current,
+        critical_gaps: nextCritical,
+        financial_gaps: nextFinancial,
+        critical_gaps_count: nextCritical.length,
+        financial_gaps_count: nextFinancial.length,
+      };
+    });
+  }
+
+  async function confirmFinancial(recordId, value, source) {
+    await apiRequest(`/api/records/${recordId}/field`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'total_cost_rand', value, source }),
+    });
+    setFinancial(current => {
+      if (!current) return current;
+      const items = current.items.filter(item => item.record_id !== recordId);
+      return { ...current, items, count: items.length };
+    });
+  }
+
+  async function markFinancialUnknown(recordId) {
+    await apiRequest(`/api/records/${recordId}/field`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'cost_data_source', value: 'UNKNOWN' }),
+    });
+    setFinancial(current => {
+      if (!current) return current;
+      const items = current.items.filter(item => item.record_id !== recordId);
+      return { ...current, items, count: items.length };
+    });
+  }
+
+  const corpusActions = completeness ? completeness.critical_gaps_count + completeness.financial_gaps_count : 0;
+  const financialActions = financial ? financial.count : 0;
+  const totalActions = corpusActions + queueItems.length + financialActions;
+  const completenessScore = completeness?.completeness_score ?? 0;
+
   return (
-    <AppShell active="queue" queueBadge={items.length}>
-      <section className="dashboard-main">
+    <AppShell active="queue" queueBadge={totalActions}>
+      <section className="dashboard-main workspace-page">
         <header className="dashboard-header">
           <div>
-            <p className="eyebrow">Expert review queue</p>
-            <h1>Classification Decisions</h1>
+            <p className="eyebrow">Evidence Intelligence Workspace</p>
+            <h1>Corpus Health, Review &amp; Financial Confirmation</h1>
           </div>
           <div className="tenant-pill queue-pill">
             <AlertTriangle size={16} />
-            <span>{items.length} pending</span>
+            <span>{totalActions} actions pending</span>
           </div>
         </header>
 
-        <section className="review-list" aria-label="Expert review queue">
-          {items.length === 0 ? (
-            <article className="empty-panel">
-              <CheckCircle2 size={28} />
-              <h2>Queue clear</h2>
-              <p>All low-confidence fields have been confirmed or overridden.</p>
-            </article>
-          ) : items.map((item) => (
-            <article className="review-card" key={item.id}>
-              <div className="review-topline">
-                <div>
-                  <p className="eyebrow">{item.programmeName}</p>
-                  <h2>{item.fieldName}</h2>
+        <section className="workspace-section" aria-label="Corpus health">
+          <div className="workspace-section-header">
+            <h2><Database size={20} /><span>Corpus Health</span></h2>
+            <span className={`workspace-score-pill ${completenessScore >= 80 ? 'complete' : 'urgent'}`}>
+              {completenessLoading ? 'Calculating...' : `${completenessScore}% complete`}
+            </span>
+          </div>
+
+          <div className="workspace-subsection">
+            <h3 className="workspace-subsection-title urgent">Missing critical fields</h3>
+            <div className="workspace-gap-grid">
+              {completenessLoading ? (
+                <p className="workspace-loading">Checking corpus completeness...</p>
+              ) : !completeness || completeness.critical_gaps.length === 0 ? (
+                <article className="empty-panel compact">
+                  <CheckCircle2 size={24} />
+                  <h3>No critical field gaps</h3>
+                  <p>Every active record has its critical fields populated.</p>
+                </article>
+              ) : completeness.critical_gaps.map(gap => (
+                <WorkspaceGapCard key={gap.record_id} gap={gap} onSaveField={saveCorpusField} />
+              ))}
+            </div>
+          </div>
+
+          <div className="workspace-subsection">
+            <h3 className="workspace-subsection-title urgent">Missing financial fields</h3>
+            <div className="workspace-gap-grid">
+              {completenessLoading ? (
+                <p className="workspace-loading">Checking financial completeness...</p>
+              ) : !completeness || completeness.financial_gaps.length === 0 ? (
+                <article className="empty-panel compact">
+                  <CheckCircle2 size={24} />
+                  <h3>No financial field gaps</h3>
+                  <p>Every active record has its financial fields populated.</p>
+                </article>
+              ) : completeness.financial_gaps.map(gap => (
+                <WorkspaceGapCard key={gap.record_id} gap={gap} onSaveField={saveCorpusField} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="workspace-section" aria-label="System flagged">
+          <div className="workspace-section-header">
+            <h2><ShieldCheck size={20} /><span>System Flagged</span></h2>
+            <span className={`workspace-score-pill ${queueItems.length === 0 ? 'complete' : 'urgent'}`}>
+              {queueItems.length} pending
+            </span>
+          </div>
+
+          <section className="review-list" aria-label="Expert review queue">
+            {queueLoading ? (
+              <p className="workspace-loading">Loading classifier review queue...</p>
+            ) : queueItems.length === 0 ? (
+              <article className="empty-panel compact">
+                <CheckCircle2 size={24} />
+                <h3>Queue clear</h3>
+                <p>All low-confidence fields have been confirmed or overridden.</p>
+              </article>
+            ) : queueItems.map((item) => (
+              <article className="review-card" key={item.id}>
+                <div className="review-topline">
+                  <div>
+                    <p className="eyebrow">{item.programmeName}</p>
+                    <h2>{item.fieldName}</h2>
+                  </div>
+                  <strong>{formatQueueConfidence(item.confidence)}</strong>
                 </div>
-                <strong>{formatQueueConfidence(item.confidence)}</strong>
-              </div>
 
-              <div className="recommendation-box">
-                <span>System recommendation</span>
-                <strong>{item.recommendation}</strong>
-                <p>{item.rationale}</p>
-              </div>
+                <div className="recommendation-box">
+                  <span>System recommendation</span>
+                  <strong>{item.recommendation}</strong>
+                  <p>{item.rationale}</p>
+                </div>
 
-              <div className="alternatives-row">
-                {item.alternatives.map((alternative) => (
-                  <button type="button" key={alternative} onClick={() => setOverrideValues({ ...overrideValues, [item.id]: alternative })}>
-                    {alternative}
+                <div className="alternatives-row">
+                  {item.alternatives.map((alternative) => (
+                    <button type="button" key={alternative} onClick={() => setOverrideValues({ ...overrideValues, [item.id]: alternative })}>
+                      {alternative}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="override-row">
+                  <input
+                    type="text"
+                    placeholder="Override value"
+                    value={overrideValues[item.id] || ''}
+                    onChange={(event) => setOverrideValues({ ...overrideValues, [item.id]: event.target.value })}
+                  />
+                  <button className="secondary-action" type="button" onClick={() => resolveQueueItem(item.id, item.recommendation)}>
+                    <Check size={17} />
+                    <span>Confirm</span>
                   </button>
-                ))}
-              </div>
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    disabled={!overrideValues[item.id]}
+                    onClick={() => resolveQueueItem(item.id, overrideValues[item.id], true)}
+                  >
+                    <Edit3 size={17} />
+                    <span>Override</span>
+                  </button>
+                  <button className="secondary-action" type="button" onClick={() => skipQueueItem(item.id)}>
+                    <SkipForward size={17} />
+                    <span>Skip</span>
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+        </section>
 
-              <div className="override-row">
-                <input
-                  type="text"
-                  placeholder="Override value"
-                  value={overrideValues[item.id] || ''}
-                  onChange={(event) => setOverrideValues({ ...overrideValues, [item.id]: event.target.value })}
-                />
-                <button className="secondary-action" type="button" onClick={() => resolveItem(item.id, item.recommendation)}>
-                  <Check size={17} />
-                  <span>Confirm</span>
-                </button>
-                <button
-                  className="secondary-action"
-                  type="button"
-                  disabled={!overrideValues[item.id]}
-                  onClick={() => resolveItem(item.id, overrideValues[item.id], true)}
-                >
-                  <Edit3 size={17} />
-                  <span>Override</span>
-                </button>
-              </div>
-            </article>
-          ))}
+        <section className="workspace-section" aria-label="Financial confirmation">
+          <div className="workspace-section-header">
+            <h2><Banknote size={20} /><span>Financial Records</span></h2>
+            <span className={`workspace-score-pill ${financialActions === 0 ? 'complete' : 'urgent'}`}>
+              {financialActions} unconfirmed
+            </span>
+          </div>
+
+          <div className="workspace-gap-grid">
+            {financialLoading ? (
+              <p className="workspace-loading">Loading financial records...</p>
+            ) : !financial || financial.items.length === 0 ? (
+              <article className="empty-panel compact">
+                <CheckCircle2 size={24} />
+                <h3>All financial records confirmed</h3>
+                <p>No extracted cost figures are waiting on confirmation.</p>
+              </article>
+            ) : financial.items.map(item => (
+              <WorkspaceFinancialCard
+                key={item.record_id}
+                item={item}
+                onConfirm={confirmFinancial}
+                onMarkUnknown={markFinancialUnknown}
+              />
+            ))}
+          </div>
         </section>
       </section>
     </AppShell>
@@ -4339,7 +4789,7 @@ function App() {
   if (path === '/synthesise') return <SynthesisePage />;
   if (path === '/ask') return <AskZenexPage />;
   if (path === '/classify') return <ClassifyPage />;
-  if (path === '/queue') return <QueuePage />;
+  if (path === '/queue') return <WorkspacePage />;
   if (path === '/products') return <KnowledgePage />;
   if (path === '/knowledge') return <KnowledgePage />;
   if (path.startsWith('/provenance/')) return <ProvenancePage />;

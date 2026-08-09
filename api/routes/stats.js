@@ -3,6 +3,13 @@
 const express = require('express');
 const { requireRoles } = require('../middleware/permissions');
 const { getPool } = require('../services/db');
+const {
+  CRITICAL_FIELDS,
+  FINANCIAL_FIELDS,
+  ALL_WORKSPACE_FIELDS,
+  isEmpty,
+  describeFieldFor,
+} = require('../services/workspace-fields');
 
 const router = express.Router();
 
@@ -359,6 +366,79 @@ router.get('/cascade',
         institutional_capital: institutionalCapital,
         generated_at: new Date().toISOString(),
         corpus_size: ec.total_records,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get('/completeness',
+  requireRoles('ORGANISATION_LEAD'),
+  async (req, res, next) => {
+    try {
+      const pool = getPool();
+      if (!pool) return res.status(503).json({ error: 'Database is not configured' });
+
+      const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+      assertSchema(schema);
+      const tenantId = req.tenant.slug;
+
+      const columns = ['id', 'programme_name', 'document_type', 'optimy_project_id', 'optimy_field_values']
+        .concat(ALL_WORKSPACE_FIELDS.map(f => f.field));
+
+      const records = await pool.query(`
+        SELECT ${columns.join(', ')}
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+      `, [tenantId]);
+
+      let filledCells = 0;
+      const totalCells = records.rows.length * ALL_WORKSPACE_FIELDS.length;
+      const criticalGaps = [];
+      const financialGaps = [];
+
+      for (const record of records.rows) {
+        for (const def of ALL_WORKSPACE_FIELDS) {
+          if (!isEmpty(record[def.field])) filledCells += 1;
+        }
+
+        const missingCritical = CRITICAL_FIELDS
+          .map(def => describeFieldFor(record, def))
+          .filter(entry => entry.current_value === null);
+        if (missingCritical.length > 0) {
+          criticalGaps.push({
+            record_id: record.id,
+            programme_name: record.programme_name,
+            document_type: record.document_type,
+            missing_fields: missingCritical,
+          });
+        }
+
+        const missingFinancial = FINANCIAL_FIELDS
+          .map(def => describeFieldFor(record, def))
+          .filter(entry => entry.current_value === null);
+        if (missingFinancial.length > 0) {
+          financialGaps.push({
+            record_id: record.id,
+            programme_name: record.programme_name,
+            document_type: record.document_type,
+            missing_fields: missingFinancial,
+          });
+        }
+      }
+
+      criticalGaps.sort((a, b) => b.missing_fields.length - a.missing_fields.length);
+      financialGaps.sort((a, b) => b.missing_fields.length - a.missing_fields.length);
+
+      return res.json({
+        completeness_score: totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0,
+        total_active_records: records.rows.length,
+        critical_gaps_count: criticalGaps.length,
+        financial_gaps_count: financialGaps.length,
+        critical_gaps: criticalGaps.slice(0, 50),
+        financial_gaps: financialGaps.slice(0, 50),
       });
     } catch (err) {
       next(err);
