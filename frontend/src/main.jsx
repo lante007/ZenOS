@@ -399,6 +399,30 @@ function CascadeFormulaModal({ item, onClose }) {
   );
 }
 
+function AlertPriorityInfoModal({ open, onClose }) {
+  if (!open) return null;
+  return (
+    <div className="modal-backdrop formula-backdrop" role="presentation" onClick={onClose}>
+      <section className="formula-modal" role="dialog" aria-modal="true" aria-label="How priority is determined" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">Intelligence Alerts</p>
+            <h2>How priority is determined</h2>
+          </div>
+          <button className="icon-button" type="button" aria-label="Close explanation" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <p>
+          Priority is based on strategic alignment, evidence age, investment size,
+          evidence gaps, and DBE policy relevance.
+        </p>
+        <small>Alerts are ranked Critical, Important, or Informational from these combined factors.</small>
+      </section>
+    </div>
+  );
+}
+
 function dateTimeStamp(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return 'Not recorded';
@@ -800,6 +824,25 @@ const alertIcons = {
   POLICY_WINDOW: '📢',
 };
 
+function alertTier(alert) {
+  const score = Number(alert?.priority_score);
+  if (Number.isFinite(score)) {
+    if (score >= 80) return 'CRITICAL';
+    if (score >= 50) return 'IMPORTANT';
+    return 'INFORMATIONAL';
+  }
+  // Legacy alerts predating priority_score fall back to their HIGH/MEDIUM/LOW priority.
+  if (alert?.priority === 'HIGH') return 'CRITICAL';
+  if (alert?.priority === 'LOW') return 'INFORMATIONAL';
+  return 'IMPORTANT';
+}
+
+const ALERT_TIER_LABELS = {
+  CRITICAL: 'Critical',
+  IMPORTANT: 'Important',
+  INFORMATIONAL: 'Informational',
+};
+
 async function cognitoRequest(target, body) {
   const response = await fetch(`https://cognito-idp.${tenantConfig.cognitoRegion}.amazonaws.com/`, {
     method: 'POST',
@@ -1136,6 +1179,7 @@ function DashboardPage() {
   const [cascade, setCascade] = useState(null);
   const [cascadeLoading, setCascadeLoading] = useState(true);
   const [formulaModal, setFormulaModal] = useState(null);
+  const [priorityInfoOpen, setPriorityInfoOpen] = useState(false);
   const [workspaceExtra, setWorkspaceExtra] = useState({ corpus: 0, financial: 0 });
   const [completenessData, setCompletenessData] = useState(null);
   const [gaps, setGaps] = useState([]);
@@ -1735,7 +1779,17 @@ function DashboardPage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Learning Flywheel</p>
-              <h2>Intelligence Alerts</h2>
+              <h2>
+                Intelligence Alerts
+                <button
+                  className="priority-info-trigger"
+                  type="button"
+                  aria-label="How priority is determined"
+                  onClick={() => setPriorityInfoOpen(true)}
+                >
+                  ⓘ
+                </button>
+              </h2>
               <span>EvidenceOS surfaces the right intelligence to the right person at the right moment</span>
             </div>
             <span className="live-badge">Live</span>
@@ -1749,23 +1803,27 @@ function DashboardPage() {
           ) : (
             <>
               <div className="alert-grid">
-                {(alerts || []).slice(0, 3).map(alert => (
-                  <article className={`alert-card priority-${String(alert.priority || 'MEDIUM').toLowerCase()}`} key={alert.id}>
-                    <div className="alert-icon" aria-hidden="true">{alertIcons[alert.alert_type] || '📢'}</div>
-                    <div>
-                      <h3>{alert.title}</h3>
-                      <p>{alert.body}</p>
-                      {alert.record_id && <a href={`/records?record=${alert.record_id}`}>Open record {alert.record_id}</a>}
-                      <footer>
-                        <span>{roleLabel(alert.target_role)}</span>
-                        <span>{dateTimeStamp(alert.created_at)}</span>
-                      </footer>
-                    </div>
-                    <button className="secondary-action mark-read-action" type="button" onClick={() => markRead(alert.id)}>
-                      Mark as read
-                    </button>
-                  </article>
-                ))}
+                {(alerts || []).slice(0, 3).map(alert => {
+                  const tier = alertTier(alert);
+                  return (
+                    <article className={`alert-card tier-${tier.toLowerCase()}`} key={alert.id}>
+                      <div className="alert-icon" aria-hidden="true">{alertIcons[alert.alert_type] || '📢'}</div>
+                      <div>
+                        <span className={`alert-tier-badge tier-${tier.toLowerCase()}`}>{ALERT_TIER_LABELS[tier]}</span>
+                        <h3>{alert.title}</h3>
+                        <p>{alert.body}</p>
+                        {alert.record_id && <a href={`/records?record=${alert.record_id}`}>Open record {alert.record_id}</a>}
+                        <footer>
+                          <span>{roleLabel(alert.target_role)}</span>
+                          <span>{dateTimeStamp(alert.created_at)}</span>
+                        </footer>
+                      </div>
+                      <button className="secondary-action mark-read-action" type="button" onClick={() => markRead(alert.id)}>
+                        Mark as read
+                      </button>
+                    </article>
+                  );
+                })}
               </div>
               {alerts.length > 3 && (
                 <a className="teal-link earlier-alerts-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
@@ -1776,6 +1834,7 @@ function DashboardPage() {
           )}
         </section>
         <CascadeFormulaModal item={formulaModal} onClose={() => setFormulaModal(null)} />
+        <AlertPriorityInfoModal open={priorityInfoOpen} onClose={() => setPriorityInfoOpen(false)} />
       </section>
     </AppShell>
   );
@@ -3154,6 +3213,7 @@ function WorkspacePage() {
   const [completenessLoading, setCompletenessLoading] = useState(true);
   const [financial, setFinancial] = useState(null);
   const [financialLoading, setFinancialLoading] = useState(true);
+  const { alerts, loading: alertsLoading, markRead } = useAlerts();
 
   useEffect(() => {
     let cancelled = false;
@@ -3295,6 +3355,46 @@ function WorkspacePage() {
             <span>{totalActions} actions pending</span>
           </div>
         </header>
+
+        <section className="workspace-section" aria-label="All intelligence alerts">
+          <div className="workspace-section-header">
+            <h2><AlertTriangle size={20} /><span>Intelligence Alerts</span></h2>
+            <span className="workspace-score-pill">{alerts.length} unread</span>
+          </div>
+
+          {alertsLoading ? (
+            <p className="workspace-loading">Loading alerts...</p>
+          ) : alerts.length === 0 ? (
+            <article className="empty-panel compact">
+              <CheckCircle2 size={24} />
+              <p>No active alerts. Your evidence base is current.</p>
+            </article>
+          ) : (
+            <div className="alert-grid">
+              {alerts.map(alert => {
+                const tier = alertTier(alert);
+                return (
+                  <article className={`alert-card tier-${tier.toLowerCase()}`} key={alert.id}>
+                    <div className="alert-icon" aria-hidden="true">{alertIcons[alert.alert_type] || '📢'}</div>
+                    <div>
+                      <span className={`alert-tier-badge tier-${tier.toLowerCase()}`}>{ALERT_TIER_LABELS[tier]}</span>
+                      <h3>{alert.title}</h3>
+                      <p>{alert.body}</p>
+                      {alert.record_id && <a href={`/records?record=${alert.record_id}`}>Open record {alert.record_id}</a>}
+                      <footer>
+                        <span>{roleLabel(alert.target_role)}</span>
+                        <span>{dateTimeStamp(alert.created_at)}</span>
+                      </footer>
+                    </div>
+                    <button className="secondary-action mark-read-action" type="button" onClick={() => markRead(alert.id)}>
+                      Mark as read
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         <section className="workspace-section" aria-label="Corpus health">
           <div className="workspace-section-header">

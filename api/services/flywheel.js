@@ -1,5 +1,7 @@
 'use strict';
 
+const { computePriorityScore, operationalPriorityScore } = require('./priority-score');
+
 function schemaFor(tenant) {
   const schema = tenant.db_schema || tenant.slug;
   if (!/^[a-z][a-z0-9_]*$/.test(schema || '')) {
@@ -11,7 +13,8 @@ function schemaFor(tenant) {
 async function detectAudienceGaps(tenant, pool) {
   const schema = schemaFor(tenant);
   const records = await pool.query(
-    `SELECT id, programme_name, eqs_tier
+    `SELECT id, programme_name, eqs_tier, programme_area, total_cost_rand, year,
+            nls_alignment, funrs_alignment, policy_alignment
      FROM ${schema}.intelligence_records
      WHERE tenant_id = $1
        AND eqs_tier IN ('TIER_1','TIER_2')
@@ -29,13 +32,15 @@ async function detectAudienceGaps(tenant, pool) {
     const covered = kps.rows.map(k => k.audience);
     const missing = audiences.filter(a => !covered.includes(a));
     if (missing.length > 0) {
+      const priority = record.eqs_tier === 'TIER_1' ? 'HIGH' : 'MEDIUM';
       alerts.push({
         alert_type: 'AUDIENCE_GAP',
         title: `Knowledge gap: ${record.programme_name}`,
         body: `${record.programme_name} (${record.eqs_tier}) has no knowledge product for: ${missing.join(', ')}. ${missing.length} audience briefs pending generation.`,
         record_id: record.id,
         target_role: 'COMMUNICATIONS',
-        priority: record.eqs_tier === 'TIER_1' ? 'HIGH' : 'MEDIUM',
+        priority,
+        priority_score: computePriorityScore(record, { priority }),
       });
     }
   }
@@ -45,7 +50,8 @@ async function detectAudienceGaps(tenant, pool) {
 async function detectCurrencyAlerts(tenant, pool) {
   const schema = schemaFor(tenant);
   const records = await pool.query(
-    `SELECT id, programme_name, half_life_rating, year, policy_alignment
+    `SELECT id, programme_name, half_life_rating, year, policy_alignment,
+            programme_area, total_cost_rand, nls_alignment, funrs_alignment
      FROM ${schema}.intelligence_records
      WHERE tenant_id = $1
        AND half_life_rating = 'AGING'
@@ -59,6 +65,7 @@ async function detectCurrencyAlerts(tenant, pool) {
     record_id: r.id,
     target_role: 'ORGANISATION_LEAD',
     priority: 'MEDIUM',
+    priority_score: computePriorityScore(r, { priority: 'MEDIUM' }),
   }));
 }
 
@@ -84,12 +91,28 @@ async function detectCommissioningGaps(tenant, pool) {
       [tenant.slug, prog]
     );
     if (Number(result.rows[0].count) === 0) {
+      // No records matched the "recent" filter above, so pull an unfiltered
+      // programme profile (most recent year, total investment, policy signal)
+      // to score priority against instead of a single record.
+      const profile = await pool.query(
+        `SELECT MAX(programme_area) AS programme_area,
+                MAX(year) AS year,
+                SUM(total_cost_rand) AS total_cost_rand,
+                BOOL_OR(nls_alignment) AS nls_alignment,
+                BOOL_OR(funrs_alignment) AS funrs_alignment,
+                MAX(policy_alignment) AS policy_alignment
+         FROM ${schema}.intelligence_records
+         WHERE tenant_id = $1 AND programme_name = $2 AND record_status = 'ACTIVE'`,
+        [tenant.slug, prog]
+      );
+      const priority = 'MEDIUM';
       alerts.push({
         alert_type: 'COMMISSIONING_GAP',
         title: `No recent impact evidence: ${prog}`,
         body: `${prog} has no impact evaluation in the archive dated 2021 or later. If this programme is still active, a new evaluation may be justified. Check the commissioning calendar.`,
         target_role: 'EVIDENCE_ANALYST',
-        priority: 'MEDIUM',
+        priority,
+        priority_score: computePriorityScore(profile.rows[0] || {}, { priority }),
       });
     }
   }
@@ -108,12 +131,18 @@ async function detectQueueBacklog(tenant, pool) {
   );
   const count = Number(result.rows[0].count);
   if (count >= 5) {
+    // Operational alert, not tied to a single evidence record: strategic
+    // alignment, investment magnitude and policy relevance don't apply, so
+    // priority_score falls back to their neutral defaults and is driven by
+    // severity alone.
+    const priority = count >= 10 ? 'HIGH' : 'MEDIUM';
     return [{
       alert_type: 'QUEUE_BACKLOG',
       title: `${count} classification decisions pending`,
       body: `${count} expert review items have been waiting more than 5 days. Batch classification progress is blocked until these are resolved. Target: clear queue in next session.`,
       target_role: 'ORGANISATION_LEAD',
-      priority: count >= 10 ? 'HIGH' : 'MEDIUM',
+      priority,
+      priority_score: operationalPriorityScore(priority),
     }];
   }
   return [];
@@ -122,7 +151,8 @@ async function detectQueueBacklog(tenant, pool) {
 async function detectEndlineGaps(tenant, pool) {
   const schema = schemaFor(tenant);
   const result = await pool.query(
-    `SELECT id, programme_name, year
+    `SELECT id, programme_name, year, programme_area, total_cost_rand,
+            nls_alignment, funrs_alignment, policy_alignment
      FROM ${schema}.intelligence_records
      WHERE tenant_id = $1
        AND document_type = 'Impact Evaluation'
@@ -137,6 +167,7 @@ async function detectEndlineGaps(tenant, pool) {
     record_id: r.id,
     target_role: 'EVIDENCE_ANALYST',
     priority: 'HIGH',
+    priority_score: computePriorityScore(r, { priority: 'HIGH' }),
   }));
 }
 
@@ -154,12 +185,16 @@ async function detectBoardProximity(tenant, pool) {
     ? Math.floor((Date.now() - new Date(lastPack)) / (1000 * 60 * 60 * 24))
     : 999;
   if (daysSince > 85) {
+    // Operational alert, not tied to a single evidence record - see note in
+    // detectQueueBacklog above.
+    const priority = 'HIGH';
     return [{
       alert_type: 'BOARD_PROXIMITY',
       title: 'Trustee Evidence Pack overdue',
       body: `No trustee evidence pack has been generated in ${daysSince === 999 ? 'this cycle' : `${daysSince} days`}. Generate the quarterly pack from the current corpus before the next board meeting.`,
       target_role: 'ORGANISATION_LEAD',
-      priority: 'HIGH',
+      priority,
+      priority_score: operationalPriorityScore(priority),
     }];
   }
   return [];
@@ -167,6 +202,25 @@ async function detectBoardProximity(tenant, pool) {
 
 async function insertAlertIfNew(tenant, pool, alert) {
   const schema = schemaFor(tenant);
+
+  // Suppression rule: a dismissed alert for the same record + same alert
+  // category (alert_type) stays suppressed for 90 days. A different
+  // alert_type on the same record fires normally.
+  if (alert.record_id) {
+    const dismissed = await pool.query(
+      `SELECT id
+       FROM ${schema}.alerts
+       WHERE tenant_id = $1
+         AND alert_type = $2
+         AND record_id = $3
+         AND dismissed_at IS NOT NULL
+         AND dismissed_at >= NOW() - INTERVAL '90 days'
+       LIMIT 1`,
+      [tenant.slug, alert.alert_type, alert.record_id]
+    );
+    if (dismissed.rows[0]) return null;
+  }
+
   const existing = await pool.query(
     `SELECT id
      FROM ${schema}.alerts
@@ -183,8 +237,8 @@ async function insertAlertIfNew(tenant, pool, alert) {
 
   const inserted = await pool.query(
     `INSERT INTO ${schema}.alerts (
-       tenant_id, alert_type, title, body, record_id, target_role, priority, expires_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       tenant_id, alert_type, title, body, record_id, target_role, priority, priority_score, expires_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      RETURNING *`,
     [
       tenant.slug,
@@ -194,6 +248,7 @@ async function insertAlertIfNew(tenant, pool, alert) {
       alert.record_id || null,
       alert.target_role,
       alert.priority || 'MEDIUM',
+      alert.priority_score ?? null,
       alert.expires_at || null,
     ]
   );
@@ -201,7 +256,6 @@ async function insertAlertIfNew(tenant, pool, alert) {
 }
 
 const DAILY_ALERT_CAP_PER_ROLE = 3;
-const PRIORITY_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
 async function countAlertsToday(tenant, pool, targetRole) {
   const schema = schemaFor(tenant);
@@ -227,7 +281,7 @@ async function runFlywheel(tenant, pool) {
   ]);
 
   const candidates = batches.flat().sort(
-    (a, b) => (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1)
+    (a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0)
   );
 
   const roleCountsToday = {};

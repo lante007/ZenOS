@@ -602,6 +602,7 @@ async function listAlerts(tenant, role) {
         AND is_read = false
         AND tenant_id = $2
       ORDER BY
+        priority_score DESC NULLS LAST,
         CASE priority
           WHEN 'HIGH' THEN 1
           WHEN 'MEDIUM' THEN 2
@@ -618,7 +619,7 @@ async function markAlertRead(tenant, id) {
   return withTenant(tenant, async client => {
     const res = await client.query(`
       UPDATE alerts
-      SET is_read = true
+      SET is_read = true, dismissed_at = NOW()
       WHERE id = $1 AND tenant_id = $2
       RETURNING *
     `, [id, tenant.slug]);

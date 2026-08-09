@@ -76,16 +76,59 @@
   background: rgba(245, 242, 238, 0.055);
 }
 
-.alert-card.priority-high {
-  border-left-color: #FF6B6B;
+.alert-card.tier-critical {
+  border-left-color: #E5484D;
 }
 
-.alert-card.priority-medium {
+.alert-card.tier-important {
   border-left-color: #F5B642;
 }
 
-.alert-card.priority-low {
-  border-left-color: rgba(245, 242, 238, 0.32);
+.alert-card.tier-informational {
+  border-left-color: var(--teal);
+}
+
+.alert-tier-badge {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.alert-tier-badge.tier-critical {
+  background: rgba(229, 72, 77, 0.16);
+  color: #FF8A8D;
+}
+
+.alert-tier-badge.tier-important {
+  background: rgba(245, 182, 66, 0.16);
+  color: #F5B642;
+}
+
+.alert-tier-badge.tier-informational {
+  background: rgba(0, 180, 216, 0.14);
+  color: var(--teal);
+}
+
+.priority-info-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  border: none;
+  background: none;
+  color: rgba(245, 242, 238, 0.5);
+  font-size: 14px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.priority-info-trigger:hover {
+  color: var(--teal);
 }
 
 .alert-icon {
