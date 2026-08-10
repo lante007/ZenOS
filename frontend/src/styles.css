@@ -4177,17 +4177,52 @@ button.estate-stat-tile {
   font-weight: 900;
 }
 
-.tor-generator-layout {
-  display: grid;
-  grid-template-columns: 60% 1fr;
-  gap: 18px;
-  align-items: start;
+.tor-panel {
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+    rgba(15, 32, 64, 0.72);
 }
 
-@media (max-width: 960px) {
-  .tor-generator-layout {
-    grid-template-columns: 1fr;
+.tor-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 18px;
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .tor-brief-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.tor-brief-label {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--color-muted);
+}
+
+.tor-brief-value {
+  margin: 0;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.35;
+}
+
+.tor-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.tor-body-section h2 {
+  margin: 4px 0 14px;
 }
 
 .tor-generator-main {
@@ -4263,30 +4298,11 @@ button.estate-stat-tile {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.tor-generator-sidebar {
-  display: grid;
-  gap: 14px;
-  align-content: start;
-  padding: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
-    rgba(15, 32, 64, 0.72);
-}
-
-.tor-generator-sidebar h3 {
+.tor-panel h2 {
   margin: 0;
   font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: 26px;
-  color: #00B4D8;
-}
-
-.tor-generator-sidebar h4 {
-  margin: 0 0 4px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1.4px;
-  color: var(--color-muted);
+  font-size: 28px;
+  color: #ffffff;
 }
 
 .tor-source-card {
@@ -4322,16 +4338,6 @@ button.estate-stat-tile {
   margin: 6px 0 0;
   color: rgba(245, 242, 238, 0.45);
   font-size: 12px;
-}
-
-.tor-source-gap {
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.tor-source-gap p {
-  margin: 0;
-  color: rgba(245, 242, 238, 0.76);
 }
 
 .tor-generator-bottom-actions {
@@ -4375,12 +4381,6 @@ button.estate-stat-tile {
 .tor-strategic-section {
   display: grid;
   gap: 18px;
-  padding: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012)),
-    rgba(10, 22, 40, 0.6);
 }
 
 .tor-strategic-heading {

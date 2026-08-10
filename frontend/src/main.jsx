@@ -2676,7 +2676,61 @@ function TorGeneratorPage() {
         )}
 
         {result && (
-          <div className="tor-generator-layout">
+          <section className="tor-panel tor-brief-section">
+            <p className="eyebrow">Section 1 · Evaluation Brief</p>
+            <h2>Evaluation Brief</h2>
+            <div className="tor-brief-grid">
+              <div>
+                <p className="tor-brief-label">Programme</p>
+                <p className="tor-brief-value">{result.programme_name}</p>
+              </div>
+              <div>
+                <p className="tor-brief-label">Programme area</p>
+                <p className="tor-brief-value">{result.programme_area || 'Not recorded'}</p>
+              </div>
+              <div>
+                <p className="tor-brief-label">Evidence gap</p>
+                <p className="tor-brief-value">{result.gap_type === 'no_endline' ? 'No endline evaluation' : 'No impact evaluation'}</p>
+              </div>
+              <div>
+                <p className="tor-brief-label">Total investment</p>
+                <p className="tor-brief-value">{formatRand(result.total_investment)}</p>
+              </div>
+              <div>
+                <p className="tor-brief-label">Last evaluation</p>
+                <p className="tor-brief-value">{result.last_evaluation_year || 'Unknown'}</p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {result && (
+          <section className="tor-panel tor-evidence-section">
+            <p className="eyebrow">Section 2 · Evidence Base</p>
+            <h2>Evidence Base</h2>
+            <p className="section-meta">
+              {result.evaluation_count} prior evaluation{result.evaluation_count !== 1 ? 's' : ''} drawn from the Zenex corpus
+            </p>
+            <div className="tor-evidence-grid">
+              {(result.source_records || []).map(r => (
+                <article key={r.id} className="tor-source-card">
+                  <div className="tor-source-header">
+                    <span>{r.year}</span>
+                    <span className={`confidence-badge ${String(r.eqs_tier || '').toLowerCase()}`}>{r.eqs_tier}</span>
+                  </div>
+                  <p className="tor-source-type">{r.document_type}{r.eqs_composite ? ` · EQS ${r.eqs_composite}/5.0` : ''}</p>
+                  {r.key_finding_1 && <p className="tor-source-finding">{r.key_finding_1}</p>}
+                  {r.original_filename && <p className="tor-source-file">{r.original_filename}</p>}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {result && (
+          <section className="tor-panel tor-body-section">
+            <p className="eyebrow">Section 3 · Terms of Reference</p>
+            <h2>Terms of Reference</h2>
             <div className="tor-generator-main">
               {sections.map((section, i) => {
                 const flagged = section.body.includes('[REVIEW]');
@@ -2706,33 +2760,7 @@ function TorGeneratorPage() {
                 );
               })}
             </div>
-
-            <aside className="tor-generator-sidebar">
-              <h3>Data sources</h3>
-              <p className="section-meta">Evaluations used to generate this TOR</p>
-              {(result.source_records || []).map(r => (
-                <article key={r.id} className="tor-source-card">
-                  <div className="tor-source-header">
-                    <span>{r.year}</span>
-                    <span className={`confidence-badge ${String(r.eqs_tier || '').toLowerCase()}`}>{r.eqs_tier}</span>
-                  </div>
-                  <p className="tor-source-type">{r.document_type}{r.eqs_composite ? ` · EQS ${r.eqs_composite}/5.0` : ''}</p>
-                  {r.key_finding_1 && <p className="tor-source-finding">{r.key_finding_1}</p>}
-                  {r.original_filename && <p className="tor-source-file">{r.original_filename}</p>}
-                </article>
-              ))}
-
-              <div className="tor-source-gap">
-                <h4>Gap identified</h4>
-                <p>{result.gap_type === 'no_endline' ? `No endline evaluation for ${result.years_without_endline} years` : 'No impact evaluation on record'}</p>
-              </div>
-
-              <div className="tor-source-gap">
-                <h4>Investment data source</h4>
-                <p>Zenex financial records · {formatRand(result.total_investment)} total to date</p>
-              </div>
-            </aside>
-          </div>
+          </section>
         )}
 
         {strategicIntelligence && (() => {
@@ -2742,7 +2770,7 @@ function TorGeneratorPage() {
           const whyMatters = computeWhyMatters(strategicIntelligence.opportunities);
 
           return (
-            <section className="tor-strategic-section">
+            <section className="tor-panel tor-strategic-section">
               <div className="tor-strategic-heading">
                 <div>
                   <p className="eyebrow">Section 4 · Strategic Intelligence</p>

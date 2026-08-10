@@ -314,7 +314,10 @@ async function runFreshStrategicIntelligence(tenant, { programmeName, programmeA
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      // Spec called for 2000, but that consistently truncated the JSON
+      // mid-generation in production testing: web search reasoning eats
+      // into the same budget as the final 3-opportunity JSON output.
+      max_tokens: 4000,
       system: systemPrompt,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages: [{ role: 'user', content: userPrompt }],
@@ -438,6 +441,7 @@ router.post('/generate',
         evaluation_count: records.length,
         gap_type: gap.hasEndline ? 'no_impact_evaluation' : 'no_endline',
         years_without_endline: gap.yearsWithoutEndline,
+        last_evaluation_year: gap.lastYear,
         provinces: gap.provinces,
         programme_area: gap.programmeArea,
         source_records: records.map(r => ({
