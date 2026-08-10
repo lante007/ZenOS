@@ -2478,6 +2478,7 @@ function TorGeneratorPage() {
   const [siRefreshing, setSiRefreshing] = useState(false);
   const [dismissedTypes, setDismissedTypes] = useState(new Set());
   const [pendingFocus, setPendingFocus] = useState(null);
+  const [progressMessage, setProgressMessage] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -2502,13 +2503,60 @@ function TorGeneratorPage() {
     );
   }
 
+  function applyGenerateResult(data) {
+    setResult(data);
+    setStrategicIntelligence(data.strategic_intelligence || null);
+    setDismissedTypes(new Set());
+    const parsed = parseTorSections(data.tor_text);
+    setSections(parsed);
+    const initialExpanded = {};
+    parsed.forEach((_, i) => { initialExpanded[i] = true; });
+    setExpanded(initialExpanded);
+  }
+
+  function pollJobStatus(jobId) {
+    return new Promise(resolve => {
+      const startedAt = Date.now();
+      const progressTimer = window.setTimeout(() => setProgressMessage('Generating TOR sections...'), 15000);
+
+      const finish = () => { window.clearTimeout(progressTimer); setLoading(false); resolve(); };
+
+      const poll = async () => {
+        if (Date.now() - startedAt > 3 * 60 * 1000) {
+          setError('This is taking longer than expected. Please try again.');
+          finish();
+          return;
+        }
+        try {
+          const statusData = await apiRequest(`/api/tor/generate/status/${jobId}`);
+          if (statusData.status === 'complete') {
+            applyGenerateResult(statusData.result);
+            finish();
+            return;
+          }
+          if (statusData.status === 'failed') {
+            setError(statusData.error || 'Generation failed. Please try again.');
+            finish();
+            return;
+          }
+          window.setTimeout(poll, 3000);
+        } catch {
+          setError('Unable to check generation status. Please try again.');
+          finish();
+        }
+      };
+      poll();
+    });
+  }
+
   async function handleGenerate(name, strategicFocus) {
     const targetName = name || programmeName;
     if (!targetName) return;
     setLoading(true);
     setError(null);
+    setProgressMessage('Analysing evidence record...');
     try {
-      const data = await apiRequest('/api/tor/generate', {
+      const job = await apiRequest('/api/tor/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2516,17 +2564,9 @@ function TorGeneratorPage() {
           ...(strategicFocus ? { strategic_focus: strategicFocus } : {}),
         }),
       });
-      setResult(data);
-      setStrategicIntelligence(data.strategic_intelligence || null);
-      setDismissedTypes(new Set());
-      const parsed = parseTorSections(data.tor_text);
-      setSections(parsed);
-      const initialExpanded = {};
-      parsed.forEach((_, i) => { initialExpanded[i] = true; });
-      setExpanded(initialExpanded);
+      await pollJobStatus(job.jobId);
     } catch {
       setError('Unable to generate the Terms of Reference. Please try again.');
-    } finally {
       setLoading(false);
     }
   }
@@ -2681,7 +2721,7 @@ function TorGeneratorPage() {
         )}
 
         {loading && !result && (
-          <p className="workspace-loading">Drafting Terms of Reference for {programmeName}...</p>
+          <p className="workspace-loading">{progressMessage || `Drafting Terms of Reference for ${programmeName}...`}</p>
         )}
 
         {result && (

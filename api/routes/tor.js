@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireRoles } = require('../middleware/permissions');
@@ -10,6 +11,31 @@ const { uploadJson } = require('../../src/s3-connector');
 const anthropic = new Anthropic();
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+// Same guard as api/services/flywheel.js - defence in depth even though
+// every DB call in this file already goes through db.js's own identical
+// check via withTenant/schemaFor.
+function schemaFor(tenant) {
+  const schema = tenant.db_schema || tenant.slug;
+  if (!/^[a-z][a-z0-9_]*$/.test(schema || '')) {
+    throw new Error(`Unsafe tenant schema: ${schema}`);
+  }
+  return schema;
+}
+
+// In-memory async job store for POST /generate. Deliberately not backed by
+// RDS: jobs are short-lived (a few minutes) and single-process (pm2 runs
+// this app in fork mode, not cluster), so there is no cross-process
+// visibility requirement that would justify a DB round-trip on every poll.
+// Jobs do not survive a pm2 restart.
+const jobs = {};
+const JOB_TTL_MS = 10 * 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - JOB_TTL_MS;
+  for (const [id, job] of Object.entries(jobs)) {
+    if (job.createdAt < cutoff) delete jobs[id];
+  }
+}, 60 * 1000).unref();
 
 function buildSystemPrompt() {
   return `You are Dr Fatima Adam, Director of Research and Evaluation at Zenex Foundation, South Africa's leading education evidence funder. You have 15 years of experience commissioning evaluations across South African schools. You also hold actuarial training and apply precise probabilistic and cost-benefit reasoning to evidence questions.
@@ -379,10 +405,86 @@ async function getStrategicIntelligence(tenant, params, { forceRefresh } = {}) {
   return runFreshStrategicIntelligence(tenant, params);
 }
 
+// The actual generation work - unchanged from the previous synchronous
+// handler, just extracted so it can run detached from the request/response
+// cycle. No change to the Claude call logic or prompts themselves.
+async function runTorGeneration(tenant, { programmeName, strategicFocus, records, generatedBy }) {
+  const gap = computeGapAnalysis(records);
+
+  // CALL 1: TOR generation. Internal corpus only, no web search.
+  const systemPrompt = buildSystemPrompt();
+  const userPrompt = buildUserPrompt({ programmeName, records, gap, strategicFocus });
+
+  const message = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8000,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  const torText = message.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('');
+
+  const sanitised = sanitiseTor(torText);
+
+  // CALL 2: Strategic intelligence. Separate, web-search-enabled call.
+  // A failure here must never fail TOR generation - the TOR is already
+  // successfully produced above.
+  let strategicIntelligence;
+  try {
+    strategicIntelligence = await getStrategicIntelligence(tenant, {
+      programmeName,
+      programmeArea: gap.programmeArea,
+      existingEvidenceSummary: buildEvidenceSummary(records, gap),
+      generatedBy,
+    });
+  } catch (siErr) {
+    console.error(`[tor] strategic intelligence failed for "${programmeName}": ${siErr.message}`);
+    strategicIntelligence = {
+      id: null,
+      opportunities: [],
+      generated_at: null,
+      cached: false,
+      error: 'Strategic intelligence could not be generated. Try again.',
+    };
+  }
+
+  return {
+    tor_text: sanitised,
+    programme_name: programmeName,
+    total_investment: gap.totalInvestment,
+    evaluation_count: records.length,
+    gap_type: gap.hasEndline ? 'no_impact_evaluation' : 'no_endline',
+    years_without_endline: gap.yearsWithoutEndline,
+    last_evaluation_year: gap.lastYear,
+    provinces: gap.provinces,
+    programme_area: gap.programmeArea,
+    source_records: records.map(r => ({
+      id: r.id,
+      year: r.year,
+      document_type: r.document_type,
+      eqs_tier: r.eqs_tier,
+      eqs_composite: r.eqs_composite,
+      key_finding_1: r.key_finding_1,
+      key_finding_2: r.key_finding_2,
+      original_filename: r.original_filename,
+    })),
+    strategic_intelligence: strategicIntelligence,
+    generated_at: new Date().toISOString(),
+  };
+}
+
 router.post('/generate',
   requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'),
   async (req, res, next) => {
+    // Auth and tenant access are already enforced above this handler by
+    // authenticate()/assertNoBoardAccess (server.js) and requireRoles just
+    // above, so by the time this body runs auth has already succeeded.
     try {
+      schemaFor(req.tenant);
+
       const { programme_name: programmeName, strategic_focus: strategicFocus } = req.body;
       const tenant = req.tenant;
 
@@ -390,76 +492,75 @@ router.post('/generate',
         return res.status(400).json({ error: 'programme_name is required' });
       }
 
+      // Fast, cheap validation happens synchronously, before any job is
+      // created - only the slow Claude calls run in the background.
       const records = await db.getProgrammeRecordsForTor(tenant, programmeName);
       if (!records || records.length === 0) {
         return res.status(404).json({ error: 'No evaluation records found for this programme' });
       }
 
-      const gap = computeGapAnalysis(records);
-
-      // CALL 1: TOR generation. Internal corpus only, no web search.
-      const systemPrompt = buildSystemPrompt();
-      const userPrompt = buildUserPrompt({ programmeName, records, gap, strategicFocus });
-
-      const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      });
-
-      const torText = message.content
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('');
-
-      const sanitised = sanitiseTor(torText);
-
-      // CALL 2: Strategic intelligence. Separate, web-search-enabled call.
-      // A failure here must never fail TOR generation - the TOR is already
-      // successfully produced above.
-      let strategicIntelligence;
-      try {
-        strategicIntelligence = await getStrategicIntelligence(tenant, {
-          programmeName,
-          programmeArea: gap.programmeArea,
-          existingEvidenceSummary: buildEvidenceSummary(records, gap),
-          generatedBy: req.user?.sub,
-        });
-      } catch (siErr) {
-        console.error(`[tor] strategic intelligence failed for "${programmeName}": ${siErr.message}`);
-        strategicIntelligence = {
-          id: null,
-          opportunities: [],
-          generated_at: null,
-          cached: false,
-          error: 'Strategic intelligence could not be generated. Try again.',
-        };
+      // De-dup: reuse an existing pending job for the same programme and
+      // tenant rather than spawning a second one from a rapid double-click.
+      const existing = Object.entries(jobs).find(([, job]) =>
+        job.status === 'pending' &&
+        job.tenantId === tenant.slug &&
+        job.programmeName === programmeName
+      );
+      if (existing) {
+        return res.status(202).json({ jobId: existing[0], status: 'pending' });
       }
 
-      return res.json({
-        tor_text: sanitised,
-        programme_name: programmeName,
-        total_investment: gap.totalInvestment,
-        evaluation_count: records.length,
-        gap_type: gap.hasEndline ? 'no_impact_evaluation' : 'no_endline',
-        years_without_endline: gap.yearsWithoutEndline,
-        last_evaluation_year: gap.lastYear,
-        provinces: gap.provinces,
-        programme_area: gap.programmeArea,
-        source_records: records.map(r => ({
-          id: r.id,
-          year: r.year,
-          document_type: r.document_type,
-          eqs_tier: r.eqs_tier,
-          eqs_composite: r.eqs_composite,
-          key_finding_1: r.key_finding_1,
-          key_finding_2: r.key_finding_2,
-          original_filename: r.original_filename,
-        })),
-        strategic_intelligence: strategicIntelligence,
-        generated_at: new Date().toISOString(),
-      });
+      const jobId = crypto.randomUUID();
+      jobs[jobId] = {
+        status: 'pending',
+        result: null,
+        error: null,
+        tenantId: tenant.slug,
+        userId: req.user?.sub || null,
+        programmeName,
+        createdAt: Date.now(),
+      };
+
+      res.status(202).json({ jobId, status: 'pending' });
+
+      (async () => {
+        try {
+          const result = await runTorGeneration(tenant, {
+            programmeName, strategicFocus, records, generatedBy: req.user?.sub,
+          });
+          jobs[jobId].status = 'complete';
+          jobs[jobId].result = result;
+        } catch (err) {
+          console.error(`[tor] generation job ${jobId} failed: ${err.message}`);
+          jobs[jobId].status = 'failed';
+          jobs[jobId].error = err.message;
+        }
+      })();
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get('/generate/status/:jobId',
+  requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'),
+  (req, res, next) => {
+    try {
+      schemaFor(req.tenant);
+
+      const job = jobs[req.params.jobId];
+      // A jobId alone is not an authorisation boundary: a job belonging to
+      // a different tenant or a different user within the same tenant
+      // returns 404, not 403, so its existence is never confirmed to an
+      // unauthorised caller.
+      if (!job || job.tenantId !== req.tenant.slug || job.userId !== (req.user?.sub || null)) {
+        return res.status(404).json({ error: 'Job not found' });
+      }
+
+      const response = { jobId: req.params.jobId, status: job.status };
+      if (job.status === 'complete') response.result = job.result;
+      if (job.status === 'failed') response.error = job.error;
+      return res.json(response);
     } catch (err) {
       next(err);
     }
