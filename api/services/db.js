@@ -137,6 +137,72 @@ async function getRecordsByIds(tenant, ids) {
   });
 }
 
+async function getProgrammeRecordsForTor(tenant, programmeName) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT
+        ir.id,
+        ir.programme_name,
+        ir.canonical_programme_name,
+        ir.programme_area,
+        ir.year,
+        ir.document_type,
+        ir.eqs_tier,
+        ir.eqs_composite,
+        ir.evaluation_design,
+        ir.key_finding_1,
+        ir.key_finding_2,
+        ir.key_finding_3,
+        ir.effect_size_composite,
+        ir.limitations,
+        ir.sample_size_learners,
+        ir.sample_size_schools,
+        ir.provinces,
+        ir.total_cost_rand,
+        ir.responsible_pm,
+        ir.nls_alignment,
+        ir.funrs_alignment,
+        ir.baseline_available,
+        ir.endline_available,
+        ir.record_series,
+        d.filename AS original_filename
+      FROM intelligence_records ir
+      LEFT JOIN documents d ON d.id = ir.document_id
+      WHERE ir.tenant_id = $1
+        AND ir.record_status = 'ACTIVE'
+        AND LOWER(COALESCE(ir.canonical_programme_name, ir.programme_name, '')) LIKE '%' || LOWER($2) || '%'
+      ORDER BY ir.year ASC
+    `, [tenant.slug, programmeName]);
+    return res.rows;
+  });
+}
+
+async function saveTorDocument(tenant, data) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      INSERT INTO tor_documents (
+        tenant_id, programme_name, tor_text, total_investment,
+        evaluation_count, gap_type, years_without_endline,
+        status, s3_key, generated_by, generated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      RETURNING *
+    `, [
+      tenant.slug,
+      data.programme_name,
+      data.tor_text,
+      data.total_investment || null,
+      data.evaluation_count || null,
+      data.gap_type || null,
+      data.years_without_endline || null,
+      data.status || 'DRAFT',
+      data.s3_key || null,
+      data.generated_by || null,
+      data.generated_at || new Date().toISOString(),
+    ]);
+    return res.rows[0];
+  });
+}
+
 async function saveSynthesis(tenant, data) {
   return withTenant(tenant, async client => {
     const res = await client.query(`
@@ -740,6 +806,8 @@ module.exports = {
   listRecords,
   getRecord,
   getRecordsByIds,
+  getProgrammeRecordsForTor,
+  saveTorDocument,
   saveSynthesis,
   getSynthesis,
   listSyntheses,

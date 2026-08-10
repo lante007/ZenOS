@@ -4145,6 +4145,209 @@ button.estate-stat-tile {
   font-weight: 900;
 }
 
+/* ─── Terms of Reference Generator ─────────────────────────────────── */
+
+.tor-generator-page {
+  display: grid;
+  gap: 18px;
+}
+
+.tor-generator-header {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.tor-generator-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tor-generator-actions button,
+.tor-generator-bottom-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+
+.tor-generator-layout {
+  display: grid;
+  grid-template-columns: 60% 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .tor-generator-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tor-generator-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tor-section-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+    rgba(15, 32, 64, 0.72);
+  overflow: hidden;
+}
+
+.tor-section-flagged {
+  border-color: rgba(251, 191, 36, 0.4);
+  background:
+    linear-gradient(180deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0.02)),
+    rgba(15, 32, 64, 0.72);
+}
+
+.tor-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.tor-section-title {
+  flex: 1;
+  font-weight: 800;
+}
+
+.tor-review-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 9px;
+  min-height: 22px;
+  background: rgba(251, 191, 36, 0.16);
+  color: #FBBF24;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.tor-section-caret {
+  color: rgba(245, 242, 238, 0.5);
+}
+
+.tor-section-body {
+  width: 100%;
+  padding: 0 18px 18px;
+  border: none;
+  background: transparent;
+  color: rgba(245, 242, 238, 0.82);
+  font: inherit;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.tor-section-body:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tor-generator-sidebar {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+    rgba(15, 32, 64, 0.72);
+}
+
+.tor-generator-sidebar h3 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 26px;
+  color: #00B4D8;
+}
+
+.tor-generator-sidebar h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--color-muted);
+}
+
+.tor-source-card {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(10, 22, 40, 0.52);
+}
+
+.tor-source-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: rgba(245, 242, 238, 0.7);
+  font-weight: 800;
+}
+
+.tor-source-type {
+  margin: 0 0 6px;
+  color: rgba(245, 242, 238, 0.62);
+  font-size: 13px;
+}
+
+.tor-source-finding {
+  margin: 0;
+  color: rgba(245, 242, 238, 0.8);
+  line-height: 1.5;
+}
+
+.tor-source-file {
+  margin: 6px 0 0;
+  color: rgba(245, 242, 238, 0.45);
+  font-size: 12px;
+}
+
+.tor-source-gap {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tor-source-gap p {
+  margin: 0;
+  color: rgba(245, 242, 238, 0.76);
+}
+
+.tor-generator-bottom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  position: sticky;
+  bottom: 16px;
+  padding: 14px;
+  border: 1px solid rgba(239, 114, 24, 0.24);
+  border-radius: 8px;
+  background: rgba(10, 22, 40, 0.94);
+}
+
 .ask-result-meta {
   display: flex;
   align-items: center;

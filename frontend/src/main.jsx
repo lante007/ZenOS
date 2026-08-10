@@ -1768,8 +1768,8 @@ function DashboardPage() {
                     </div>
                     <a
                       className="generate-tor-button"
-                      href={`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`}
-                      onClick={(event) => { event.preventDefault(); navigate(`/synthesise?programme=${encodeURIComponent(gap.programme_name)}`); }}
+                      href={`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`}
+                      onClick={(event) => { event.preventDefault(); navigate(`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`); }}
                     >
                       Generate TOR →
                     </a>
@@ -2399,6 +2399,268 @@ function SynthesisePage() {
           </section>
         )}
         <RecordDetailModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />
+      </section>
+    </AppShell>
+  );
+}
+
+const TOR_SECTION_RE = /^(\d{1,2})\.\s+(.+)$/;
+
+function parseTorSections(text) {
+  if (!text) return [];
+  const lines = text.split('\n');
+  const sections = [];
+  let current = null;
+  for (const line of lines) {
+    const match = line.match(TOR_SECTION_RE);
+    if (match && Number(match[1]) >= 1 && Number(match[1]) <= 11) {
+      if (current) sections.push(current);
+      current = { number: match[1], title: match[2].trim(), body: '' };
+    } else if (current) {
+      current.body += (current.body ? '\n' : '') + line;
+    }
+  }
+  if (current) sections.push(current);
+  if (!sections.length) return [{ number: '', title: 'Terms of Reference', body: text.trim() }];
+  return sections.map(s => ({ ...s, body: s.body.trim() }));
+}
+
+function TorGeneratorPage() {
+  const user = currentUser();
+  const canGenerate = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
+  const [programmeName, setProgrammeName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [sections, setSections] = useState([]);
+  const [expanded, setExpanded] = useState({});
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewSaved, setReviewSaved] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setProgrammeName(params.get('programme') || '');
+  }, []);
+
+  useEffect(() => {
+    if (programmeName) handleGenerate(programmeName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programmeName]);
+
+  if (!canGenerate) {
+    return (
+      <AppShell active="tor-generator">
+        <section className="dashboard-main">
+          <article className="empty-panel">
+            <LockKeyhole size={28} />
+            <h2>TOR generation is not available for this role</h2>
+          </article>
+        </section>
+      </AppShell>
+    );
+  }
+
+  async function handleGenerate(name) {
+    const targetName = name || programmeName;
+    if (!targetName) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiRequest('/api/tor/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ programme_name: targetName }),
+      });
+      setResult(data);
+      const parsed = parseTorSections(data.tor_text);
+      setSections(parsed);
+      const initialExpanded = {};
+      parsed.forEach((_, i) => { initialExpanded[i] = true; });
+      setExpanded(initialExpanded);
+    } catch {
+      setError('Unable to generate the Terms of Reference. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function updateSectionBody(index, value) {
+    setSections(prev => prev.map((s, i) => (i === index ? { ...s, body: value } : s)));
+  }
+
+  function fullTorText() {
+    return sections.map(s => (s.number ? `${s.number}. ${s.title}\n\n${s.body}` : s.body)).join('\n\n');
+  }
+
+  async function handleSaveDraft() {
+    if (!result) return;
+    setDraftSaving(true);
+    try {
+      await apiRequest('/api/tor/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          programme_name: result.programme_name,
+          tor_text: fullTorText(),
+          total_investment: result.total_investment,
+          evaluation_count: result.evaluation_count,
+          gap_type: result.gap_type,
+          years_without_endline: result.years_without_endline,
+        }),
+      });
+      setDraftSaved(true);
+      window.setTimeout(() => setDraftSaved(false), 3000);
+    } catch {
+      setError('Unable to save draft. Please try again.');
+    } finally {
+      setDraftSaving(false);
+    }
+  }
+
+  async function handleSendForReview() {
+    if (!result) return;
+    setReviewSaving(true);
+    try {
+      await apiRequest('/api/tor/submit-for-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          programme_name: result.programme_name,
+          tor_text: fullTorText(),
+          total_investment: result.total_investment,
+          evaluation_count: result.evaluation_count,
+          gap_type: result.gap_type,
+          years_without_endline: result.years_without_endline,
+        }),
+      });
+      setReviewSaved(true);
+      window.setTimeout(() => setReviewSaved(false), 3000);
+    } catch {
+      setError('Unable to send for review. Please try again.');
+    } finally {
+      setReviewSaving(false);
+    }
+  }
+
+  function handleDownloadWord() {
+    if (!result) return;
+    const html = fullTorText()
+      .split('\n\n')
+      .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+      .join('\n');
+    downloadWord(`TOR-${result.programme_name.replace(/\s+/g, '-')}.doc`, html);
+  }
+
+  return (
+    <AppShell active="tor-generator">
+      <section className="dashboard-main tor-generator-page">
+        <header className="dashboard-header page-header tor-generator-header">
+          <div>
+            <p className="eyebrow">Terms of Reference</p>
+            <h1>{result?.programme_name || programmeName || 'Terms of Reference Generator'}</h1>
+            {result && (
+              <p className="page-subheader">
+                Generated from {result.evaluation_count} evaluation{result.evaluation_count !== 1 ? 's' : ''} in the Zenex corpus
+                {' · '}Total investment: {formatRand(result.total_investment)}
+              </p>
+            )}
+          </div>
+          <div className="tor-generator-actions">
+            <button className="btn-secondary" type="button" disabled={loading} onClick={() => handleGenerate(programmeName)}>
+              {loading ? 'Regenerating...' : 'Regenerate'}
+            </button>
+            <button className="btn-secondary" type="button" disabled={!result} onClick={handleDownloadWord}>
+              <Download size={16} />
+              <span>Download Word</span>
+            </button>
+            <button className="btn-primary" type="button" disabled={!result || reviewSaving} onClick={handleSendForReview}>
+              {reviewSaved ? 'Sent to Workspace' : reviewSaving ? 'Sending...' : 'Save to Workspace'}
+            </button>
+          </div>
+        </header>
+
+        {error && <div className="synthesis-error">{error}</div>}
+
+        {loading && !result && (
+          <p className="workspace-loading">Drafting Terms of Reference for {programmeName}...</p>
+        )}
+
+        {result && (
+          <div className="tor-generator-layout">
+            <div className="tor-generator-main">
+              {sections.map((section, i) => {
+                const flagged = section.body.includes('[REVIEW]');
+                const isOpen = expanded[i] !== false;
+                return (
+                  <article key={`${section.number}-${section.title}`} className={`tor-section-card${flagged ? ' tor-section-flagged' : ''}`}>
+                    <button
+                      type="button"
+                      className="tor-section-toggle"
+                      onClick={() => setExpanded(prev => ({ ...prev, [i]: !isOpen }))}
+                    >
+                      <span className="tor-section-title">
+                        {section.number ? `${section.number}. ` : ''}{section.title}
+                      </span>
+                      {flagged && <span className="tor-review-badge">REVIEW</span>}
+                      <span className="tor-section-caret">{isOpen ? '▾' : '▸'}</span>
+                    </button>
+                    {isOpen && (
+                      <textarea
+                        className="tor-section-body"
+                        value={section.body}
+                        onChange={event => updateSectionBody(i, event.target.value)}
+                        rows={Math.max(4, Math.ceil(section.body.length / 90))}
+                      />
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+
+            <aside className="tor-generator-sidebar">
+              <h3>Data sources</h3>
+              <p className="section-meta">Evaluations used to generate this TOR</p>
+              {(result.source_records || []).map(r => (
+                <article key={r.id} className="tor-source-card">
+                  <div className="tor-source-header">
+                    <span>{r.year}</span>
+                    <span className={`confidence-badge ${String(r.eqs_tier || '').toLowerCase()}`}>{r.eqs_tier}</span>
+                  </div>
+                  <p className="tor-source-type">{r.document_type}{r.eqs_composite ? ` · EQS ${r.eqs_composite}/5.0` : ''}</p>
+                  {r.key_finding_1 && <p className="tor-source-finding">{r.key_finding_1}</p>}
+                  {r.original_filename && <p className="tor-source-file">{r.original_filename}</p>}
+                </article>
+              ))}
+
+              <div className="tor-source-gap">
+                <h4>Gap identified</h4>
+                <p>{result.gap_type === 'no_endline' ? `No endline evaluation for ${result.years_without_endline} years` : 'No impact evaluation on record'}</p>
+              </div>
+
+              <div className="tor-source-gap">
+                <h4>Investment data source</h4>
+                <p>Zenex financial records · {formatRand(result.total_investment)} total to date</p>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {result && (
+          <div className="tor-generator-bottom-actions">
+            <button className="btn-secondary" type="button" onClick={handleDownloadWord}>
+              <Download size={16} />
+              <span>Download as Word Document</span>
+            </button>
+            <button className="btn-primary" type="button" disabled={reviewSaving} onClick={handleSendForReview}>
+              {reviewSaved ? 'Sent for Review' : reviewSaving ? 'Sending...' : 'Send to Fatima for Review'}
+            </button>
+            <button className="btn-secondary" type="button" disabled={draftSaving} onClick={handleSaveDraft}>
+              {draftSaved ? 'Draft Saved' : draftSaving ? 'Saving...' : 'Save Draft'}
+            </button>
+          </div>
+        )}
       </section>
     </AppShell>
   );
@@ -4944,6 +5206,7 @@ function App() {
   if (path === '/dashboard') return <DashboardPage />;
   if (path === '/records') return <RecordsPage />;
   if (path === '/synthesise') return <SynthesisePage />;
+  if (path === '/tor-generator') return <TorGeneratorPage />;
   if (path === '/ask') return <AskZenexPage />;
   if (path === '/classify') return <ClassifyPage />;
   if (path === '/queue') return <WorkspacePage />;
