@@ -2425,6 +2425,33 @@ function parseTorSections(text) {
   return sections.map(s => ({ ...s, body: s.body.trim() }));
 }
 
+const SI_ORDER = ['POLICY_ALIGNMENT', 'SECTOR_WHITE_SPACE', 'ZENEX_ADVANTAGE'];
+
+const SI_CARD_META = {
+  POLICY_ALIGNMENT: { label: 'Policy Alignment', tone: 'orange', icon: ShieldCheck },
+  SECTOR_WHITE_SPACE: { label: 'Sector White Space', tone: 'teal', icon: Search },
+  ZENEX_ADVANTAGE: { label: 'Zenex Advantage', tone: 'purple', icon: TrendingUp },
+};
+
+const SI_TIER_LABELS = { high: 'High', moderate: 'Moderate', emerging: 'Emerging' };
+
+function siTier(avg) {
+  if (avg >= 7) return 'high';
+  if (avg >= 4) return 'moderate';
+  return 'emerging';
+}
+
+function computeWhyMatters(opportunities) {
+  if (!opportunities || !opportunities.length) return null;
+  const avg = key => opportunities.reduce((sum, o) => sum + (o.commissioning_priority_score?.[key] || 0), 0) / opportunities.length;
+  return {
+    strategicFit: siTier(avg('potential_decision_value')),
+    evidenceReadiness: siTier(10 - avg('evidence_white_space')),
+    zenexAdvantage: siTier(avg('zenex_advantage')),
+    policyRelevance: siTier(avg('policy_demand')),
+  };
+}
+
 function TorGeneratorPage() {
   const user = currentUser();
   const canGenerate = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
@@ -2438,6 +2465,10 @@ function TorGeneratorPage() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewSaved, setReviewSaved] = useState(false);
+  const [strategicIntelligence, setStrategicIntelligence] = useState(null);
+  const [siRefreshing, setSiRefreshing] = useState(false);
+  const [dismissedTypes, setDismissedTypes] = useState(new Set());
+  const [pendingFocus, setPendingFocus] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -2462,7 +2493,7 @@ function TorGeneratorPage() {
     );
   }
 
-  async function handleGenerate(name) {
+  async function handleGenerate(name, strategicFocus) {
     const targetName = name || programmeName;
     if (!targetName) return;
     setLoading(true);
@@ -2471,9 +2502,14 @@ function TorGeneratorPage() {
       const data = await apiRequest('/api/tor/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ programme_name: targetName }),
+        body: JSON.stringify({
+          programme_name: targetName,
+          ...(strategicFocus ? { strategic_focus: strategicFocus } : {}),
+        }),
       });
       setResult(data);
+      setStrategicIntelligence(data.strategic_intelligence || null);
+      setDismissedTypes(new Set());
       const parsed = parseTorSections(data.tor_text);
       setSections(parsed);
       const initialExpanded = {};
@@ -2484,6 +2520,46 @@ function TorGeneratorPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRefreshStrategicIntelligence() {
+    if (!result) return;
+    setSiRefreshing(true);
+    try {
+      const data = await apiRequest('/api/tor/strategic-intelligence/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          programme_name: result.programme_name,
+          programme_area: result.programme_area,
+        }),
+      });
+      setStrategicIntelligence(data.strategic_intelligence);
+      setDismissedTypes(new Set());
+    } catch {
+      setError('Unable to refresh strategic intelligence. Please try again.');
+    } finally {
+      setSiRefreshing(false);
+    }
+  }
+
+  async function handleDismissOpportunity(opportunityType, title) {
+    setDismissedTypes(prev => new Set(prev).add(opportunityType));
+    if (!strategicIntelligence?.id) return;
+    try {
+      await apiRequest(`/api/tor/strategic-intelligence/${strategicIntelligence.id}/dismiss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opportunity_type: opportunityType, opportunity_title: title }),
+      });
+    } catch {
+      // Dismissal is best-effort: the card stays hidden for this session
+      // even if the audit record failed to save.
+    }
+  }
+
+  function handleCommissionThis(question) {
+    setPendingFocus(question);
   }
 
   function updateSectionBody(index, value) {
@@ -2568,8 +2644,13 @@ function TorGeneratorPage() {
             )}
           </div>
           <div className="tor-generator-actions">
-            <button className="btn-secondary" type="button" disabled={loading} onClick={() => handleGenerate(programmeName)}>
-              {loading ? 'Regenerating...' : 'Regenerate'}
+            <button
+              className="btn-secondary"
+              type="button"
+              disabled={loading}
+              onClick={() => { handleGenerate(programmeName, pendingFocus); setPendingFocus(null); }}
+            >
+              {loading ? 'Regenerating...' : pendingFocus ? 'Regenerate with focus' : 'Regenerate'}
             </button>
             <button className="btn-secondary" type="button" disabled={!result} onClick={handleDownloadWord}>
               <Download size={16} />
@@ -2582,6 +2663,13 @@ function TorGeneratorPage() {
         </header>
 
         {error && <div className="synthesis-error">{error}</div>}
+
+        {pendingFocus && (
+          <div className="tor-commission-note">
+            <span>Commissioning focus added: &ldquo;{pendingFocus}&rdquo; — click Regenerate to incorporate it into the TOR.</span>
+            <button type="button" onClick={() => setPendingFocus(null)}>Clear</button>
+          </div>
+        )}
 
         {loading && !result && (
           <p className="workspace-loading">Drafting Terms of Reference for {programmeName}...</p>
@@ -2646,6 +2734,109 @@ function TorGeneratorPage() {
             </aside>
           </div>
         )}
+
+        {strategicIntelligence && (() => {
+          const visibleOpportunities = SI_ORDER
+            .map(type => (strategicIntelligence.opportunities || []).find(o => o.opportunity_type === type))
+            .filter(o => o && !dismissedTypes.has(o.opportunity_type));
+          const whyMatters = computeWhyMatters(strategicIntelligence.opportunities);
+
+          return (
+            <section className="tor-strategic-section">
+              <div className="tor-strategic-heading">
+                <div>
+                  <p className="eyebrow">Section 4 · Strategic Intelligence</p>
+                  <h2>What the sector does not yet know</h2>
+                  <p className="section-meta">
+                    Powered by real-time strategy alignment. Refreshes on generation.
+                    {strategicIntelligence.generated_at && ` Last refreshed ${new Date(strategicIntelligence.generated_at).toLocaleString('en-ZA')}.`}
+                  </p>
+                </div>
+                <button className="btn-secondary" type="button" disabled={siRefreshing} onClick={handleRefreshStrategicIntelligence}>
+                  {siRefreshing ? 'Refreshing...' : 'Refresh strategic intelligence'}
+                </button>
+              </div>
+
+              {strategicIntelligence.error && <div className="synthesis-error">{strategicIntelligence.error}</div>}
+
+              {visibleOpportunities.length > 0 && (
+                <>
+                  <div className="tor-strategic-cards">
+                    {visibleOpportunities.map(opp => {
+                      const meta = SI_CARD_META[opp.opportunity_type];
+                      const Icon = meta.icon;
+                      return (
+                        <article key={opp.opportunity_type} className={`tor-strategic-card tor-strategic-${meta.tone}`}>
+                          <button
+                            type="button"
+                            className="tor-strategic-dismiss"
+                            aria-label={`Dismiss ${meta.label}`}
+                            onClick={() => handleDismissOpportunity(opp.opportunity_type, opp.title)}
+                          >
+                            <X size={14} />
+                          </button>
+                          <div className="tor-strategic-card-head">
+                            <Icon size={20} />
+                            <span className="tor-strategic-label">{meta.label}</span>
+                            <span className={`confidence-badge ${String(opp.confidence || '').toLowerCase()}`}>{opp.confidence}</span>
+                          </div>
+                          <h4 className="tor-strategic-title">{opp.title}</h4>
+                          <p className="tor-strategic-question">{opp.question}</p>
+                          <p className="tor-strategic-context">{opp.context}</p>
+                          <p className="tor-strategic-suggestion">
+                            <strong>Commission this:</strong> {opp.commissioning_suggestion}
+                          </p>
+                          {opp.sources.length > 0 && (
+                            <p className="tor-strategic-sources">
+                              Source:{' '}
+                              {opp.sources.map((s, i) => (
+                                <React.Fragment key={s.url}>
+                                  {i > 0 && ', '}
+                                  <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a>
+                                </React.Fragment>
+                              ))}
+                            </p>
+                          )}
+                          <button type="button" className="tor-strategic-commission" onClick={() => handleCommissionThis(opp.question)}>
+                            Commission this →
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  {whyMatters && (
+                    <div className="tor-why-matters">
+                      <h3>Why this matters</h3>
+                      <div className="tor-why-matters-grid">
+                        <div>
+                          <p className="tor-why-label">Strategic fit</p>
+                          <p className={`tor-why-value tor-why-${whyMatters.strategicFit}`}>{SI_TIER_LABELS[whyMatters.strategicFit]}</p>
+                        </div>
+                        <div>
+                          <p className="tor-why-label">Evidence readiness</p>
+                          <p className={`tor-why-value tor-why-${whyMatters.evidenceReadiness}`}>{SI_TIER_LABELS[whyMatters.evidenceReadiness]}</p>
+                        </div>
+                        <div>
+                          <p className="tor-why-label">Zenex advantage</p>
+                          <p className={`tor-why-value tor-why-${whyMatters.zenexAdvantage}`}>{SI_TIER_LABELS[whyMatters.zenexAdvantage]}</p>
+                        </div>
+                        <div>
+                          <p className="tor-why-label">Policy relevance</p>
+                          <p className={`tor-why-value tor-why-${whyMatters.policyRelevance}`}>{SI_TIER_LABELS[whyMatters.policyRelevance]}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {visibleOpportunities.length === 0 && !strategicIntelligence.error && (
+                <p className="workspace-clear">No strategic intelligence opportunities to show.</p>
+              )}
+            </section>
+          );
+        })()}
 
         {result && (
           <div className="tor-generator-bottom-actions">

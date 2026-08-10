@@ -35,6 +35,10 @@ function getPool() {
   return pool;
 }
 
+function asUuidOrNull(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value || '') ? value : null;
+}
+
 function assertSchema(schema) {
   if (!/^[a-z][a-z0-9_]*$/.test(schema || '')) {
     throw new Error(`Unsafe tenant schema: ${schema}`);
@@ -196,9 +200,62 @@ async function saveTorDocument(tenant, data) {
       data.years_without_endline || null,
       data.status || 'DRAFT',
       data.s3_key || null,
-      data.generated_by || null,
+      asUuidOrNull(data.generated_by),
       data.generated_at || new Date().toISOString(),
     ]);
+    return res.rows[0];
+  });
+}
+
+async function getLatestStrategicIntelligence(tenant, programmeName) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT * FROM strategic_intelligence
+      WHERE tenant_id = $1 AND programme_name = $2
+      ORDER BY generated_at DESC
+      LIMIT 1
+    `, [tenant.slug, programmeName]);
+    return res.rows[0] || null;
+  });
+}
+
+async function saveStrategicIntelligence(tenant, data) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      INSERT INTO strategic_intelligence (
+        tenant_id, programme_name, opportunities, model_used, generated_by, generated_at
+      ) VALUES ($1,$2,$3,$4,$5,NOW())
+      RETURNING *
+    `, [
+      tenant.slug,
+      data.programme_name,
+      JSON.stringify(data.opportunities),
+      data.model_used || 'claude-sonnet-4-6',
+      asUuidOrNull(data.generated_by),
+    ]);
+    return res.rows[0];
+  });
+}
+
+async function listStrategicIntelligenceDismissals(tenant, strategicIntelligenceId) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      SELECT opportunity_type
+      FROM strategic_intelligence_dismissals
+      WHERE tenant_id = $1 AND strategic_intelligence_id = $2
+    `, [tenant.slug, strategicIntelligenceId]);
+    return res.rows;
+  });
+}
+
+async function dismissStrategicIntelligenceOpportunity(tenant, strategicIntelligenceId, opportunityType, opportunityTitle, userId) {
+  return withTenant(tenant, async client => {
+    const res = await client.query(`
+      INSERT INTO strategic_intelligence_dismissals (
+        tenant_id, strategic_intelligence_id, opportunity_type, opportunity_title, dismissed_by
+      ) VALUES ($1,$2,$3,$4,$5)
+      RETURNING *
+    `, [tenant.slug, strategicIntelligenceId, opportunityType, opportunityTitle || null, asUuidOrNull(userId)]);
     return res.rows[0];
   });
 }
@@ -808,6 +865,10 @@ module.exports = {
   getRecordsByIds,
   getProgrammeRecordsForTor,
   saveTorDocument,
+  getLatestStrategicIntelligence,
+  saveStrategicIntelligence,
+  listStrategicIntelligenceDismissals,
+  dismissStrategicIntelligenceOpportunity,
   saveSynthesis,
   getSynthesis,
   listSyntheses,
