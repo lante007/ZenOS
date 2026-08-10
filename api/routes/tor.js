@@ -71,6 +71,9 @@ Design: ${highestEQS.evaluation_design || 'not recorded'}
 NLS 2024-2030 ALIGNMENT: ${nlsAlignment ? 'Confirmed' : 'Not confirmed'}
 FUNRS 2025 ALIGNMENT: ${funrsAlignment ? 'Confirmed' : 'Not confirmed'}
 ${strategicFocus ? `\nADDITIONAL COMMISSIONING FOCUS (raised by strategic intelligence, give this explicit attention in the Evaluation Purpose and Evaluation Questions sections):\n${strategicFocus}\n` : ''}
+SECTION HEADER FORMAT (must follow exactly, this output is machine-parsed):
+Write each of the 11 top-level section headers on its own line as "## N. Title", for example "## 1. Programme Context and Background". Use this exact "## N. " pattern only for these 11 top-level headers, nowhere else in the document. Sub-headings within a section must use a different format, for example "### 1.1 Programme Overview" or bold text, never "## N. " with a bare number. Numbered lists within a section body must use "N)" or a plain dash, never "N. " at the start of a line.
+
 Generate a complete 11-section evaluation TOR with these sections:
 
 1. Programme Context and Background

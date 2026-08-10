@@ -2404,18 +2404,27 @@ function SynthesisePage() {
   );
 }
 
-const TOR_SECTION_RE = /^(\d{1,2})\.\s+(.+)$/;
+// Matches the "## N. Title" header format the Call 1 prompt requires.
+// A plain "N. " check (without the "## " prefix) also matches numbered
+// list items inside a section body (deliverables, data access lists,
+// etc.), fragmenting the TOR into dozens of false "sections" - the "## "
+// requirement plus the strictly-sequential number check below are both
+// needed since a body list can coincidentally reach the next expected
+// section number too.
+const TOR_SECTION_RE = /^##\s+(\d{1,2})\.\s+(.+)$/;
 
 function parseTorSections(text) {
   if (!text) return [];
   const lines = text.split('\n');
   const sections = [];
   let current = null;
+  let expectedNext = 1;
   for (const line of lines) {
     const match = line.match(TOR_SECTION_RE);
-    if (match && Number(match[1]) >= 1 && Number(match[1]) <= 11) {
+    if (match && Number(match[1]) === expectedNext && expectedNext <= 11) {
       if (current) sections.push(current);
       current = { number: match[1], title: match[2].trim(), body: '' };
+      expectedNext += 1;
     } else if (current) {
       current.body += (current.body ? '\n' : '') + line;
     }
