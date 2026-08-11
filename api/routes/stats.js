@@ -8,6 +8,7 @@ const {
   FINANCIAL_FIELDS,
   ALL_WORKSPACE_FIELDS,
   isEmpty,
+  isHumanRejected,
   describeFieldFor,
 } = require('../services/workspace-fields');
 
@@ -429,7 +430,7 @@ router.get('/completeness',
       assertSchema(schema);
       const tenantId = req.tenant.slug;
 
-      const columns = ['id', 'programme_name', 'document_type', 'optimy_project_id', 'optimy_field_values']
+      const columns = ['id', 'programme_name', 'document_type', 'optimy_project_id', 'optimy_field_values', 'validation_flags']
         .concat(ALL_WORKSPACE_FIELDS.map(f => f.field));
 
       const records = await pool.query(`
@@ -447,12 +448,12 @@ router.get('/completeness',
 
       for (const record of records.rows) {
         for (const def of ALL_WORKSPACE_FIELDS) {
-          if (!isEmpty(record[def.field])) filledCells += 1;
+          if (!isEmpty(record[def.field]) || isHumanRejected(record, def.field)) filledCells += 1;
         }
 
         const missingCritical = CRITICAL_FIELDS
           .map(def => describeFieldFor(record, def))
-          .filter(entry => entry.current_value === null);
+          .filter(entry => entry.current_value === null && !entry.reviewed);
         if (missingCritical.length > 0) {
           criticalGaps.push({
             record_id: record.id,
@@ -465,7 +466,7 @@ router.get('/completeness',
 
         const missingFinancial = FINANCIAL_FIELDS
           .map(def => describeFieldFor(record, def))
-          .filter(entry => entry.current_value === null);
+          .filter(entry => entry.current_value === null && !entry.reviewed);
         if (missingFinancial.length > 0) {
           financialGaps.push({
             record_id: record.id,

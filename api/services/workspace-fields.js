@@ -16,9 +16,15 @@ const CRITICAL_FIELDS = [
   { field: 'limitations', label: 'Limitations', type: 'text', multiline: true },
   { field: 'effect_size_composite', label: 'Effect size', type: 'text' },
   { field: 'sample_size_learners', label: 'Sample size (learners)', type: 'number' },
+  { field: 'sample_size_schools', label: 'Sample size (schools)', type: 'number' },
   { field: 'baseline_available', label: 'Baseline available', type: 'boolean' },
   { field: 'endline_available', label: 'Endline available', type: 'boolean' },
+  { field: 'baseline_year', label: 'Baseline year', type: 'number' },
+  { field: 'endline_year', label: 'Endline year', type: 'number' },
   { field: 'commissioning_standards_met', label: 'Commissioning standards met', type: 'boolean' },
+  { field: 'intervention_type', label: 'Intervention type', type: 'text' },
+  { field: 'implementation_period', label: 'Implementation period', type: 'text' },
+  { field: 'policy_alignment', label: 'Policy alignment', type: 'text', multiline: true },
 ];
 
 const FINANCIAL_FIELDS = [
@@ -45,6 +51,13 @@ function isEmpty(value) {
   return value === null || value === undefined || value === '';
 }
 
+// A field a human has explicitly reviewed and confirmed should stay null
+// (Workspace suggestion Reject flow) is resolved, not an open gap - even
+// though the underlying value is still null.
+function isHumanRejected(record, field) {
+  return (record.validation_flags || []).some(flag => flag.field === field && flag.rule === 'HUMAN_REJECTED');
+}
+
 // Suggested pre-fill: only offered when the record is linked to Optimy
 // (optimy_project_id set) and Optimy has supplied a value for this exact
 // field in optimy_field_values. No fabricated defaults otherwise.
@@ -67,6 +80,7 @@ function describeFieldFor(record, def) {
     current_value: isEmpty(current) ? null : current,
     suggested_value: suggestion ? suggestion.value : null,
     suggested_source: suggestion ? suggestion.source : null,
+    reviewed: isEmpty(current) ? isHumanRejected(record, def.field) : false,
   };
 }
 
@@ -77,5 +91,6 @@ module.exports = {
   ALLOWED_FIELD_NAMES,
   fieldDef,
   isEmpty,
+  isHumanRejected,
   describeFieldFor,
 };

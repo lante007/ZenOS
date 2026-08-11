@@ -24,6 +24,7 @@ import {
   Search,
   ShieldCheck,
   SkipForward,
+  Sparkles,
   TrendingUp,
   UploadCloud,
   Users,
@@ -3695,7 +3696,106 @@ function WorkspaceFieldEditor({ recordId, entry, onSave }) {
   );
 }
 
-function WorkspaceGapCard({ gap, onSaveField }) {
+const SUGGESTABLE_FIELDS = new Set([
+  'intervention_type', 'implementation_period', 'policy_alignment',
+  'sample_size_schools', 'baseline_year', 'endline_year',
+  'effect_size_composite', 'null_findings_reported',
+]);
+
+function WorkspaceSuggestPanel({ recordId, entry, onSave, onReject }) {
+  const [status, setStatus] = useState('idle'); // idle | loading | suggested | editing | rejected
+  const [suggestion, setSuggestion] = useState(null);
+  const [error, setError] = useState('');
+
+  async function getSuggestion() {
+    setStatus('loading');
+    setError('');
+    try {
+      const result = await apiRequest('/api/workspace/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record_id: recordId, field_name: entry.field }),
+      });
+      setSuggestion(result);
+      setStatus('suggested');
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Could not get a suggestion.');
+      setStatus('idle');
+    }
+  }
+
+  async function confirmSuggestion() {
+    setError('');
+    try {
+      await onSave(recordId, entry.field, suggestion.suggested_value);
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Could not save.');
+    }
+  }
+
+  async function rejectSuggestion() {
+    setError('');
+    try {
+      await apiRequest('/api/workspace/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record_id: recordId, field_name: entry.field }),
+      });
+      setStatus('rejected');
+      if (onReject) onReject(recordId, entry.field);
+    } catch (err) {
+      setError(err.payload?.error || err.message || 'Could not save.');
+    }
+  }
+
+  if (status === 'rejected') {
+    return <p className="workspace-suggest-rejected">Reviewed - confirmed no value available.</p>;
+  }
+
+  if (status === 'editing') {
+    return (
+      <WorkspaceFieldEditor
+        recordId={recordId}
+        entry={{ ...entry, suggested_value: suggestion.suggested_value }}
+        onSave={onSave}
+      />
+    );
+  }
+
+  if (status === 'suggested') {
+    return (
+      <div className="workspace-suggestion-review">
+        <p className="workspace-suggestion-value">{suggestion.suggested_value != null ? String(suggestion.suggested_value) : 'No value found'}</p>
+        <p className="workspace-suggestion-confidence">Confidence: {suggestion.confidence || 'N/A'}</p>
+        {suggestion.source_excerpt && <p className="workspace-suggestion-source">Source: &ldquo;{suggestion.source_excerpt}&rdquo;</p>}
+        <div className="workspace-suggestion-actions">
+          <button className="secondary-action confirm" type="button" disabled={suggestion.suggested_value == null} onClick={confirmSuggestion}>
+            Confirm
+          </button>
+          <button className="secondary-action" type="button" onClick={() => setStatus('editing')}>
+            Edit
+          </button>
+          <button className="secondary-action danger" type="button" onClick={rejectSuggestion}>
+            Reject
+          </button>
+        </div>
+        {error && <span className="workspace-field-error">{error}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="workspace-suggest">
+      <button className="btn-ghost workspace-suggest-btn" type="button" disabled={status === 'loading'} onClick={getSuggestion}>
+        <Sparkles size={14} />
+        <span>{status === 'loading' ? 'Getting suggestion...' : 'Get Suggestion'}</span>
+      </button>
+      {error && <span className="workspace-field-error">{error}</span>}
+    </div>
+  );
+}
+
+function WorkspaceGapCard({ gap, onSaveField, onRejectField, canSuggest }) {
   return (
     <article className="workspace-gap-card">
       <div className="workspace-gap-card-header">
@@ -3715,6 +3815,9 @@ function WorkspaceGapCard({ gap, onSaveField }) {
               </p>
             )}
             <WorkspaceFieldEditor recordId={gap.record_id} entry={entry} onSave={onSaveField} />
+            {canSuggest && SUGGESTABLE_FIELDS.has(entry.field) && (
+              <WorkspaceSuggestPanel recordId={gap.record_id} entry={entry} onSave={onSaveField} onReject={onRejectField} />
+            )}
           </div>
         ))}
       </div>
@@ -3814,6 +3917,7 @@ function WorkspaceFinancialCard({ item, onConfirm, onMarkUnknown }) {
 }
 
 function WorkspacePage() {
+  const user = currentUser();
   const [queueItems, setQueueItems] = useState(FALLBACK_QUEUE_EMPTY);
   const [queueLoading, setQueueLoading] = useState(true);
   const [overrideValues, setOverrideValues] = useState({});
@@ -3894,12 +3998,7 @@ function WorkspacePage() {
     setQueueItems(current => current.filter(entry => entry.id !== id));
   }
 
-  async function saveCorpusField(recordId, field, value) {
-    await apiRequest(`/api/records/${recordId}/field`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ field, value }),
-    });
+  function stripFieldFromCompleteness(recordId, field) {
     setCompleteness(current => {
       if (!current) return current;
       const stripField = gaps => gaps
@@ -3917,6 +4016,19 @@ function WorkspacePage() {
         financial_gaps_count: nextFinancial.length,
       };
     });
+  }
+
+  async function saveCorpusField(recordId, field, value) {
+    await apiRequest(`/api/records/${recordId}/field`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field, value }),
+    });
+    stripFieldFromCompleteness(recordId, field);
+  }
+
+  function rejectCorpusField(recordId, field) {
+    stripFieldFromCompleteness(recordId, field);
   }
 
   async function confirmFinancial(recordId, value, source) {
@@ -4024,7 +4136,7 @@ function WorkspacePage() {
                   <p>Every active record has its critical fields populated.</p>
                 </article>
               ) : completeness.critical_gaps.map(gap => (
-                <WorkspaceGapCard key={gap.record_id} gap={gap} onSaveField={saveCorpusField} />
+                <WorkspaceGapCard key={gap.record_id} gap={gap} onSaveField={saveCorpusField} onRejectField={rejectCorpusField} canSuggest={user.role === 'ORGANISATION_LEAD'} />
               ))}
             </div>
           </div>
@@ -4041,7 +4153,7 @@ function WorkspacePage() {
                   <p>Every active record has its financial fields populated.</p>
                 </article>
               ) : completeness.financial_gaps.map(gap => (
-                <WorkspaceGapCard key={gap.record_id} gap={gap} onSaveField={saveCorpusField} />
+                <WorkspaceGapCard key={gap.record_id} gap={gap} onSaveField={saveCorpusField} onRejectField={rejectCorpusField} canSuggest={user.role === 'ORGANISATION_LEAD'} />
               ))}
             </div>
           </div>
