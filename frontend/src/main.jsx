@@ -1407,6 +1407,8 @@ function DashboardPage() {
       title: 'EROI',
       value: cascadeLoading ? 'Calculating...' : cascade?.eroi?.has_data ? `${cascade.eroi.index} / 100` : 'N/A',
       note: cascadeLoading ? '' : cascade?.eroi?.label || '',
+      explanation: 'Measures the institutional return on Zenex\'s evidence investment across system adoption, policy influence, learner outcomes, knowledge assets and capital leveraged.',
+      footerNote: 'Score improves as programmes are adopted and Decision Capital is confirmed.',
       formula: cascade?.eroi?.methodology_note,
       dimensions: cascade?.eroi?.dimensions,
       dimensionsNote: `Computed from ${cascade?.corpus_size ?? 0} classified documents. Dimensions use corpus data as proxies. Full calculation requires Decision Capital confirmation.`,
@@ -1671,8 +1673,10 @@ function DashboardPage() {
                 <h3>{stage.title}</h3>
                 <strong>{stage.value}</strong>
                 <p>{stage.note || 'N/A'}</p>
+                {stage.explanation && <p className="cascade-explanation">{stage.explanation}</p>}
                 {stage.costDataNote && <p className="cascade-cost-note">{stage.costDataNote}</p>}
                 {stage.warningNote && <p className="cascade-warning-note">{stage.warningNote}</p>}
+                {stage.footerNote && <p className="cascade-footer-note">{stage.footerNote}</p>}
                 {index < cascadeCards.length - 1 && <ArrowRight className="cascade-arrow" size={18} />}
               </article>
             ))}
