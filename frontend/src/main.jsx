@@ -4566,15 +4566,6 @@ function KnowledgePage() {
             <p className="eyebrow">Knowledge products</p>
             <h1>Generate Knowledge Product</h1>
           </div>
-          <button
-            className="primary-action"
-            type="button"
-            onClick={generateBrief}
-            disabled={!(selectedRecord || synthesisId) || !audienceSelected}
-          >
-            <Edit3 size={18} />
-            <span>{isGenerating ? `Generating ${selectedAudience.label} brief for ${displayProgrammeName}...` : 'Generate Brief'}</span>
-          </button>
         </header>
 
         {synthesisId && (
@@ -4686,6 +4677,16 @@ function KnowledgePage() {
               </div>
             </article>
           )}
+
+          <button
+            className="primary-action generate-brief-action"
+            type="button"
+            onClick={generateBrief}
+            disabled={!(selectedRecord || synthesisId) || !audienceSelected}
+          >
+            <Edit3 size={18} />
+            <span>{isGenerating ? `Generating ${selectedAudience.label} brief for ${displayProgrammeName}...` : 'Generate Brief'}</span>
+          </button>
         </section>
 
         <section className="brief-panel" aria-label="Generated knowledge product">
