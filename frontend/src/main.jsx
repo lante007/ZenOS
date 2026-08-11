@@ -2715,7 +2715,7 @@ function TorGeneratorPage() {
 
         {pendingFocus && (
           <div className="tor-commission-note">
-            <span>Commissioning focus added: &ldquo;{pendingFocus}&rdquo; — click Regenerate to incorporate it into the TOR.</span>
+            <span>Commissioning focus added: &ldquo;{pendingFocus}&rdquo;; click Regenerate to incorporate it into the TOR.</span>
             <button type="button" onClick={() => setPendingFocus(null)}>Clear</button>
           </div>
         )}
@@ -3507,21 +3507,21 @@ function formatRand(value) {
 
 const WORKSPACE_LOSS_FRAMING = {
   methodology_description: "Without a methodology description, this evaluation can't be cited as rigorous evidence.",
-  null_findings_reported: "Unreported null findings break Protocol Amendment 1 — this record can't be board-cited until confirmed.",
+  null_findings_reported: "Unreported null findings break Protocol Amendment 1; this record can't be board-cited until confirmed.",
   limitations: "Undocumented limitations mean this finding can't be defended under scrutiny.",
-  effect_size_composite: "No effect size recorded — this evaluation can't support an impact claim.",
-  sample_size_learners: "No sample size recorded — this evaluation can't be weighted against comparable studies.",
-  baseline_available: "Baseline availability is unconfirmed — causal claims can't be verified.",
-  endline_available: "Endline availability is unconfirmed — the evidence chain is incomplete.",
-  commissioning_standards_met: "Commissioning standards are unconfirmed — this record is excluded from the EROI score.",
-  total_cost_rand: 'No cost recorded — this programme is invisible to Financial Capital.',
-  cost_data_source: "No cost data source recorded — this figure can't be trusted for SROI.",
-  cost_per_learner: "No per-learner cost — this programme can't be benchmarked for cost-effectiveness.",
-  financial_year: "No financial year recorded — this cost figure can't be placed in context.",
+  effect_size_composite: "No effect size recorded; this evaluation can't support an impact claim.",
+  sample_size_learners: "No sample size recorded; this evaluation can't be weighted against comparable studies.",
+  baseline_available: "Baseline availability is unconfirmed; causal claims can't be verified.",
+  endline_available: "Endline availability is unconfirmed; the evidence chain is incomplete.",
+  commissioning_standards_met: "Commissioning standards are unconfirmed; this record is excluded from the EROI score.",
+  total_cost_rand: 'No cost recorded; this programme is invisible to Financial Capital.',
+  cost_data_source: "No cost data source recorded; this figure can't be trusted for SROI.",
+  cost_per_learner: "No per-learner cost; this programme can't be benchmarked for cost-effectiveness.",
+  financial_year: "No financial year recorded; this cost figure can't be placed in context.",
 };
 
 function workspaceLossFraming(field, label) {
-  return WORKSPACE_LOSS_FRAMING[field] || `Missing ${(label || field).toLowerCase()} — this record is incomplete.`;
+  return WORKSPACE_LOSS_FRAMING[field] || `Missing ${(label || field).toLowerCase()}; this record is incomplete.`;
 }
 
 function WorkspaceFieldEditor({ recordId, entry, onSave }) {
