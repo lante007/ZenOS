@@ -320,7 +320,10 @@ router.get('/cascade',
              CASE WHEN null_findings_reported IS NOT NULL THEN 1 ELSE 0 END +
              CASE WHEN limitations IS NOT NULL THEN 1 ELSE 0 END +
              CASE WHEN effect_size_composite IS NOT NULL
-               OR document_type NOT IN ('Impact Evaluation')
+               OR (
+                 document_type NOT IN ('Impact Evaluation')
+                 AND (secondary_document_type IS NULL OR secondary_document_type NOT IN ('Impact Evaluation'))
+               )
               THEN 1 ELSE 0 END
             ) / 4.0
           ), 1

@@ -85,7 +85,7 @@ async function detectCommissioningGaps(tenant, pool) {
        FROM ${schema}.intelligence_records
        WHERE tenant_id = $1
          AND programme_name = $2
-         AND document_type = 'Impact Evaluation'
+         AND (document_type = 'Impact Evaluation' OR secondary_document_type = 'Impact Evaluation')
          AND year::int >= 2021
          AND record_status = 'ACTIVE'`,
       [tenant.slug, prog]
@@ -155,7 +155,7 @@ async function detectEndlineGaps(tenant, pool) {
             nls_alignment, funrs_alignment, policy_alignment
      FROM ${schema}.intelligence_records
      WHERE tenant_id = $1
-       AND document_type = 'Impact Evaluation'
+       AND (document_type = 'Impact Evaluation' OR secondary_document_type = 'Impact Evaluation')
        AND endline_available = false
        AND record_status = 'ACTIVE'`,
     [tenant.slug]
