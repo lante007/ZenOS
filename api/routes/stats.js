@@ -550,6 +550,7 @@ router.get('/gaps',
           ) as has_endline,
           bool_or(
             document_type = 'Process Evaluation'
+            OR secondary_document_type = 'Process Evaluation'
           ) as has_process,
           bool_or(nls_alignment = true) as nls_alignment,
           bool_or(funrs_alignment = true) as funrs_alignment,
