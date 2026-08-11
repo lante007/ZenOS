@@ -3073,6 +3073,49 @@ button.estate-stat-tile {
   font-style: italic;
 }
 
+.workspace-suggest-loading {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(0, 180, 216, 0.24);
+  border-radius: 6px;
+  background: rgba(0, 180, 216, 0.06);
+}
+
+.workspace-suggest-loading-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.workspace-suggest-loading-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.workspace-suggest-progress-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.workspace-suggest-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #EF7218;
+  animation: workspaceSuggestProgressFill 120s linear forwards;
+}
+
+@keyframes workspaceSuggestProgressFill {
+  from { width: 0%; }
+  to { width: 90%; }
+}
+
 .workspace-financial-actions {
   display: flex;
   flex-wrap: wrap;

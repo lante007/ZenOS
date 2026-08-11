@@ -3702,6 +3702,43 @@ const SUGGESTABLE_FIELDS = new Set([
   'effect_size_composite', 'null_findings_reported',
 ]);
 
+const WORKSPACE_LOADING_MESSAGES = [
+  { icon: '📄', text: 'Reading document...' },
+  { icon: '🔍', text: 'Scanning for relevant passages...' },
+  { icon: '⚡', text: 'Applying evidence intelligence...' },
+  { icon: '✓', text: 'Preparing suggestion...' },
+  { icon: '⏳', text: 'Large document detected. Still analysing...' },
+];
+
+function WorkspaceSuggestLoading() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [fadeIn, setFadeIn] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFadeIn(false);
+      setTimeout(() => {
+        setMessageIndex(prev => (prev < WORKSPACE_LOADING_MESSAGES.length - 1 ? prev + 1 : prev));
+        setFadeIn(true);
+      }, 300);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const message = WORKSPACE_LOADING_MESSAGES[messageIndex];
+  return (
+    <div className="workspace-suggest-loading">
+      <div className="workspace-suggest-loading-message" style={{ opacity: fadeIn ? 1 : 0 }}>
+        <span className="workspace-suggest-loading-icon" aria-hidden="true">{message.icon}</span>
+        <span>{message.text}</span>
+      </div>
+      <div className="workspace-suggest-progress-track">
+        <div className="workspace-suggest-progress-fill" />
+      </div>
+    </div>
+  );
+}
+
 function WorkspaceSuggestPanel({ recordId, entry, onSave, onReject }) {
   const [status, setStatus] = useState('idle'); // idle | loading | suggested | editing | rejected
   const [suggestion, setSuggestion] = useState(null);
@@ -3752,6 +3789,10 @@ function WorkspaceSuggestPanel({ recordId, entry, onSave, onReject }) {
     return <p className="workspace-suggest-rejected">Reviewed - confirmed no value available.</p>;
   }
 
+  if (status === 'loading') {
+    return <WorkspaceSuggestLoading />;
+  }
+
   if (status === 'editing') {
     return (
       <WorkspaceFieldEditor
@@ -3786,9 +3827,9 @@ function WorkspaceSuggestPanel({ recordId, entry, onSave, onReject }) {
 
   return (
     <div className="workspace-suggest">
-      <button className="btn-ghost workspace-suggest-btn" type="button" disabled={status === 'loading'} onClick={getSuggestion}>
+      <button className="btn-ghost workspace-suggest-btn" type="button" onClick={getSuggestion}>
         <Sparkles size={14} />
-        <span>{status === 'loading' ? 'Getting suggestion...' : 'Get Suggestion'}</span>
+        <span>Get Suggestion</span>
       </button>
       {error && <span className="workspace-field-error">{error}</span>}
     </div>
