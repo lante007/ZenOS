@@ -56,8 +56,10 @@ async function classifyFromS3Key(tenant, s3Key, filename, institution, user) {
     s3_key: s3Key,
     record_id: record.id,
     filename: record.filename,
+    programme_name: record.programme_name,
     confidence_tier: record.confidence_tier,
     eqs_composite: record.eqs_composite,
+    extraction_quality: record.extraction_quality,
     fatima_queue_items: record.fatima_queue_items,
   };
 }

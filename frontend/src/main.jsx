@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   AlertTriangle,
@@ -51,16 +51,26 @@ const knowledgeAudiences = [
   { id: 'SECTOR_PEER', label: 'Sector Peer', focus: 'Practice learning and replication conditions' },
 ];
 
-const pipelineSteps = [
-  'Secure upload to tenant S3 bucket',
-  'Extract text from source document',
-  'Detect programme and document metadata',
-  'Classify and score document',
-  'Apply quality standards',
-  'Calculate Evidence Quality Score',
-  'Create expert queue items',
-  'Save record and publish to library',
+// Honest, time-based progress messaging for the 20-40s classification wait.
+// The frontend cannot observe real backend phase transitions, so these are
+// realistic delays (not fake per-360ms steps) that approximate the actual
+// pipeline. The bar never reaches 100% from a timer - only the API
+// resolving (success or error) advances past pct 90. See uploadAndClassify.
+const CLASSIFY_PHASES = [
+  { label: 'Extracting text...', subtext: '', delay: 3000, pct: 25 },
+  { label: 'Classifying document structure...', subtext: '', delay: 8000, pct: 50 },
+  {
+    label: 'Running methodological analysis...',
+    subtext: 'This may take up to 30 seconds for detailed evaluations.',
+    delay: 15000,
+    pct: 75,
+  },
+  { label: 'Calculating evidence quality score and saving record...', subtext: '', delay: 35000, pct: 90 },
 ];
+
+function formatEqsTier(tier) {
+  return tier ? String(tier).replace(/_/g, ' ') : 'N/A';
+}
 
 const adeiFieldLabels = [
   ['adei_record_id', 'ADEI Record ID'],
@@ -3122,7 +3132,7 @@ function AskZenexPage() {
 function ClassifyPage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [driveFileId, setDriveFileId] = useState('');
-  const [activeStep, setActiveStep] = useState(-1);
+  const [classifyPhaseIdx, setClassifyPhaseIdx] = useState(-1);
   const [classificationResult, setClassificationResult] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadPhase, setUploadPhase] = useState('idle');
@@ -3131,11 +3141,34 @@ function ClassifyPage() {
   const [manualComparison, setManualComparison] = useState({});
   const [comparisonSubmitting, setComparisonSubmitting] = useState(false);
   const [comparisonSubmitted, setComparisonSubmitted] = useState(false);
+  const classifyTimersRef = useRef([]);
+
+  function clearClassifyTimers() {
+    classifyTimersRef.current.forEach(id => window.clearTimeout(id));
+    classifyTimersRef.current = [];
+  }
+
+  useEffect(() => () => clearClassifyTimers(), []);
+
+  function resetForm() {
+    clearClassifyTimers();
+    setSelectedFile(null);
+    setDriveFileId('');
+    setClassifyPhaseIdx(-1);
+    setClassificationResult('');
+    setUploadProgress(0);
+    setUploadPhase('idle');
+    setDuplicateInfo(null);
+    setClassifiedRecord(null);
+    setManualComparison({});
+    setComparisonSubmitted(false);
+  }
 
   async function uploadAndClassify(file) {
     if (!file) return null;
+    clearClassifyTimers();
     setSelectedFile(file);
-    setActiveStep(0);
+    setClassifyPhaseIdx(-1);
     setClassificationResult('');
     setDuplicateInfo(null);
     setClassifiedRecord(null);
@@ -3143,9 +3176,6 @@ function ClassifyPage() {
     setComparisonSubmitted(false);
     setUploadPhase('requesting');
     setUploadProgress(0);
-    pipelineSteps.forEach((_, index) => {
-      window.setTimeout(() => setActiveStep(index), index * 360);
-    });
 
     try {
       const presign = await apiRequest(`/api/classify/presign?${new URLSearchParams({
@@ -3182,6 +3212,9 @@ function ClassifyPage() {
 
       setUploadProgress(100);
       setUploadPhase('classifying');
+      classifyTimersRef.current = CLASSIFY_PHASES.map((phase, index) =>
+        window.setTimeout(() => setClassifyPhaseIdx(index), phase.delay)
+      );
 
       const result = await apiRequest('/api/classify/process', {
         method: 'POST',
@@ -3202,33 +3235,31 @@ function ClassifyPage() {
             record = result;
           }
         }
+        clearClassifyTimers();
         setClassifiedRecord(record);
         setManualComparison(buildManualComparison(record));
         setUploadPhase('complete');
-        setActiveStep(pipelineSteps.length);
         setClassificationResult(`Created ${result.record_id || result.filename}`);
         return result;
       }
 
       throw new Error(result?.error || 'Classification failed');
     } catch (err) {
+      clearClassifyTimers();
       if (err.status === 409 && err.payload?.error === 'duplicate_detected') {
         setDuplicateInfo(err.payload);
         setUploadPhase('duplicate');
         setClassificationResult(err.payload.message || 'Document already exists');
-        setActiveStep(-1);
         return null;
       }
       setUploadPhase('error');
       setClassificationResult(err.message || 'Upload failed');
-      setActiveStep(-1);
       console.error('Upload error:', err);
       throw err;
     }
   }
 
   async function startPipeline() {
-    setActiveStep(0);
     setClassificationResult('');
 
     if (selectedFile) {
@@ -3274,8 +3305,16 @@ function ClassifyPage() {
     }
   }
 
-  const isComplete = activeStep >= pipelineSteps.length;
+  const isComplete = uploadPhase === 'complete';
+  const isRunning = ['requesting', 'uploading', 'classifying'].includes(uploadPhase);
   const canStart = driveFileId.trim() || (selectedFile && ['idle', 'error', 'duplicate'].includes(uploadPhase));
+  const currentClassifyPhase = classifyPhaseIdx >= 0 ? CLASSIFY_PHASES[classifyPhaseIdx] : null;
+  const recordId = classifiedRecord?.id || classifiedRecord?.record_id || classifiedRecord?.adei_record_id || '';
+  const eqsTierDisplay = formatEqsTier(classifiedRecord?.eqs_tier || classifiedRecord?.confidence_tier);
+  const eqsCompositeDisplay = classifiedRecord?.eqs_composite != null
+    ? `${Number(classifiedRecord.eqs_composite).toFixed(2)}/5.0`
+    : 'N/A';
+  const needsOcr = classifiedRecord?.extraction_quality === 'NEEDS_OCR';
 
   return (
     <AppShell active="classify">
@@ -3330,16 +3369,45 @@ function ClassifyPage() {
                 </div>
               )}
               {uploadPhase === 'classifying' && (
-                <div className="pulse-loading">
-                  <span className="pulse-dot" />
-                  <span className="pulse-dot" />
-                  <span className="pulse-dot" />
-                  <span>Classifying document through 8-step pipeline...</span>
+                <div className="upload-progress-container">
+                  <div className="upload-progress-bar">
+                    <div
+                      className="upload-progress-fill"
+                      style={{ width: `${currentClassifyPhase ? currentClassifyPhase.pct : 10}%` }}
+                    />
+                  </div>
+                  <p className="upload-progress-label">
+                    {currentClassifyPhase ? currentClassifyPhase.label : 'Uploading document...'}
+                  </p>
+                  {currentClassifyPhase?.subtext && (
+                    <p className="upload-progress-subtext">{currentClassifyPhase.subtext}</p>
+                  )}
+                </div>
+              )}
+              {uploadPhase === 'complete' && needsOcr && (
+                <div className="upload-warning-ocr">
+                  <span className="duplicate-icon">⚠</span>
+                  <p>
+                    This document appears to be a scanned image. Text extraction quality may be reduced.
+                    Classification has been completed with available text but some fields may be incomplete.
+                    Consider uploading a text-searchable version for more accurate results.
+                  </p>
                 </div>
               )}
               {uploadPhase === 'complete' && (
                 <div className="upload-success">
-                  Document classified successfully. View in Evidence Library.
+                  <p className="upload-success-headline">
+                    {classifiedRecord?.programme_name || 'Document'} classified successfully.
+                  </p>
+                  <p className="upload-success-eqs">{eqsTierDisplay} ({eqsCompositeDisplay})</p>
+                  <div className="upload-success-actions">
+                    <a className="btn-ghost" href={`/records?record=${encodeURIComponent(recordId)}`}>
+                      View Record <ArrowRight size={16} />
+                    </a>
+                    <button type="button" className="secondary-action" onClick={resetForm}>
+                      Upload Another Document
+                    </button>
+                  </div>
                 </div>
               )}
               {uploadPhase === 'error' && (
@@ -3390,7 +3458,7 @@ function ClassifyPage() {
                   value={driveFileId}
                   onChange={(event) => {
                     setDriveFileId(event.target.value);
-                    setActiveStep(-1);
+                    setClassifyPhaseIdx(-1);
                   }}
                 />
                 <span>Legacy intake only</span>
@@ -3406,17 +3474,17 @@ function ClassifyPage() {
           <article className="pipeline-panel">
             <div className="panel-title">
               <Clock3 size={20} />
-              <span>8-step pipeline</span>
+              <span>Classification pipeline</span>
             </div>
 
             <div className="pipeline-list">
-              {pipelineSteps.map((step, index) => {
-                const complete = activeStep > index || isComplete;
-                const active = activeStep === index && !isComplete;
+              {CLASSIFY_PHASES.map((phase, index) => {
+                const complete = classifyPhaseIdx > index || isComplete;
+                const active = classifyPhaseIdx === index && !isComplete;
                 return (
-                  <div className={`pipeline-step ${complete ? 'complete' : ''} ${active ? 'active' : ''}`} key={step}>
+                  <div className={`pipeline-step ${complete ? 'complete' : ''} ${active ? 'active' : ''}`} key={phase.label}>
                     <div>{complete ? <CheckCircle2 size={16} /> : <span>{index + 1}</span>}</div>
-                    <p>{step}</p>
+                    <p>{phase.label}</p>
                   </div>
                 );
               })}
@@ -3424,7 +3492,7 @@ function ClassifyPage() {
 
             <div className="pipeline-result">
               <p className="eyebrow">Pipeline state</p>
-              <strong>{isComplete ? 'Record ready for Evidence Library' : activeStep >= 0 ? 'Classification running' : 'Waiting for document'}</strong>
+              <strong>{isComplete ? 'Record ready for Evidence Library' : isRunning ? 'Classification running' : 'Waiting for document'}</strong>
               <span>{classificationResult || (isComplete ? 'Expert queue and EQS outputs are prepared for review.' : 'Progress updates will stream here from the live API.')}</span>
             </div>
 

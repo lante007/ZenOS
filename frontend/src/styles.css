@@ -2284,6 +2284,48 @@ button.estate-stat-tile {
   text-align: center;
 }
 
+.upload-success-headline {
+  margin: 0;
+  font-weight: 600;
+}
+
+.upload-success-eqs {
+  margin: 6px 0 0;
+  color: rgba(76, 175, 80, 0.85);
+}
+
+.upload-success-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.upload-progress-subtext {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin: 4px 0 0;
+  text-align: center;
+}
+
+.upload-warning-ocr {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: rgba(217, 119, 6, 0.1);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.upload-warning-ocr p {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin: 0;
+}
+
 .upload-error {
   color: #EF7218;
   font-size: 14px;
