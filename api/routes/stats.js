@@ -199,36 +199,40 @@ router.get('/cascade',
           COUNT(*) FILTER (WHERE half_life_rating = 'CURRENT')::int AS current_count,
           COUNT(*) FILTER (WHERE half_life_rating = 'AGING')::int AS aging_count,
           COUNT(*) FILTER (WHERE half_life_rating = 'HISTORICAL')::int AS historical_count,
-          ROUND(AVG(eqs_composite) FILTER (WHERE eqs_composite IS NOT NULL), 2) AS avg_eqs,
-          ROUND(AVG(
-            CASE
-              WHEN eqs_composite IS NULL
-                THEN NULL
-              ELSE
-                (eqs_composite / 5.0)
-                * CASE
-                    WHEN evaluation_subtype IN ('RCT', 'Quasi-experimental')
-                    THEN 1.00
-                    WHEN document_type = 'Impact Evaluation'
-                    THEN 0.85
-                    WHEN document_type IN ('Process Evaluation', 'Implementation Evaluation')
-                    THEN 0.75
-                    ELSE 0.60
-                  END
-                * CASE half_life_rating
-                    WHEN 'CURRENT' THEN 1.00
-                    WHEN 'AGING' THEN 0.65
-                    WHEN 'HISTORICAL' THEN 0.30
-                    ELSE 1.00
-                  END
-            END
-          ), 4) AS net_ec_index
+          ROUND(AVG(eqs_composite) FILTER (WHERE eqs_composite IS NOT NULL), 2) AS avg_eqs
         FROM ${schema}.intelligence_records
         WHERE tenant_id = $1
           AND record_status = 'ACTIVE'
       `, [tenantId]);
-
       const ec = ecResult.rows[0];
+
+      // Evidence Capital = Financial Capital x Evidence Decay (NOT Financial Capital x EQS).
+      // The Rand value of investment that remains decision-relevant after
+      // accounting for evidence aging (half_life_rating).
+      const DECAY = { CURRENT: 1.0, AGING: 0.6, HISTORICAL: 0.3 };
+      const decayResult = await pool.query(`
+        SELECT total_cost_rand, half_life_rating
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+          AND total_cost_rand IS NOT NULL
+      `, [tenantId]);
+
+      let evidenceCapitalRand = 0;
+      let financialCapitalTotal = 0;
+      decayResult.rows.forEach(r => {
+        const grant = parseFloat(r.total_cost_rand) || 0;
+        const decay = DECAY[r.half_life_rating] ?? 0.5;
+        financialCapitalTotal += grant;
+        evidenceCapitalRand += grant * decay;
+      });
+      const decayLossRand = financialCapitalTotal - evidenceCapitalRand;
+      const decayLossPct = financialCapitalTotal > 0
+        ? Math.round((decayLossRand / financialCapitalTotal) * 100)
+        : 0;
+      const ecHasData = financialCapitalTotal > 0;
+      const ecLabel = value => `R${value >= 1000000 ? `${(value / 1000000).toFixed(1)}m` : Math.round(value).toLocaleString()}`;
+
       const evidenceCapital = {
         total_records: ec.total_records,
         tier_1: ec.tier_1,
@@ -236,21 +240,21 @@ router.get('/cascade',
         tier_3: ec.tier_3,
         not_applicable: ec.not_applicable,
         avg_eqs: ec.avg_eqs,
-        net_ec_index: ec.net_ec_index,
         current: ec.current_count,
         aging: ec.aging_count,
         historical: ec.historical_count,
-        has_data: ec.total_records > 0,
-        label: ec.total_records > 0
-          ? (ec.avg_eqs != null
-              ? `${parseFloat(ec.avg_eqs).toFixed(2)} / 5.0`
-              : 'N/A')
-          : 'N/A',
-        note: ec.total_records > 0
-          ? `Quality-adjusted evidence index · ${ec.total_records} records`
-          : 'No classified records yet',
+        has_data: ecHasData,
+        rand_value: Math.round(evidenceCapitalRand),
+        financial_capital_total: Math.round(financialCapitalTotal),
+        decay_loss_rand: Math.round(decayLossRand),
+        decay_loss_pct: decayLossPct,
+        index: ec.avg_eqs,
+        index_max: 5.0,
+        label: ecHasData ? ecLabel(evidenceCapitalRand) : 'N/A',
+        note: ecHasData ? `of ${ecLabel(financialCapitalTotal)} invested` : 'No classified financial records yet',
         cost_data_note: 'Rand value unavailable until financial records are classified.',
-        formula: 'Quality-adjusted evidence index (0-5.0). Formula: Σ(EQS ÷ 5 × pathway multiplier × depreciation factor) ÷ record count. Rand value unlocks when audited financial records are classified.',
+        interpretation: 'Investment value adjusted for evidence currency. Aging evidence retains 60 percent of value. Historical evidence retains 30 percent.',
+        formula: `Evidence Capital reflects the decision-relevant value of Zenex's investment after accounting for evidence currency. Current evaluations retain full value. Aging evaluations retain 60 percent. Historical evaluations retain 30 percent. Average evidence quality across active records: ${ec.avg_eqs != null ? `${parseFloat(ec.avg_eqs).toFixed(2)} / 5.0` : 'N/A'}.`,
       };
 
       const decisionTable = await pool.query('SELECT to_regclass($1) AS table_name', [`${schema}.decision_capital_instances`]);
