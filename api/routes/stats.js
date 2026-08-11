@@ -605,10 +605,12 @@ router.get('/gaps',
         ORDER BY MAX(year) ASC
       `, [tenantId]);
 
-      const gaps = result.rows
+      const rankedGaps = result.rows
         .map(r => ({ ...r, priority_score: computeGapPriorityScore(r) }))
-        .sort((a, b) => b.priority_score - a.priority_score)
-        .slice(0, 3)
+        .sort((a, b) => b.priority_score - a.priority_score);
+
+      const gaps = rankedGaps
+        .slice(0, 12)
         .map((r, index) => ({
           rank: index + 1,
           programme_name: r.programme_name,
@@ -619,7 +621,7 @@ router.get('/gaps',
           eval_count: Number(r.eval_count),
         }));
 
-      return res.json({ gaps });
+      return res.json({ gaps, total_identified: rankedGaps.length });
     } catch (err) {
       next(err);
     }

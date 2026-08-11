@@ -152,6 +152,7 @@ async function getProgrammeRecordsForTor(tenant, programmeName) {
         ir.programme_area,
         ir.year,
         ir.document_type,
+        ir.secondary_document_type,
         ir.eqs_tier,
         ir.eqs_composite,
         ir.evaluation_design,

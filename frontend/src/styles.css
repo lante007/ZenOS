@@ -1695,6 +1695,50 @@ button.estate-stat-tile {
   padding: 14px 20px;
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  animation: gapPriorityRowIn 0.3s ease-out;
+}
+
+@keyframes gapPriorityRowIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gap-priority-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 14px;
+}
+
+.gap-dismiss-button {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(245, 242, 238, 0.5);
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gap-dismiss-button:hover {
+  color: rgba(245, 242, 238, 0.8);
+}
+
+.gap-priority-counter {
+  margin: 10px 20px 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(245, 242, 238, 0.5);
+  font-size: 12px;
+  text-align: center;
 }
 
 .gap-priority-row:nth-child(2) {

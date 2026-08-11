@@ -56,7 +56,7 @@ You are generating a Terms of Reference for an evaluation commission. Your writi
 - Do not use bullet points in the TOR body text, use numbered lists instead`;
 }
 
-function buildUserPrompt({ programmeName, records, gap, strategicFocus }) {
+function buildUserPrompt({ programmeName, records, gap, strategicFocus, budget }) {
   const {
     totalInvestment, hasEndline, firstYear, lastYear,
     yearsWithoutEndline, provinces, highestEQS, hasBaseline,
@@ -73,6 +73,33 @@ function buildUserPrompt({ programmeName, records, gap, strategicFocus }) {
   const evidenceGap = !hasEndline
     ? `No endline evaluation has been commissioned despite ${yearsWithoutEndline} years since the last evaluation and R${totalInvestment.toLocaleString()} invested.`
     : `No impact evaluation exists for this programme.`;
+
+  const budgetGuidanceBlock = `SECTION 9 — BUDGET GUIDANCE:
+
+The following figures have been computed by the system. Use them exactly as provided. Do not recalculate or modify them.
+
+Recommended evaluation methodology: ${budget.recommendedMethodology}
+Benchmark base range for this methodology: R${budget.base.min.toLocaleString()} to R${budget.base.max.toLocaleString()}
+Geography adjustment applied: ${budget.geoMultiplier}x
+  Reason: ${budget.geoReason}
+Sample size adjustment applied: ${budget.sampleMultiplier}x
+  Reason: ${budget.sampleReason}
+Raw computed range: R${budget.rawMin.toLocaleString()} to R${budget.rawMax.toLocaleString()}
+Governance cap (15% of R${totalInvestment.toLocaleString()}): R${budget.governanceCap.toLocaleString()}
+${budget.capApplied ? 'Note: Raw range exceeded governance cap. Final range capped accordingly.' : 'Note: Raw range is within governance cap.'}
+
+FINAL RECOMMENDED RANGE: R${budget.finalMin.toLocaleString()} to R${budget.finalMax.toLocaleString()}
+
+In Section 9, write 3-4 sentences that:
+1. State the final range clearly
+2. Explain in plain language what drives the estimate (methodology type, geographic scope, sample size)
+3. Note whether the governance cap was applied and why that matters
+4. State that these are benchmark estimates pending empirical calibration from Zenex's own commissioning history
+
+Do NOT write any numbers other than those provided above.
+Do NOT recalculate.
+Do NOT add contingency percentages or other adjustments.
+The system has already computed the range.`;
 
   return `Generate a world-class evaluation Terms of Reference for Zenex Foundation using the data below.
 
@@ -97,6 +124,8 @@ Design: ${highestEQS.evaluation_design || 'not recorded'}
 NLS 2024-2030 ALIGNMENT: ${nlsAlignment ? 'Confirmed' : 'Not confirmed'}
 FUNRS 2025 ALIGNMENT: ${funrsAlignment ? 'Confirmed' : 'Not confirmed'}
 ${strategicFocus ? `\nADDITIONAL COMMISSIONING FOCUS (raised by strategic intelligence, give this explicit attention in the Evaluation Purpose and Evaluation Questions sections):\n${strategicFocus}\n` : ''}
+${budgetGuidanceBlock}
+
 SECTION HEADER FORMAT (must follow exactly, this output is machine-parsed):
 Write each of the 11 top-level section headers on its own line as "## N. Title", for example "## 1. Programme Context and Background". Use this exact "## N. " pattern only for these 11 top-level headers, nowhere else in the document. Sub-headings within a section must use a different format, for example "### 1.1 Programme Overview" or bold text, never "## N. " with a bare number. Numbered lists within a section body must use "N)" or a plain dash, never "N. " at the start of a line.
 
@@ -127,7 +156,7 @@ Generate a complete 11-section evaluation TOR with these sections:
    (Who receives each deliverable. What decision each deliverable informs. By what date findings must be available to influence the next funding cycle.)
 
 9. Budget Guidance
-   (Reference total programme investment of R${totalInvestment.toLocaleString()}. Evaluation should not exceed 15% of programme investment. State indicative range.)
+   (Follow the SECTION 9 — BUDGET GUIDANCE instructions above exactly. Use only the figures provided there.)
 
 10. Evaluator Requirements
     (Specific competencies required. Independence provisions. Conflict of interest declaration.)
@@ -161,11 +190,154 @@ function computeGapAnalysis(records) {
   const nlsAlignment = records.some(r => r.nls_alignment);
   const funrsAlignment = records.some(r => r.funrs_alignment);
   const programmeArea = records.find(r => r.programme_area)?.programme_area || null;
+  const hasProcess = records.some(r => r.document_type === 'Process Evaluation' || r.secondary_document_type === 'Process Evaluation');
 
   return {
     totalInvestment, hasEndline, hasBaseline, firstYear, lastYear,
-    yearsWithoutEndline, provinces, highestEQS, nlsAlignment, funrsAlignment, programmeArea,
+    yearsWithoutEndline, provinces, highestEQS, nlsAlignment, funrsAlignment, programmeArea, hasProcess,
   };
+}
+
+// Budget estimate for TOR Section 9. Principle: code determines the
+// estimate, Claude only explains it in prose - see buildUserPrompt's
+// SECTION 9 block, which forbids Claude from recalculating any figure.
+const BENCHMARK_RATES = {
+  'RCT': { min: 2500000, max: 5000000 },
+  'Quasi-Experimental': { min: 1500000, max: 3000000 },
+  'Mixed Methods': { min: 800000, max: 1500000 },
+  'Qualitative': { min: 400000, max: 800000 },
+  'Pre-Post Without Comparison': { min: 600000, max: 1200000 },
+  'Cross-Sectional': { min: 500000, max: 1000000 },
+  'Literature Review': { min: 150000, max: 400000 },
+  'default': { min: 500000, max: 1500000 },
+};
+
+const RURAL_PROVINCES = ['Limpopo', 'Eastern Cape', 'Northern Cape', 'Mpumalanga', 'North West', 'Free State'];
+
+const GOVERNANCE_CAP_PCT = 0.15;
+
+function computeBudgetEstimate(records, gap) {
+  const { hasBaseline, hasEndline, hasProcess, totalInvestment } = gap;
+
+  const recommendedMethodology = (hasBaseline && !hasEndline && totalInvestment > 5000000)
+    ? 'Quasi-Experimental'
+    : (!hasBaseline && !hasEndline && totalInvestment > 20000000)
+      ? 'RCT'
+      : (!hasProcess)
+        ? 'Mixed Methods'
+        : 'Qualitative';
+
+  const base = BENCHMARK_RATES[recommendedMethodology] || BENCHMARK_RATES['default'];
+
+  const provinces = records.flatMap(r => r.provinces || []).filter(Boolean);
+  const uniqueProvinces = [...new Set(provinces)];
+  const ruralCount = uniqueProvinces.filter(p => RURAL_PROVINCES.includes(p)).length;
+  const urbanCount = uniqueProvinces.length - ruralCount;
+
+  let geoMultiplier = 1.0;
+  let geoReason = 'Single province, standard rate';
+  if (uniqueProvinces.length >= 7) {
+    geoMultiplier = 1.5;
+    geoReason = 'National scope (7+ provinces)';
+  } else if (uniqueProvinces.length >= 4) {
+    geoMultiplier = 1.3;
+    geoReason = 'Multi-provincial (4+ provinces)';
+  } else if (ruralCount > 0 && ruralCount >= urbanCount) {
+    geoMultiplier = 1.35;
+    geoReason = 'Rural-majority provinces (travel and accommodation premium)';
+  } else if (uniqueProvinces.length === 1 && urbanCount === 1) {
+    geoMultiplier = 0.85;
+    geoReason = 'Single urban province (lower logistics cost)';
+  }
+
+  const schoolSamples = records.map(r => r.sample_size_schools).filter(Boolean);
+  const avgSchools = schoolSamples.length
+    ? Math.round(schoolSamples.reduce((a, b) => a + b, 0) / schoolSamples.length)
+    : 0;
+
+  let sampleMultiplier = 1.0;
+  let sampleReason = 'Sample size not recorded';
+  if (avgSchools > 150) {
+    sampleMultiplier = 1.4;
+    sampleReason = 'Large sample (150+ schools avg)';
+  } else if (avgSchools > 75) {
+    sampleMultiplier = 1.2;
+    sampleReason = 'Moderate-large sample (75-150 schools)';
+  } else if (avgSchools > 30) {
+    sampleMultiplier = 1.0;
+    sampleReason = 'Standard sample (30-75 schools)';
+  } else if (avgSchools > 0) {
+    sampleMultiplier = 0.85;
+    sampleReason = 'Small sample (<30 schools)';
+  }
+
+  const rawMin = Math.round(base.min * geoMultiplier * sampleMultiplier);
+  const rawMax = Math.round(base.max * geoMultiplier * sampleMultiplier);
+
+  const governanceCap = Math.round(totalInvestment * GOVERNANCE_CAP_PCT);
+  const finalMax = governanceCap > 0 ? Math.min(rawMax, governanceCap) : rawMax;
+  const finalMin = Math.min(rawMin, finalMax * 0.6);
+  const capApplied = finalMax < rawMax;
+
+  return {
+    recommendedMethodology, base, uniqueProvinces, ruralCount, urbanCount,
+    geoMultiplier, geoReason, avgSchools, sampleMultiplier, sampleReason,
+    rawMin, rawMax, governanceCap, finalMin, finalMax, capApplied,
+  };
+}
+
+async function saveBudgetAuditLog(tenant, { programmeName, torId, records, gap, budget }) {
+  const budgetAuditLog = {
+    programme_name: programmeName,
+    generated_at: new Date().toISOString(),
+    inputs: {
+      recommended_methodology: budget.recommendedMethodology,
+      total_investment: gap.totalInvestment,
+      unique_provinces: budget.uniqueProvinces,
+      rural_count: budget.ruralCount,
+      urban_count: budget.urbanCount,
+      avg_schools_sample: budget.avgSchools,
+      eval_count: records.length,
+    },
+    computation: {
+      benchmark_base_min: budget.base.min,
+      benchmark_base_max: budget.base.max,
+      geo_multiplier: budget.geoMultiplier,
+      geo_reason: budget.geoReason,
+      sample_multiplier: budget.sampleMultiplier,
+      sample_reason: budget.sampleReason,
+      raw_min: budget.rawMin,
+      raw_max: budget.rawMax,
+      governance_cap: budget.governanceCap,
+      governance_cap_pct: GOVERNANCE_CAP_PCT * 100,
+      cap_applied: budget.capApplied,
+      final_min: budget.finalMin,
+      final_max: budget.finalMax,
+    },
+    note: 'Benchmark rates are illustrative estimates pending empirical calibration from Zenex historical commissioning data.',
+  };
+
+  try {
+    const schema = schemaFor(tenant);
+    const pool = db.getPool();
+    if (!pool) return;
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.tor_budget_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        programme_name VARCHAR(300),
+        tor_id VARCHAR(100),
+        audit_log JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      INSERT INTO ${schema}.tor_budget_logs (programme_name, tor_id, audit_log, created_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT DO NOTHING
+    `, [programmeName, torId, JSON.stringify(budgetAuditLog)]);
+  } catch (err) {
+    console.error(`[tor] budget audit log failed for "${programmeName}": ${err.message}`);
+  }
 }
 
 function sanitiseTor(text) {
@@ -408,12 +580,17 @@ async function getStrategicIntelligence(tenant, params, { forceRefresh } = {}) {
 // The actual generation work - unchanged from the previous synchronous
 // handler, just extracted so it can run detached from the request/response
 // cycle. No change to the Claude call logic or prompts themselves.
-async function runTorGeneration(tenant, { programmeName, strategicFocus, records, generatedBy }) {
+async function runTorGeneration(tenant, { programmeName, strategicFocus, records, generatedBy, jobId }) {
   const gap = computeGapAnalysis(records);
+
+  // Budget: code computes the estimate, Claude only explains it in prose.
+  // See buildUserPrompt's SECTION 9 block, which forbids recalculation.
+  const budget = computeBudgetEstimate(records, gap);
+  await saveBudgetAuditLog(tenant, { programmeName, torId: jobId || null, records, gap, budget });
 
   // CALL 1: TOR generation. Internal corpus only, no web search.
   const systemPrompt = buildSystemPrompt();
-  const userPrompt = buildUserPrompt({ programmeName, records, gap, strategicFocus });
+  const userPrompt = buildUserPrompt({ programmeName, records, gap, strategicFocus, budget });
 
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
@@ -526,7 +703,7 @@ router.post('/generate',
       (async () => {
         try {
           const result = await runTorGeneration(tenant, {
-            programmeName, strategicFocus, records, generatedBy: req.user?.sub,
+            programmeName, strategicFocus, records, generatedBy: req.user?.sub, jobId,
           });
           jobs[jobId].status = 'complete';
           jobs[jobId].result = result;

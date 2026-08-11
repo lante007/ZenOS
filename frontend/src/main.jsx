@@ -1209,6 +1209,8 @@ function DashboardPage() {
   const [completenessData, setCompletenessData] = useState(null);
   const [gaps, setGaps] = useState([]);
   const [gapsLoading, setGapsLoading] = useState(true);
+  const [totalGapsIdentified, setTotalGapsIdentified] = useState(0);
+  const [dismissedGapNames, setDismissedGapNames] = useState(() => new Set());
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
   const [seedAttempted, setSeedAttempted] = useState(false);
@@ -1350,7 +1352,10 @@ function DashboardPage() {
     let cancelled = false;
     apiRequest('/api/stats/gaps')
       .then(data => {
-        if (!cancelled) setGaps(Array.isArray(data?.gaps) ? data.gaps : []);
+        if (!cancelled) {
+          setGaps(Array.isArray(data?.gaps) ? data.gaps : []);
+          setTotalGapsIdentified(data?.total_identified ?? (Array.isArray(data?.gaps) ? data.gaps.length : 0));
+        }
       })
       .catch(() => {
         if (!cancelled) setGaps([]);
@@ -1375,6 +1380,14 @@ function DashboardPage() {
     await apiRequest('/api/admin/flywheel/run', { method: 'POST' });
     await loadAlerts();
   }
+
+  // Session-only dismissal (not persisted) - distinct from TOR dismissals,
+  // which are stored server-side. Reveals the next-ranked gap in its place.
+  function dismissGap(programmeName) {
+    setDismissedGapNames(current => new Set(current).add(programmeName));
+  }
+
+  const visibleGaps = gaps.filter(g => !dismissedGapNames.has(g.programme_name)).slice(0, 3);
 
   const cascadeCards = [
     {
@@ -1772,9 +1785,16 @@ function DashboardPage() {
                 <p className="workspace-loading">Identifying priority gaps...</p>
               ) : gaps.length === 0 ? (
                 <p className="workspace-clear">No priority evidence gaps identified.</p>
+              ) : visibleGaps.length === 0 ? (
+                <p className="workspace-clear">
+                  All priority gaps reviewed. View the full gap register in your{' '}
+                  <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
+                    Workspace
+                  </a>.
+                </p>
               ) : (
-                gaps.map(gap => (
-                  <article className="gap-priority-row" key={`${gap.rank}-${gap.programme_name}`}>
+                visibleGaps.map(gap => (
+                  <article className="gap-priority-row" key={gap.programme_name}>
                     <span className="gap-priority-circle">{gap.rank}</span>
                     <div className="gap-priority-text">
                       <h4>{gap.programme_name}</h4>
@@ -1782,17 +1802,31 @@ function DashboardPage() {
                         {gap.gap_description} (last: {gap.last_evaluation_year || 'Unknown'}) · {formatRand(gap.total_grant_rand)} invested
                       </p>
                     </div>
-                    <a
-                      className="generate-tor-button"
-                      href={`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`}
-                      onClick={(event) => { event.preventDefault(); navigate(`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`); }}
-                    >
-                      Generate TOR →
-                    </a>
+                    <div className="gap-priority-actions">
+                      <a
+                        className="generate-tor-button"
+                        href={`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`}
+                        onClick={(event) => { event.preventDefault(); navigate(`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`); }}
+                      >
+                        Generate TOR →
+                      </a>
+                      <button
+                        className="gap-dismiss-button"
+                        type="button"
+                        onClick={() => dismissGap(gap.programme_name)}
+                      >
+                        Not now →
+                      </button>
+                    </div>
                   </article>
                 ))
               )}
             </div>
+            {!gapsLoading && gaps.length > 0 && (
+              <p className="gap-priority-counter">
+                Showing {visibleGaps.length} of {totalGapsIdentified} priority evidence gaps
+              </p>
+            )}
           </div>
         </section>
 
