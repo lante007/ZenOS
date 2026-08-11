@@ -3182,9 +3182,9 @@ button.estate-stat-tile {
   color: var(--teal);
 }
 
-.knowledge-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 0.85fr) minmax(520px, 1.15fr);
+.knowledge-flow {
+  display: flex;
+  flex-direction: column;
   gap: 18px;
 }
 
@@ -3199,18 +3199,155 @@ button.estate-stat-tile {
   padding: 22px;
 }
 
-.record-picker,
+.evaluation-search {
+  position: relative;
+  margin-top: 18px;
+}
+
+.evaluation-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  color: var(--color-muted);
+  pointer-events: none;
+}
+
+.evaluation-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.evaluation-selected {
+  margin-top: 14px;
+}
+
+.evaluation-selected-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--color-muted);
+  margin-bottom: 8px;
+}
+
+.evaluation-selected-empty {
+  margin: 0;
+  color: var(--color-muted);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.evaluation-selected-card {
+  background: rgba(0, 180, 216, 0.14);
+  border: 1px solid rgba(0, 180, 216, 0.35);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.evaluation-selected-card strong {
+  display: block;
+  color: #ffffff;
+  font-size: 15px;
+}
+
+.evaluation-selected-card span {
+  display: block;
+  margin-top: 4px;
+  color: rgba(245, 242, 238, 0.68);
+  font-size: 12px;
+}
+
+.evaluation-selected-card em {
+  display: block;
+  margin-top: 6px;
+  font-style: normal;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--teal);
+}
+
+.record-picker {
+  margin-top: 18px;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #DDE3EA;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.record-picker button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 1px solid #F0F2F5;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-picker button:last-child {
+  border-bottom: none;
+}
+
+.record-picker button:hover {
+  background: #F8F9FA;
+}
+
+.record-picker button.selected {
+  background: #EFF9FF;
+  border-left: 3px solid #00B4D8;
+  padding-left: 13px;
+}
+
+.record-picker-row-main {
+  display: block;
+  min-width: 0;
+}
+
+.record-picker strong {
+  display: block;
+  color: #0A1628;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.record-picker span {
+  display: block;
+  margin-top: 4px;
+  color: #6B7686;
+  font-size: 12px;
+}
+
+.record-picker-check {
+  flex-shrink: 0;
+  color: #00B4D8;
+}
+
+.record-picker .muted {
+  padding: 16px;
+  color: #6B7686;
+  font-size: 13px;
+}
+
 .audience-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 18px;
 }
 
-.audience-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.record-picker button,
 .audience-grid button {
   min-height: 78px;
   padding: 14px;
@@ -3221,31 +3358,41 @@ button.estate-stat-tile {
   cursor: pointer;
 }
 
-.record-picker button.selected,
 .audience-grid button.selected {
   border-color: rgba(239, 114, 24, 0.54);
   background: rgba(239, 114, 24, 0.12);
 }
 
-.record-picker strong,
 .audience-grid strong,
-.record-picker span,
 .audience-grid span {
   display: block;
 }
 
-.record-picker strong,
 .audience-grid strong {
   color: #ffffff;
   font-size: 15px;
 }
 
-.record-picker span,
 .audience-grid span {
   margin-top: 6px;
   color: rgba(245, 242, 238, 0.54);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.audience-panel-enter {
+  animation: audiencePanelEnter 0.2s ease-out;
+}
+
+@keyframes audiencePanelEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .brief-panel {
@@ -5243,7 +5390,6 @@ button.estate-stat-tile {
 
   .records-toolbar,
   .classify-grid,
-  .knowledge-grid,
   .audience-grid,
   .filter-grid,
   .field-grid {

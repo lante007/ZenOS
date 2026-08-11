@@ -4402,8 +4402,9 @@ function KnowledgePage() {
   const { records, source } = useLiveRecords();
   const querySynthesisId = new URLSearchParams(window.location.search).get('synthesis_id') || '';
   const eligibleRecords = records.filter(record => ['Tier 1', 'Tier 2'].includes(record.eqs_tier));
-  const [selectedRecordId, setSelectedRecordId] = useState(eligibleRecords[0]?.adei_record_id || '');
-  const [audience, setAudience] = useState(knowledgeAudiences[0].id);
+  const [selectedRecordId, setSelectedRecordId] = useState('');
+  const [audience, setAudience] = useState('');
+  const [evaluationSearch, setEvaluationSearch] = useState('');
   const [brief, setBrief] = useState('');
   const [briefProduct, setBriefProduct] = useState(null);
   const [briefError, setBriefError] = useState('');
@@ -4414,6 +4415,7 @@ function KnowledgePage() {
 
   useEffect(() => {
     if (synthesisId) return;
+    if (!selectedRecordId) return;
     if (!eligibleRecords.length) return;
     if (!eligibleRecords.some(record => record.adei_record_id === selectedRecordId)) {
       setSelectedRecordId(eligibleRecords[0].adei_record_id);
@@ -4435,8 +4437,19 @@ function KnowledgePage() {
       .finally(() => setSynthesisLoading(false));
   }, []);
 
-  const selectedRecord = eligibleRecords.find(record => record.adei_record_id === selectedRecordId) || eligibleRecords[0];
+  const selectedRecord = eligibleRecords.find(record => record.adei_record_id === selectedRecordId);
   const selectedAudience = knowledgeAudiences.find(item => item.id === audience) || knowledgeAudiences[0];
+  const audienceSelected = knowledgeAudiences.some(item => item.id === audience);
+  const filteredRecords = useMemo(() => {
+    const query = evaluationSearch.trim().toLowerCase();
+    if (!query) return eligibleRecords;
+    return eligibleRecords.filter(record => [
+      record.programme_name,
+      record.canonical_programme_name,
+      record.province,
+      record.document_type,
+    ].filter(Boolean).some(field => String(field).toLowerCase().includes(query)));
+  }, [eligibleRecords, evaluationSearch]);
   const synthesisRecords = synthesis?.record_ids
     ? records.filter(record => synthesis.record_ids.includes(record.id) || synthesis.record_ids.includes(record.adei_record_id))
     : [];
@@ -4445,7 +4458,7 @@ function KnowledgePage() {
     : selectedRecord?.programme_name;
   const safeBrief = briefContent(brief);
 
-  if (!selectedRecord && !synthesisId) {
+  if (!eligibleRecords.length && !synthesisId) {
     return (
       <AppShell active="knowledge">
         <section className="dashboard-main">
@@ -4551,9 +4564,14 @@ function KnowledgePage() {
         <header className="dashboard-header">
           <div>
             <p className="eyebrow">Knowledge products</p>
-            <h1>Generate Audience Brief</h1>
+            <h1>Generate Knowledge Product</h1>
           </div>
-          <button className="primary-action" type="button" onClick={generateBrief}>
+          <button
+            className="primary-action"
+            type="button"
+            onClick={generateBrief}
+            disabled={!(selectedRecord || synthesisId) || !audienceSelected}
+          >
             <Edit3 size={18} />
             <span>{isGenerating ? `Generating ${selectedAudience.label} brief for ${displayProgrammeName}...` : 'Generate Brief'}</span>
           </button>
@@ -4572,11 +4590,12 @@ function KnowledgePage() {
           </div>
         )}
 
-        <section className="knowledge-grid">
+        <section className="knowledge-flow">
           <article className="selector-panel">
+            <p className="synthesis-step-header">Step 1</p>
             <div className="panel-title">
               <FileText size={20} />
-              <span>{synthesisId ? 'Synthesis context' : `Record selector · ${source === 'live' ? 'Live API' : 'Offline preview'}`}</span>
+              <span>{synthesisId ? 'Synthesis context' : `1. Select an evaluation · ${source === 'live' ? 'Live API' : 'Offline preview'}`}</span>
             </div>
             {synthesisId ? (
               <div className="synthesis-readonly-records">
@@ -4588,51 +4607,85 @@ function KnowledgePage() {
                 ))}
               </div>
             ) : (
-              <div className="record-picker">
-                {eligibleRecords.map((record) => (
+              <>
+                <div className="evaluation-search">
+                  <Search size={16} className="evaluation-search-icon" />
+                  <input
+                    type="search"
+                    className="evaluation-search-input"
+                    placeholder="Search evaluations..."
+                    value={evaluationSearch}
+                    onChange={(event) => setEvaluationSearch(event.target.value)}
+                  />
+                </div>
+
+                <div className="evaluation-selected">
+                  <span className="evaluation-selected-label">Selected</span>
+                  {selectedRecord ? (
+                    <div className="evaluation-selected-card">
+                      <strong>{selectedRecord.programme_name}</strong>
+                      <span>{selectedRecord.eqs_tier} · EQS {selectedRecord.eqs_composite} · {selectedRecord.province}</span>
+                      <em>Selected evaluation</em>
+                    </div>
+                  ) : (
+                    <p className="evaluation-selected-empty">No evaluation selected</p>
+                  )}
+                </div>
+
+                <div className="record-picker">
+                  {filteredRecords.length === 0 ? (
+                    <p className="muted">No evaluations match this search.</p>
+                  ) : filteredRecords.map((record) => (
+                    <button
+                      className={record.adei_record_id === selectedRecordId ? 'selected' : ''}
+                      type="button"
+                      key={record.adei_record_id}
+                      onClick={() => {
+                        setSelectedRecordId(record.adei_record_id);
+                        setBrief('');
+                        setBriefProduct(null);
+                        setBriefError('');
+                      }}
+                    >
+                      <span className="record-picker-row-main">
+                        <strong>{record.programme_name}</strong>
+                        <span>{record.eqs_tier} · EQS {record.eqs_composite} · {record.province}</span>
+                      </span>
+                      {record.adei_record_id === selectedRecordId && <Check size={16} className="record-picker-check" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </article>
+
+          {(selectedRecord || synthesisId) && (
+            <article className="audience-panel audience-panel-enter">
+              <p className="synthesis-step-header">Step 2</p>
+              <div className="panel-title">
+                <Users size={20} />
+                <span>2. Select audience</span>
+              </div>
+              <div className="audience-grid">
+                {knowledgeAudiences.map((item) => (
                   <button
-                    className={record.adei_record_id === selectedRecordId ? 'selected' : ''}
+                    className={item.id === audience ? 'selected' : ''}
                     type="button"
-                    key={record.adei_record_id}
+                    key={item.id}
                     onClick={() => {
-                      setSelectedRecordId(record.adei_record_id);
+                      setAudience(item.id);
                       setBrief('');
                       setBriefProduct(null);
                       setBriefError('');
                     }}
                   >
-                    <strong>{record.programme_name}</strong>
-                    <span>{record.eqs_tier} · EQS {record.eqs_composite} · {record.province}</span>
+                    <strong>{item.label}</strong>
+                    <span>{item.focus}</span>
                   </button>
                 ))}
               </div>
-            )}
-          </article>
-
-          <article className="audience-panel">
-            <div className="panel-title">
-              <Users size={20} />
-              <span>Audience</span>
-            </div>
-            <div className="audience-grid">
-              {knowledgeAudiences.map((item) => (
-                <button
-                  className={item.id === audience ? 'selected' : ''}
-                  type="button"
-                  key={item.id}
-                  onClick={() => {
-                    setAudience(item.id);
-                    setBrief('');
-                    setBriefProduct(null);
-                    setBriefError('');
-                  }}
-                >
-                  <strong>{item.label}</strong>
-                  <span>{item.focus}</span>
-                </button>
-              ))}
-            </div>
-          </article>
+            </article>
+          )}
         </section>
 
         <section className="brief-panel" aria-label="Generated knowledge product">
