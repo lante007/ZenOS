@@ -286,84 +286,117 @@ router.get('/cascade',
         formula: 'Confirmed Rand value of decisions attributable to classified evidence. Source: ratified decision instances only. No estimates.',
       };
 
-      const qualityScore = ec.avg_eqs
-        ? Math.round((toNumber(ec.avg_eqs) / 5) * 25)
-        : 0;
-
-      const totalForCurrency = ec.total_records || 1;
-      const currencyPct = ec.current_count / totalForCurrency;
-      const currencyScore = Math.round(currencyPct * 25);
-
-      const coverageResult = await pool.query(`
+      // EROI = five-dimension portfolio return score, computed from corpus
+      // data as proxies pending Decision Capital confirmation. See
+      // methodology_note below for the source field behind each dimension.
+      const eroiResult = await pool.query(`
         SELECT
-          COUNT(DISTINCT r.phase)::int AS phases,
-          COUNT(DISTINCT r.document_type)::int AS doc_types,
-          COUNT(DISTINCT p.province)::int AS provinces
-        FROM ${schema}.intelligence_records r
-        LEFT JOIN LATERAL unnest(COALESCE(r.provinces, ARRAY[]::text[])) AS p(province) ON true
-        WHERE r.tenant_id = $1
-          AND r.record_status = 'ACTIVE'
-      `, [tenantId]);
-      const cov = coverageResult.rows[0];
-      const coverageScore = Math.min(25,
-        Math.round(
-          (Math.min(cov.phases, 4) / 4) * 10 +
-          (Math.min(cov.doc_types, 3) / 3) * 8 +
-          (Math.min(cov.provinces, 4) / 4) * 7
-        )
-      );
+          -- Dimension 1: System Adoption
+          COUNT(*) FILTER (WHERE dbe_adoption_status = 'ADOPTED') as adopted_count,
+          COUNT(*) FILTER (WHERE dbe_adoption_status = 'PILOTED') as piloted_count,
+          COUNT(*) FILTER (WHERE dbe_adoption_status = 'REFERENCED') as referenced_count,
+          COUNT(*) as total_active,
 
-      const standardsResult = await pool.query(`
-        SELECT ROUND(
-          100.0 * AVG(
-            (CASE WHEN methodology_description IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN null_findings_reported IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN limitations IS NOT NULL THEN 1 ELSE 0 END +
-             CASE WHEN effect_size_composite IS NOT NULL
-               OR (
-                 document_type NOT IN ('Impact Evaluation')
-                 AND (secondary_document_type IS NULL OR secondary_document_type NOT IN ('Impact Evaluation'))
-               )
-              THEN 1 ELSE 0 END
-            ) / 4.0
-          ), 1
-        ) AS pct
+          -- Dimension 2: Policy Influence
+          AVG(policy_relevance_score) FILTER (WHERE eqs_tier IN ('TIER_1','TIER_2')) as avg_policy_score,
+          COUNT(*) FILTER (WHERE nls_alignment = true) as nls_count,
+          COUNT(*) FILTER (WHERE funrs_alignment = true) as funrs_count,
+
+          -- Dimension 3: Learning Outcomes
+          COUNT(*) FILTER (
+            WHERE effect_direction = 'Positive'
+            AND eqs_tier IN ('TIER_1','TIER_2')
+          ) as positive_outcomes,
+          COUNT(*) FILTER (
+            WHERE (document_type = 'Impact Evaluation' OR secondary_document_type = 'Impact Evaluation')
+            AND eqs_tier IN ('TIER_1','TIER_2')
+          ) as quality_impact_evals,
+
+          -- Dimension 4: Knowledge Assets
+          COUNT(*) FILTER (WHERE eqs_tier = 'TIER_1') as tier1_count,
+          COUNT(*) FILTER (WHERE eqs_tier = 'TIER_2') as tier2_count,
+          COUNT(DISTINCT programme_name) as programme_count,
+          MAX(year::int) - MIN(year::int) + 1 as years_of_evidence,
+
+          -- Dimension 5: Capital Leveraged
+          COUNT(*) FILTER (WHERE array_length(funder_names, 1) > 1) as multi_funder_count
+
         FROM ${schema}.intelligence_records
         WHERE tenant_id = $1
           AND record_status = 'ACTIVE'
       `, [tenantId]);
 
-      const stdPct = parseFloat(standardsResult.rows[0]?.pct || 0);
-      const standardsScore = Math.round((stdPct / 100) * 25);
-      const eroiIndex = qualityScore + currencyScore + coverageScore + standardsScore;
+      const er = eroiResult.rows[0];
+      const totalActive = toNumber(er.total_active) || 1;
+      const adoptedCount = toNumber(er.adopted_count);
+      const pilotedCount = toNumber(er.piloted_count);
+      const referencedCount = toNumber(er.referenced_count);
+      const avgPolicyScore = er.avg_policy_score != null ? Number(er.avg_policy_score) : null;
+      const nlsCount = toNumber(er.nls_count);
+      const funrsCount = toNumber(er.funrs_count);
+      const positiveOutcomes = toNumber(er.positive_outcomes);
+      const qualityImpactEvals = toNumber(er.quality_impact_evals);
+      const tier1Count = toNumber(er.tier1_count);
+      const tier2Count = toNumber(er.tier2_count);
+      const programmeCount = toNumber(er.programme_count);
+      const yearsOfEvidence = er.years_of_evidence != null ? Number(er.years_of_evidence) : 0;
+      const multiFunderCount = toNumber(er.multi_funder_count);
+
+      // Dimension 1: System Adoption (30%) - max score if everything adopted
+      const adoptionScore = Math.min(100,
+        Math.round(
+          (adoptedCount * 100 + pilotedCount * 50 + referencedCount * 25) / totalActive
+        )
+      );
+
+      // Dimension 2: Policy Influence (20%) - policy_relevance_score (1-5 -> 0-100)
+      const policyScore = Math.round(
+        ((avgPolicyScore || 1) / 5) * 100
+        * (1 + (nlsCount + funrsCount) / (totalActive * 2) * 0.2)
+      );
+
+      // Dimension 3: Learning Outcomes (20%) - proportion of quality impact
+      // evaluations with a positive effect direction
+      const outcomesScore = qualityImpactEvals > 0
+        ? Math.round((positiveOutcomes / qualityImpactEvals) * 100)
+        : 0;
+
+      // Dimension 4: Knowledge Assets (15%) - composite of corpus depth and quality
+      const knowledgeScore = Math.round(
+        (tier1Count * 100 + tier2Count * 60) / totalActive * 0.5
+        + Math.min(50, programmeCount * 1.5 + yearsOfEvidence * 2)
+      );
+
+      // Dimension 5: Capital Leveraged (15%) - proxy: multi-funder proportion.
+      // Replace with Fatima-confirmed follow-on funding data in Phase 2.
+      const leverageScore = Math.round((multiFunderCount / totalActive) * 100);
+
+      const eroiScore = Math.round(
+        adoptionScore * 0.30 +
+        policyScore * 0.20 +
+        outcomesScore * 0.20 +
+        knowledgeScore * 0.15 +
+        leverageScore * 0.15
+      );
+
+      const eroiLabel = eroiScore >= 80 ? 'Outstanding'
+        : eroiScore >= 65 ? 'Strong'
+        : eroiScore >= 50 ? 'Established'
+        : eroiScore >= 35 ? 'Developing'
+        : 'Early Stage';
 
       const eroi = {
-        index: eroiIndex,
+        index: eroiScore,
+        label: eroiLabel,
         dimensions: {
-          evidence_quality: {
-            score: qualityScore,
-            max: 25,
-            label: 'Evidence quality',
-          },
-          currency: {
-            score: currencyScore,
-            max: 25,
-            label: 'Evidence currency',
-          },
-          coverage: {
-            score: coverageScore,
-            max: 25,
-            label: 'Portfolio coverage',
-          },
-          commissioning_standards: {
-            score: standardsScore,
-            max: 25,
-            label: 'Commissioning standards',
-          },
+          system_adoption: { score: adoptionScore, weight: 30, contribution: Math.round(adoptionScore * 0.30) },
+          policy_influence: { score: policyScore, weight: 20, contribution: Math.round(policyScore * 0.20) },
+          learning_outcomes: { score: outcomesScore, weight: 20, contribution: Math.round(outcomesScore * 0.20) },
+          knowledge_assets: { score: knowledgeScore, weight: 15, contribution: Math.round(knowledgeScore * 0.15) },
+          capital_leveraged: { score: leverageScore, weight: 15, contribution: Math.round(leverageScore * 0.15) },
         },
         has_data: ec.total_records > 0,
-        label: ec.total_records > 0 ? `${eroiIndex} / 100` : 'N/A',
-        formula: 'Composite index of evidence quality, currency, coverage and commissioning standards. Converts to true EROI once Decision Capital instances are confirmed by the Director of Research.',
+        methodology_note: 'Computed from corpus data. System Adoption uses dbe_adoption_status. Policy Influence uses policy_relevance scores. Learning Outcomes uses effect_direction on quality evaluations. Knowledge Assets uses corpus depth and quality. Capital Leveraged uses multi-funder proportion as proxy. Full EROI requires Decision Capital confirmation.',
       };
 
       return res.json({

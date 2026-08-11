@@ -378,8 +378,13 @@ function getHealthLabel(score) {
   return { label: 'Early stage', color: '#EF7218' };
 }
 
+function formatDimensionLabel(key) {
+  return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
 function CascadeFormulaModal({ item, onClose }) {
   if (!item) return null;
+  const dimensionEntries = item.dimensions ? Object.entries(item.dimensions) : null;
   return (
     <div className="modal-backdrop formula-backdrop" role="presentation" onClick={onClose}>
       <section className="formula-modal" role="dialog" aria-modal="true" aria-label={`${item.title} calculation`} onClick={(event) => event.stopPropagation()}>
@@ -393,7 +398,26 @@ function CascadeFormulaModal({ item, onClose }) {
           </button>
         </div>
         <p>{item.formula || 'N/A'}</p>
+        {dimensionEntries && (
+          <div className="eroi-dimension-table" role="table">
+            <div className="eroi-dimension-row eroi-dimension-head" role="row">
+              <span>Label</span>
+              <span>Score</span>
+              <span>Weight</span>
+              <span>Contribution</span>
+            </div>
+            {dimensionEntries.map(([key, dim]) => (
+              <div className="eroi-dimension-row" role="row" key={key}>
+                <span>{formatDimensionLabel(key)}</span>
+                <span>{dim.score}</span>
+                <span>{dim.weight}%</span>
+                <span>{dim.contribution}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {item.note && <small>Source note: {item.note}</small>}
+        {item.dimensionsNote && <p className="eroi-dimensions-note">{item.dimensionsNote}</p>}
       </section>
     </div>
   );
@@ -1381,10 +1405,11 @@ function DashboardPage() {
     },
     {
       title: 'EROI',
-      value: 'In Development',
-      note: 'Portfolio return score across System Adoption, Policy Influence, Learning Outcomes, Knowledge Assets and Capital Leveraged',
-      costDataNote: 'EROI will be calculated once Decision Capital instances are confirmed and system adoption data is collected.',
-      formula: 'Evidence Return on Investment measures the broader institutional value created by Zenex\'s evidence investment across five dimensions: System Adoption (30%), Policy Influence (20%), Learning Outcomes (20%), Knowledge Assets (15%), and Capital Leveraged (15%). Full calculation requires Decision Capital confirmation by the Director of Research and Evaluation.',
+      value: cascadeLoading ? 'Calculating...' : cascade?.eroi?.has_data ? `${cascade.eroi.index} / 100` : 'N/A',
+      note: cascadeLoading ? '' : cascade?.eroi?.label || '',
+      formula: cascade?.eroi?.methodology_note,
+      dimensions: cascade?.eroi?.dimensions,
+      dimensionsNote: `Computed from ${cascade?.corpus_size ?? 0} classified documents. Dimensions use corpus data as proxies. Full calculation requires Decision Capital confirmation.`,
     },
   ];
   const programmeNames = [...new Set((portfolio?.programmes || []).map(item => item.programme_name).filter(Boolean))];

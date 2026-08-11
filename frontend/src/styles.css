@@ -2007,6 +2007,43 @@ button.estate-stat-tile {
   line-height: 1.5;
 }
 
+.eroi-dimension-table {
+  display: grid;
+  margin: 0 24px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.eroi-dimension-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) 60px 70px 90px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(245, 242, 238, 0.72);
+  font-size: 13px;
+}
+
+.eroi-dimension-row:last-child {
+  border-bottom: 0;
+}
+
+.eroi-dimension-head {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.eroi-dimensions-note {
+  padding: 0 24px 24px;
+  color: rgba(245, 242, 238, 0.54);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .modal-header {
   position: sticky;
   top: 0;
