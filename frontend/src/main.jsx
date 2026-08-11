@@ -370,16 +370,6 @@ function greetingNameFor(user) {
   return value || '';
 }
 
-function cascadeDimensions(cascade) {
-  const dims = cascade?.eroi?.dimensions || {};
-  return [
-    ['Quality', dims.evidence_quality?.score],
-    ['Currency', dims.currency?.score],
-    ['Coverage', dims.coverage?.score],
-    ['Standards', dims.commissioning_standards?.score],
-  ];
-}
-
 function getHealthLabel(score) {
   if (score >= 90) return { label: 'Excellent', color: '#4CAF50' };
   if (score >= 75) return { label: 'Strong', color: '#8BC34A' };
@@ -1391,11 +1381,10 @@ function DashboardPage() {
     },
     {
       title: 'EROI',
-      value: cascadeLoading ? 'Calculating...' : cascade?.eroi?.label || 'N/A',
-      note: 'Evidence Quality Index',
-      costDataNote: 'Converts to true EROI when Decision Capital instances are confirmed',
-      formula: cascade?.eroi?.formula,
-      dimensions: cascadeDimensions(cascade),
+      value: 'In Development',
+      note: 'Portfolio return score across System Adoption, Policy Influence, Learning Outcomes, Knowledge Assets and Capital Leveraged',
+      costDataNote: 'EROI will be calculated once Decision Capital instances are confirmed and system adoption data is collected.',
+      formula: 'Evidence Return on Investment measures the broader institutional value created by Zenex\'s evidence investment across five dimensions: System Adoption (30%), Policy Influence (20%), Learning Outcomes (20%), Knowledge Assets (15%), and Capital Leveraged (15%). Full calculation requires Decision Capital confirmation by the Director of Research and Evaluation.',
     },
   ];
   const programmeNames = [...new Set((portfolio?.programmes || []).map(item => item.programme_name).filter(Boolean))];
@@ -1656,23 +1645,9 @@ function DashboardPage() {
                 <div className="cascade-index">{String(index + 1).padStart(2, '0')}</div>
                 <h3>{stage.title}</h3>
                 <strong>{stage.value}</strong>
-                {stage.dimensions ? (
-                  <>
-                    <div className="dimension-pills">
-                      {stage.dimensions.map(([label, score]) => (
-                        <span key={label}>{label} {score ?? 0}/25</span>
-                      ))}
-                    </div>
-                    {stage.note && <p>{stage.note}</p>}
-                    {stage.costDataNote && <p className="cascade-cost-note cascade-conversion-note">{stage.costDataNote}</p>}
-                  </>
-                ) : (
-                  <>
-                    <p>{stage.note || 'N/A'}</p>
-                    {stage.costDataNote && <p className="cascade-cost-note">{stage.costDataNote}</p>}
-                    {stage.warningNote && <p className="cascade-warning-note">{stage.warningNote}</p>}
-                  </>
-                )}
+                <p>{stage.note || 'N/A'}</p>
+                {stage.costDataNote && <p className="cascade-cost-note">{stage.costDataNote}</p>}
+                {stage.warningNote && <p className="cascade-warning-note">{stage.warningNote}</p>}
                 {index < cascadeCards.length - 1 && <ArrowRight className="cascade-arrow" size={18} />}
               </article>
             ))}
