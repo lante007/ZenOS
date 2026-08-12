@@ -1211,6 +1211,7 @@ function DashboardPage() {
   const [gapsLoading, setGapsLoading] = useState(true);
   const [totalGapsIdentified, setTotalGapsIdentified] = useState(0);
   const [dismissedGapNames, setDismissedGapNames] = useState(() => new Set());
+  const [ceoBriefOpen, setCeoBriefOpen] = useState(false);
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
   const [seedAttempted, setSeedAttempted] = useState(false);
@@ -1464,7 +1465,14 @@ function DashboardPage() {
               <p className="eyebrow">Evidence Estate</p>
               <h2>Zenex Foundation</h2>
             </div>
-            <span>Last updated: {formatDisplayDate(new Date())}</span>
+            <div className="estate-header-right">
+              {user.role === 'CEO_EXEC' && (
+                <button className="ceo-brief-trigger" type="button" onClick={() => setCeoBriefOpen(true)}>
+                  CEO Brief
+                </button>
+              )}
+              <span>Last updated: {formatDisplayDate(new Date())}</span>
+            </div>
           </div>
           <div className="estate-stat-grid">
             <button className="estate-stat-tile" type="button" onClick={() => setEstateTypesOpen(true)}>
@@ -1893,8 +1901,162 @@ function DashboardPage() {
         </section>
         <CascadeFormulaModal item={formulaModal} onClose={() => setFormulaModal(null)} />
         <AlertPriorityInfoModal open={priorityInfoOpen} onClose={() => setPriorityInfoOpen(false)} />
+        <CEOBriefModal open={ceoBriefOpen} onClose={() => setCeoBriefOpen(false)} />
       </section>
     </AppShell>
+  );
+}
+
+const BRIEF_ACTION_MARKER_RE = /\[(EXPLORE_EVIDENCE|ADD_TO_AGENDA|GENERATE_TOR):\s*([^\]]+)\]/g;
+
+function renderBriefParagraph(text, key, agendaAdded, onAddToAgenda) {
+  BRIEF_ACTION_MARKER_RE.lastIndex = 0;
+  const nodes = [];
+  let lastIndex = 0;
+  let match;
+  let i = 0;
+  while ((match = BRIEF_ACTION_MARKER_RE.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(<span key={`${key}-t${i++}`}>{text.slice(lastIndex, match.index)}</span>);
+    }
+    const action = match[1];
+    const programmeName = match[2].trim();
+    if (action === 'EXPLORE_EVIDENCE') {
+      nodes.push(
+        <a
+          key={`${key}-a${i++}`}
+          className="brief-action-btn brief-action-explore"
+          href={`/records?search=${encodeURIComponent(programmeName)}`}
+          onClick={(event) => { event.preventDefault(); navigate(`/records?search=${encodeURIComponent(programmeName)}`); }}
+        >
+          Explore Evidence →
+        </a>
+      );
+    } else if (action === 'GENERATE_TOR') {
+      nodes.push(
+        <a
+          key={`${key}-a${i++}`}
+          className="brief-action-btn brief-action-tor"
+          href={`/tor-generator?programme=${encodeURIComponent(programmeName)}`}
+          onClick={(event) => { event.preventDefault(); navigate(`/tor-generator?programme=${encodeURIComponent(programmeName)}`); }}
+        >
+          Generate TOR →
+        </a>
+      );
+    } else if (action === 'ADD_TO_AGENDA') {
+      const added = agendaAdded.has(programmeName);
+      nodes.push(
+        <button
+          key={`${key}-a${i++}`}
+          type="button"
+          className="brief-action-btn brief-action-agenda"
+          disabled={added}
+          onClick={() => onAddToAgenda(programmeName)}
+        >
+          {added ? 'Added ✓' : 'Add to Agenda'}
+        </button>
+      );
+    }
+    lastIndex = BRIEF_ACTION_MARKER_RE.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(<span key={`${key}-t${i++}`}>{text.slice(lastIndex)}</span>);
+  }
+  return nodes;
+}
+
+function CEOBriefModal({ open, onClose }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [brief, setBrief] = useState(null);
+  const [agendaAdded, setAgendaAdded] = useState(() => new Set());
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    apiRequest('/api/brief/ceo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ period_start: null, period_end: null, theme: null, provinces: null }),
+    })
+      .then(data => {
+        if (cancelled) return;
+        setBrief(data);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setError(err?.payload?.error || err?.message || 'Unable to generate the CEO brief. Please try again.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [open]);
+
+  if (!open) return null;
+
+  const sections = brief?.brief_text ? parseTorSections(brief.brief_text) : [];
+
+  function handleAddToAgenda(programmeName) {
+    setAgendaAdded(prev => new Set(prev).add(programmeName));
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="ceo-brief-modal" role="dialog" aria-modal="true" aria-label="CEO Evidence Brief" onClick={(event) => event.stopPropagation()}>
+        <header className="ceo-brief-header">
+          <img className="ceo-brief-logo" src={tenantConfig.logoUrl} alt="Zenex Foundation" />
+          <p className="ceo-brief-eyebrow">CEO Evidence Brief</p>
+          <h2 className="ceo-brief-title">Zenex Foundation</h2>
+          <p className="ceo-brief-meta">{formatDisplayDate(new Date())} | Confidential</p>
+          <button className="icon-button ceo-brief-close" type="button" aria-label="Close CEO brief" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </header>
+        <div className="ceo-brief-divider" />
+
+        <div className="ceo-brief-body">
+          {loading ? (
+            <p className="ceo-brief-loading">Generating brief from live evidence data...</p>
+          ) : error ? (
+            <p className="ceo-brief-error">{error}</p>
+          ) : (
+            sections.map((section, sIndex) => (
+              <React.Fragment key={`${section.number}-${section.title}`}>
+                <article className="ceo-brief-section">
+                  <h3 className="ceo-brief-section-heading">{section.number}. {section.title}</h3>
+                  {section.body.split(/\n{2,}/).filter(Boolean).map((paragraph, pIndex) => (
+                    <p className="ceo-brief-section-body" key={pIndex}>
+                      {renderBriefParagraph(paragraph.trim(), `${sIndex}-${pIndex}`, agendaAdded, handleAddToAgenda)}
+                    </p>
+                  ))}
+                </article>
+                {sIndex < sections.length - 1 && <div className="ceo-brief-divider ceo-brief-divider-thin" />}
+              </React.Fragment>
+            ))
+          )}
+        </div>
+
+        <footer className="ceo-brief-footer">
+          <div className="ceo-brief-footer-actions">
+            <button className="ceo-brief-pdf-btn" type="button" disabled={loading || !!error} onClick={() => window.print()}>
+              Download PDF
+            </button>
+            <button className="btn-ghost" type="button" onClick={onClose}>
+              Close
+            </button>
+          </div>
+          <p className="ceo-brief-footer-note">
+            Generated from {brief?.total_docs ?? '...'} classified evaluations. Updated each time a new document is classified.
+          </p>
+          <p className="ceo-brief-footer-note">
+            Filter by period, theme or geography coming soon.
+          </p>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -1924,7 +2086,7 @@ function exportRecordsCsv(records) {
 
 function RecordsPage() {
   const { records, source } = useLiveRecords();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('search') || '');
   const [filters, setFilters] = useState({ tier: 'all', type: 'all', phase: 'all', province: 'all' });
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);

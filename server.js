@@ -28,6 +28,7 @@ const provenanceRoutes = require('./api/routes/provenance');
 const statsRoutes = require('./api/routes/stats');
 const financialRoutes = require('./api/routes/financial');
 const workspaceRoutes = require('./api/routes/workspace');
+const briefRoutes = require('./api/routes/brief');
 const db = require('./api/services/db');
 const localStore = require('./api/services/local-store');
 
@@ -116,6 +117,7 @@ app.use('/api/alerts', alertsRoutes);
 app.use('/api/provenance', provenanceRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/workspace', workspaceRoutes);
+app.use('/api/brief', briefRoutes);
 app.use('/api', knowledgeRoutes);
 
 app.get('/api/exec-summary', authenticate(), assertNoBoardAccess, async (req, res, next) => {
