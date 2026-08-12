@@ -1211,6 +1211,7 @@ function DashboardPage() {
   const [gapsLoading, setGapsLoading] = useState(true);
   const [totalGapsIdentified, setTotalGapsIdentified] = useState(0);
   const [dismissedGapNames, setDismissedGapNames] = useState(() => new Set());
+  const [commissionedGapNames, setCommissionedGapNames] = useState(() => new Set());
   const [ceoBriefOpen, setCeoBriefOpen] = useState(false);
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
@@ -1382,13 +1383,36 @@ function DashboardPage() {
     await loadAlerts();
   }
 
-  // Session-only dismissal (not persisted) - distinct from TOR dismissals,
-  // which are stored server-side. Reveals the next-ranked gap in its place.
+  // Session-only status (not persisted) - distinct from TOR dismissals,
+  // which are stored server-side. Drives the learning loop status badge;
+  // the card itself stays visible so the badge change is observable.
   function dismissGap(programmeName) {
     setDismissedGapNames(current => new Set(current).add(programmeName));
+    setCommissionedGapNames(current => {
+      if (!current.has(programmeName)) return current;
+      const next = new Set(current);
+      next.delete(programmeName);
+      return next;
+    });
   }
 
-  const visibleGaps = gaps.filter(g => !dismissedGapNames.has(g.programme_name)).slice(0, 3);
+  function commissionGap(programmeName) {
+    setCommissionedGapNames(current => new Set(current).add(programmeName));
+    setDismissedGapNames(current => {
+      if (!current.has(programmeName)) return current;
+      const next = new Set(current);
+      next.delete(programmeName);
+      return next;
+    });
+  }
+
+  function gapStatus(programmeName) {
+    if (commissionedGapNames.has(programmeName)) return 'COMMISSIONED';
+    if (dismissedGapNames.has(programmeName)) return 'NOT NOW';
+    return 'IDENTIFIED';
+  }
+
+  const visibleGaps = gaps.slice(0, 3);
 
   const cascadeCards = [
     {
@@ -1793,44 +1817,50 @@ function DashboardPage() {
                 <p className="workspace-loading">Identifying priority gaps...</p>
               ) : gaps.length === 0 ? (
                 <p className="workspace-clear">No priority evidence gaps identified.</p>
-              ) : visibleGaps.length === 0 ? (
-                <p className="workspace-clear">
-                  All priority gaps reviewed. View the full gap register in your{' '}
-                  <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
-                    Workspace
-                  </a>.
-                </p>
               ) : (
-                visibleGaps.map(gap => (
-                  <article className="gap-priority-row" key={gap.programme_name}>
-                    <span className="gap-priority-circle">{gap.rank}</span>
-                    <div className="gap-priority-text">
-                      <h4>{gap.programme_name}</h4>
-                      <p className="gap-priority-description">
-                        {gap.gap_description} (last: {gap.last_evaluation_year || 'Unknown'}) · {formatRand(gap.total_grant_rand)} invested
-                      </p>
-                      <p className="gap-priority-context">
-                        {gap.eval_count} evaluation{gap.eval_count === 1 ? '' : 's'} completed · {formatRand(gap.total_grant_rand)} invested · {gap.programme_area || 'Programme area not recorded'}
-                      </p>
-                    </div>
-                    <div className="gap-priority-actions">
-                      <a
-                        className="generate-tor-button"
-                        href={`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`}
-                        onClick={(event) => { event.preventDefault(); navigate(`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`); }}
-                      >
-                        Generate TOR →
-                      </a>
-                      <button
-                        className="gap-dismiss-button"
-                        type="button"
-                        onClick={() => dismissGap(gap.programme_name)}
-                      >
-                        Not now →
-                      </button>
-                    </div>
-                  </article>
-                ))
+                visibleGaps.map(gap => {
+                  const status = gapStatus(gap.programme_name);
+                  const statusClass = status === 'COMMISSIONED'
+                    ? 'gap-status-badge commissioned'
+                    : status === 'NOT NOW'
+                      ? 'gap-status-badge not-now'
+                      : 'gap-status-badge';
+                  return (
+                    <article className="gap-priority-row" key={gap.programme_name}>
+                      <span className="gap-priority-circle">{gap.rank}</span>
+                      <div className="gap-priority-text">
+                        <span className={statusClass}>{status}</span>
+                        <h4>{gap.programme_name}</h4>
+                        <p className="gap-priority-description">
+                          {gap.gap_description} (last: {gap.last_evaluation_year || 'Unknown'})
+                        </p>
+                        <p className="gap-priority-context">
+                          {gap.eval_count} evaluation{gap.eval_count === 1 ? '' : 's'} · {gap.programme_area || 'Programme area not recorded'} · {formatRand(gap.total_grant_rand)} invested
+                        </p>
+                      </div>
+                      <div className="gap-priority-actions">
+                        <a
+                          className="generate-tor-button"
+                          href={`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            commissionGap(gap.programme_name);
+                            navigate(`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`);
+                          }}
+                        >
+                          Generate TOR →
+                        </a>
+                        <button
+                          className="gap-dismiss-button"
+                          type="button"
+                          onClick={() => dismissGap(gap.programme_name)}
+                        >
+                          Not now →
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })
               )}
             </div>
             {!gapsLoading && gaps.length > 0 && (
