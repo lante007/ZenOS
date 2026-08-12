@@ -415,7 +415,7 @@ router.get('/cascade',
         decision_capital: decisionCapital,
         eroi,
         generated_at: new Date().toISOString(),
-        corpus_size: ec.total_records,
+        corpus_size: evidenceCapital.total_records,
       });
     } catch (err) {
       next(err);
