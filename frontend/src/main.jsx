@@ -20,6 +20,7 @@ import {
   KeyRound,
   Layers3,
   LockKeyhole,
+  LogOut,
   Mail,
   Search,
   ShieldCheck,
@@ -1125,6 +1126,19 @@ function queueCount(queueItems = FALLBACK_QUEUE_EMPTY) {
 function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() }) {
   const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
   const canSynthesise = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
+
+  async function handleSignOut() {
+    try {
+      await signOutOfCognito();
+    } catch {
+      // Local sign-out should still complete if Cognito cannot be reached.
+    } finally {
+      setInMemoryToken('');
+      sessionStorage.clear();
+      navigateInApp('/login');
+    }
+  }
+
   return (
     <>
       <aside className="dashboard-sidebar" aria-label="EvidenceOS navigation">
@@ -1171,6 +1185,10 @@ function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() 
             <Users size={18} />
             <span>Settings</span>
           </a>
+          <button className="sidebar-signout" type="button" onClick={handleSignOut}>
+            <LogOut size={18} />
+            <span>Sign Out</span>
+          </button>
         </nav>
       </aside>
     </>

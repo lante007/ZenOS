@@ -869,6 +869,39 @@ button:disabled {
   flex: 0 0 auto;
 }
 
+.sidebar-signout {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0 12px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-signout:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-signout svg {
+  color: rgba(255, 255, 255, 0.5);
+  flex: 0 0 auto;
+}
+
+.sidebar-signout:hover svg {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .nav-badge {
   min-width: 22px;
   height: 22px;
