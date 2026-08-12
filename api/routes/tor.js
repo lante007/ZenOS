@@ -37,6 +37,18 @@ setInterval(() => {
   }
 }, 60 * 1000).unref();
 
+// Separate job store for POST /strategic-intelligence/refresh, same pattern
+// as `jobs` above. Kept distinct so a jobId from one endpoint can never be
+// polled against the other by mistake.
+const siJobs = {};
+const SI_JOB_TTL_MS = 10 * 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - SI_JOB_TTL_MS;
+  for (const [id, job] of Object.entries(siJobs)) {
+    if (job.createdAt < cutoff) delete siJobs[id];
+  }
+}, 60 * 1000).unref();
+
 function buildSystemPrompt() {
   return `You are Dr Fatima Adam, Director of Research and Evaluation at Zenex Foundation, South Africa's leading education evidence funder. You have 15 years of experience commissioning evaluations across South African schools. You also hold actuarial training and apply precise probabilistic and cost-benefit reasoning to evidence questions.
 
@@ -856,6 +868,9 @@ router.post('/submit-for-review',
 router.post('/strategic-intelligence/refresh',
   requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'),
   async (req, res, next) => {
+    // Async job pattern, same as POST /generate - this call makes a
+    // synchronous, web-search-enabled Claude call that can run past
+    // CloudFront's origin timeout, so it must not block the response.
     try {
       const { programme_name: programmeName, programme_area: programmeArea } = req.body;
       const tenant = req.tenant;
@@ -864,20 +879,85 @@ router.post('/strategic-intelligence/refresh',
         return res.status(400).json({ error: 'programme_name is required' });
       }
 
+      // Fast, cheap validation happens synchronously, before any job is
+      // created - only the slow Claude call runs in the background.
       const records = await db.getProgrammeRecordsForTor(tenant, programmeName);
       if (!records || records.length === 0) {
         return res.status(404).json({ error: 'No evaluation records found for this programme' });
       }
       const gap = computeGapAnalysis(records);
 
-      const result = await runFreshStrategicIntelligence(tenant, {
-        programmeName,
-        programmeArea: programmeArea || gap.programmeArea,
-        existingEvidenceSummary: buildEvidenceSummary(records, gap),
-        generatedBy: req.user?.sub,
-      });
+      // De-dup: reuse an existing pending job for the same programme and
+      // tenant rather than spawning a second one from a rapid double-click.
+      const existing = Object.entries(siJobs).find(([, job]) =>
+        job.status === 'pending' &&
+        job.tenantId === tenant.slug &&
+        job.programmeName === programmeName
+      );
+      if (existing) {
+        return res.status(202).json({ jobId: existing[0], status: 'pending' });
+      }
 
-      return res.json({ success: true, strategic_intelligence: result });
+      const jobId = crypto.randomUUID();
+      siJobs[jobId] = {
+        status: 'pending',
+        result: null,
+        error: null,
+        tenantId: tenant.slug,
+        userId: req.user?.sub || null,
+        programmeName,
+        createdAt: Date.now(),
+      };
+
+      res.status(202).json({ jobId, status: 'pending' });
+
+      (async () => {
+        try {
+          const result = await runFreshStrategicIntelligence(tenant, {
+            programmeName,
+            programmeArea: programmeArea || gap.programmeArea,
+            existingEvidenceSummary: buildEvidenceSummary(records, gap),
+            generatedBy: req.user?.sub,
+          });
+          siJobs[jobId].status = 'complete';
+          siJobs[jobId].result = result;
+        } catch (err) {
+          console.error(`[tor] strategic intelligence refresh job ${jobId} failed: ${err.message}`);
+          siJobs[jobId].status = 'failed';
+          siJobs[jobId].error = err.message;
+        }
+      })();
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get('/strategic-intelligence/status/:jobId',
+  requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'),
+  (req, res, next) => {
+    try {
+      const job = siJobs[req.params.jobId];
+      // A jobId alone is not an authorisation boundary: a job belonging to
+      // a different tenant or a different user within the same tenant
+      // returns 404, not 403, so its existence is never confirmed to an
+      // unauthorised caller.
+      if (!job || job.tenantId !== req.tenant.slug || job.userId !== (req.user?.sub || null)) {
+        return res.status(404).json({ error: 'Job not found' });
+      }
+
+      if (job.status === 'complete') {
+        return res.json({
+          status: 'complete',
+          opportunities: job.result?.opportunities || [],
+          id: job.result?.id,
+          generated_at: job.result?.generated_at,
+        });
+      }
+      if (job.status === 'failed') {
+        return res.json({ status: 'failed', error: job.error });
+      }
+      return res.json({ status: 'pending' });
     } catch (err) {
       next(err);
     }

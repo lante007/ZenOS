@@ -2849,11 +2849,50 @@ function TorGeneratorPage() {
     }
   }
 
+  function pollSiRefreshStatus(jobId) {
+    return new Promise(resolve => {
+      const startedAt = Date.now();
+      const finish = () => { setSiRefreshing(false); resolve(); };
+
+      const poll = async () => {
+        if (Date.now() - startedAt > 120 * 1000) {
+          setError('Intelligence refresh failed. Please try again.');
+          finish();
+          return;
+        }
+        try {
+          const statusData = await apiRequest(`/api/tor/strategic-intelligence/status/${jobId}`);
+          if (statusData.status === 'complete') {
+            setStrategicIntelligence({
+              id: statusData.id,
+              opportunities: statusData.opportunities || [],
+              generated_at: statusData.generated_at,
+            });
+            setDismissedTypes(new Set());
+            finish();
+            return;
+          }
+          if (statusData.status === 'failed') {
+            setError('Intelligence refresh failed. Please try again.');
+            finish();
+            return;
+          }
+          window.setTimeout(poll, 3000);
+        } catch {
+          setError('Intelligence refresh failed. Please try again.');
+          finish();
+        }
+      };
+      poll();
+    });
+  }
+
   async function handleRefreshStrategicIntelligence() {
     if (!result) return;
     setSiRefreshing(true);
+    setError(null);
     try {
-      const data = await apiRequest('/api/tor/strategic-intelligence/refresh', {
+      const job = await apiRequest('/api/tor/strategic-intelligence/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2861,11 +2900,9 @@ function TorGeneratorPage() {
           programme_area: result.programme_area,
         }),
       });
-      setStrategicIntelligence(data.strategic_intelligence);
-      setDismissedTypes(new Set());
+      await pollSiRefreshStatus(job.jobId);
     } catch {
       setError('Unable to refresh strategic intelligence. Please try again.');
-    } finally {
       setSiRefreshing(false);
     }
   }
@@ -3108,7 +3145,14 @@ function TorGeneratorPage() {
                   </p>
                 </div>
                 <button className="btn-secondary" type="button" disabled={siRefreshing} onClick={handleRefreshStrategicIntelligence}>
-                  {siRefreshing ? 'Refreshing...' : 'Refresh strategic intelligence'}
+                  {siRefreshing ? (
+                    <span className="button-loading">
+                      Refreshing intelligence...
+                      <span className="pulse-dot" />
+                      <span className="pulse-dot" />
+                      <span className="pulse-dot" />
+                    </span>
+                  ) : 'Refresh strategic intelligence'}
                 </button>
               </div>
 
