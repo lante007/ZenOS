@@ -54,8 +54,22 @@ function isEmpty(value) {
 // A field a human has explicitly reviewed and confirmed should stay null
 // (Workspace suggestion Reject flow) is resolved, not an open gap - even
 // though the underlying value is still null.
+//
+// validation_flags is a JSONB column, but the pg driver returns it as a
+// string instead of an already-parsed array for some records - defensively
+// parse it here rather than assuming the shape.
 function isHumanRejected(record, field) {
-  return (record.validation_flags || []).some(flag => flag.field === field && flag.rule === 'HUMAN_REJECTED');
+  let flags = record.validation_flags || [];
+  if (typeof flags === 'string') {
+    try {
+      flags = JSON.parse(flags || '[]');
+    } catch {
+      flags = [];
+    }
+  }
+  return Array.isArray(flags)
+    ? flags.some(flag => flag.field === field && flag.rule === 'HUMAN_REJECTED')
+    : false;
 }
 
 // Suggested pre-fill: only offered when the record is linked to Optimy
