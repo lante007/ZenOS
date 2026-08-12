@@ -1801,6 +1801,9 @@ function DashboardPage() {
                       <p className="gap-priority-description">
                         {gap.gap_description} (last: {gap.last_evaluation_year || 'Unknown'}) · {formatRand(gap.total_grant_rand)} invested
                       </p>
+                      <p className="gap-priority-context">
+                        {gap.eval_count} evaluation{gap.eval_count === 1 ? '' : 's'} completed · {formatRand(gap.total_grant_rand)} invested · {gap.programme_area || 'Programme area not recorded'}
+                      </p>
                     </div>
                     <div className="gap-priority-actions">
                       <a

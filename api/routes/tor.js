@@ -56,7 +56,7 @@ You are generating a Terms of Reference for an evaluation commission. Your writi
 - Do not use bullet points in the TOR body text, use numbered lists instead`;
 }
 
-function buildUserPrompt({ programmeName, records, gap, strategicFocus, budget }) {
+function buildUserPrompt({ programmeName, records, gap, strategicFocus, budget, openingNarrative }) {
   const {
     totalInvestment, hasEndline, firstYear, lastYear,
     yearsWithoutEndline, provinces, highestEQS, hasBaseline,
@@ -73,6 +73,14 @@ function buildUserPrompt({ programmeName, records, gap, strategicFocus, budget }
   const evidenceGap = !hasEndline
     ? `No endline evaluation has been commissioned despite ${yearsWithoutEndline} years since the last evaluation and R${totalInvestment.toLocaleString()} invested.`
     : `No impact evaluation exists for this programme.`;
+
+  const openingNarrativeBlock = `SECTION 1 — OPENING NARRATIVE:
+
+The following opening paragraph has been computed by the system from corpus data. Reproduce it exactly, word for word, as the first paragraph of Section 1. Do not rewrite, paraphrase, summarise, or alter it in any way.
+
+"${openingNarrative}"
+
+After this paragraph, continue Section 1 with additional programme context and background as instructed below. Do not repeat the facts already stated in the opening paragraph.`;
 
   const budgetGuidanceBlock = `SECTION 9 — BUDGET GUIDANCE:
 
@@ -124,6 +132,8 @@ Design: ${highestEQS.evaluation_design || 'not recorded'}
 NLS 2024-2030 ALIGNMENT: ${nlsAlignment ? 'Confirmed' : 'Not confirmed'}
 FUNRS 2025 ALIGNMENT: ${funrsAlignment ? 'Confirmed' : 'Not confirmed'}
 ${strategicFocus ? `\nADDITIONAL COMMISSIONING FOCUS (raised by strategic intelligence, give this explicit attention in the Evaluation Purpose and Evaluation Questions sections):\n${strategicFocus}\n` : ''}
+${openingNarrativeBlock}
+
 ${budgetGuidanceBlock}
 
 SECTION HEADER FORMAT (must follow exactly, this output is machine-parsed):
@@ -132,7 +142,7 @@ Write each of the 11 top-level section headers on its own line as "## N. Title",
 Generate a complete 11-section evaluation TOR with these sections:
 
 1. Programme Context and Background
-   (Pre-fill with the data above. Reference prior evaluations by name, year, and key finding. Include actuarial framing: what is the probability of replication given prior evidence?)
+   (Follow the SECTION 1 — OPENING NARRATIVE instructions above exactly: reproduce that paragraph verbatim, unchanged, as the first paragraph. Then continue with additional programme context: reference prior evaluations by name, year, and key finding. Include actuarial framing: what is the probability of replication given prior evidence?)
 
 2. Evaluation Purpose and Rationale
    (Why now? What decision does this evaluation serve? Be specific about the decision-maker and the decision.)
@@ -196,6 +206,53 @@ function computeGapAnalysis(records) {
     totalInvestment, hasEndline, hasBaseline, firstYear, lastYear,
     yearsWithoutEndline, provinces, highestEQS, nlsAlignment, funrsAlignment, programmeArea, hasProcess,
   };
+}
+
+function formatRandCompact(value) {
+  const num = Number(value) || 0;
+  if (num >= 1000000) return `R${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `R${(num / 1000).toFixed(0)}K`;
+  return `R${num.toLocaleString()}`;
+}
+
+function formatTierLabel(tier) {
+  if (!tier) return 'unrated';
+  return String(tier).replace(/^TIER_/i, 'Tier ');
+}
+
+function narrativeGapDescription(gap) {
+  if (!gap.hasEndline) {
+    const baselineClause = gap.hasBaseline
+      ? 'A baseline evaluation exists but no endline evaluation has been commissioned'
+      : 'No baseline or endline evaluation has been commissioned';
+    const yearsClause = gap.yearsWithoutEndline
+      ? ` in ${gap.yearsWithoutEndline} year${gap.yearsWithoutEndline === 1 ? '' : 's'}`
+      : '';
+    return `${baselineClause}${yearsClause}.`;
+  }
+  return 'No impact evaluation exists for this programme despite prior evaluation activity.';
+}
+
+function narrativeClosing(gap) {
+  return !gap.hasEndline
+    ? 'This Terms of Reference proposes the endline evaluation to complete the evidence cycle.'
+    : 'This Terms of Reference proposes the next evaluation to address this gap.';
+}
+
+// Section 1 opening paragraph for TOR Section 1. Principle: code computes
+// the narrative from corpus data, Claude does not rewrite it - see the
+// SECTION 1 block in buildUserPrompt, which instructs Claude to reproduce
+// this paragraph verbatim as the opening of Section 1.
+function computeOpeningNarrative(programmeName, gap, records) {
+  const evalCount = records.length;
+  const evalWord = evalCount === 1 ? 'evaluation' : 'evaluations';
+  const hasHaveWord = evalCount === 1 ? 'has' : 'have';
+  const tierLabel = formatTierLabel(gap.highestEQS?.eqs_tier);
+  const investment = formatRandCompact(gap.totalInvestment);
+
+  return `${programmeName} has received ${investment} in Zenex investment since ${gap.firstYear}. `
+    + `${evalCount} ${evalWord} ${hasHaveWord} been commissioned, most recently in ${gap.lastYear} (${tierLabel} quality). `
+    + `${narrativeGapDescription(gap)} ${narrativeClosing(gap)}`;
 }
 
 // Budget estimate for TOR Section 9. Principle: code determines the
@@ -588,9 +645,14 @@ async function runTorGeneration(tenant, { programmeName, strategicFocus, records
   const budget = computeBudgetEstimate(records, gap);
   await saveBudgetAuditLog(tenant, { programmeName, torId: jobId || null, records, gap, budget });
 
+  // Section 1 opening: code computes the narrative from corpus data, Claude
+  // reproduces it verbatim rather than writing its own. See buildUserPrompt's
+  // SECTION 1 block, which forbids rewriting.
+  const openingNarrative = computeOpeningNarrative(programmeName, gap, records);
+
   // CALL 1: TOR generation. Internal corpus only, no web search.
   const systemPrompt = buildSystemPrompt();
-  const userPrompt = buildUserPrompt({ programmeName, records, gap, strategicFocus, budget });
+  const userPrompt = buildUserPrompt({ programmeName, records, gap, strategicFocus, budget, openingNarrative });
 
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',

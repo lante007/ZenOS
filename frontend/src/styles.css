@@ -1782,6 +1782,13 @@ button.estate-stat-tile {
   line-height: 1.4;
 }
 
+.gap-priority-context {
+  margin: 4px 0 0;
+  color: rgba(245, 242, 238, 0.42);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .generate-tor-button {
   flex-shrink: 0;
   padding: 0;
