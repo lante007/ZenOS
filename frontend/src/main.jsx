@@ -25,7 +25,6 @@ import {
   Search,
   ShieldCheck,
   SkipForward,
-  Sparkles,
   TrendingUp,
   UploadCloud,
   Users,
@@ -4091,7 +4090,6 @@ function WorkspaceSuggestPanel({ recordId, entry, onSave, onReject }) {
   return (
     <div className="workspace-suggest">
       <button className="btn-ghost workspace-suggest-btn" type="button" onClick={getSuggestion}>
-        <Sparkles size={14} />
         <span>Get Suggestion</span>
       </button>
       {error && <span className="workspace-field-error">{error}</span>}
