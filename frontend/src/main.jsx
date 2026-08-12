@@ -1210,8 +1210,12 @@ function DashboardPage() {
   const [gaps, setGaps] = useState([]);
   const [gapsLoading, setGapsLoading] = useState(true);
   const [totalGapsIdentified, setTotalGapsIdentified] = useState(0);
-  const [dismissedGapNames, setDismissedGapNames] = useState(() => new Set());
-  const [commissionedGapNames, setCommissionedGapNames] = useState(() => new Set());
+  const [dismissedGapNames, setDismissedGapNames] = useState(() => new Set(
+    JSON.parse(sessionStorage.getItem('dismissed_gaps') || '[]')
+  ));
+  const [commissionedGapNames, setCommissionedGapNames] = useState(() => new Set(
+    JSON.parse(sessionStorage.getItem('commissioned_gaps') || '[]')
+  ));
   const [ceoBriefOpen, setCeoBriefOpen] = useState(false);
   const user = currentUser();
   const { alerts, loading: alertsLoading, loadAlerts, markRead } = useAlerts();
@@ -1383,25 +1387,37 @@ function DashboardPage() {
     await loadAlerts();
   }
 
-  // Session-only status (not persisted) - distinct from TOR dismissals,
-  // which are stored server-side. Drives the learning loop status badge;
-  // the card itself stays visible so the badge change is observable.
+  // sessionStorage-backed status (not a database write) - distinct from TOR
+  // dismissals, which are stored server-side. Drives the learning loop
+  // status badge; the card itself stays visible so the badge change is
+  // observable. Persists across navigation within the browser tab (e.g.
+  // Generate TOR then back to Dashboard) and clears on tab close/refresh.
   function dismissGap(programmeName) {
-    setDismissedGapNames(current => new Set(current).add(programmeName));
+    setDismissedGapNames(current => {
+      const next = new Set(current).add(programmeName);
+      sessionStorage.setItem('dismissed_gaps', JSON.stringify([...next]));
+      return next;
+    });
     setCommissionedGapNames(current => {
       if (!current.has(programmeName)) return current;
       const next = new Set(current);
       next.delete(programmeName);
+      sessionStorage.setItem('commissioned_gaps', JSON.stringify([...next]));
       return next;
     });
   }
 
   function commissionGap(programmeName) {
-    setCommissionedGapNames(current => new Set(current).add(programmeName));
+    setCommissionedGapNames(current => {
+      const next = new Set(current).add(programmeName);
+      sessionStorage.setItem('commissioned_gaps', JSON.stringify([...next]));
+      return next;
+    });
     setDismissedGapNames(current => {
       if (!current.has(programmeName)) return current;
       const next = new Set(current);
       next.delete(programmeName);
+      sessionStorage.setItem('dismissed_gaps', JSON.stringify([...next]));
       return next;
     });
   }
