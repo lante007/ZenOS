@@ -1122,9 +1122,36 @@ function queueCount(queueItems = FALLBACK_QUEUE_EMPTY) {
   return queueItems.length;
 }
 
+// Which roles see each sidebar destination. CEO_EXEC does not action
+// Upload, Synthesise or Workspace, so those are simply absent from her
+// nav rather than shown-then-disabled.
+const NAV_VISIBILITY = {
+  '/dashboard': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+  '/records': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+  '/classify': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
+  '/synthesise': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
+  '/ask': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+  '/products': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+  '/tor-generator': ['CEO_EXEC', 'ORGANISATION_LEAD'],
+  '/queue': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
+  '/settings': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+};
+
 function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() }) {
-  const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
-  const canSynthesise = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
+  const navItems = [
+    { path: '/dashboard', activeKey: 'dashboard', icon: <Gauge size={18} />, label: 'Dashboard' },
+    { path: '/records', activeKey: 'records', icon: <FileText size={18} />, label: 'Library' },
+    { path: '/classify', activeKey: 'classify', icon: <UploadCloud size={18} />, label: 'Upload' },
+    { path: '/synthesise', activeKey: 'synthesise', icon: <Layers size={18} />, label: 'Synthesise' },
+    { path: '/ask', activeKey: 'ask', icon: <span className="nav-emoji" aria-hidden="true">🔍</span>, label: 'Ask Zenex' },
+    { path: '/products', activeKey: 'knowledge', icon: <span className="nav-emoji" aria-hidden="true">📄</span>, label: 'Products' },
+    { path: '/tor-generator', activeKey: 'tor-generator', icon: <Edit3 size={18} />, label: 'TOR Generator' },
+    { path: '/queue', activeKey: 'queue', icon: <CheckCircle2 size={18} />, label: 'Workspace', badge: queueBadge },
+    { path: '/settings', activeKey: 'settings', icon: <Users size={18} />, label: 'Settings' },
+  ];
+  const visibleNavItems = navItems.filter(item =>
+    (NAV_VISIBILITY[item.path] || []).includes(user.role)
+  );
 
   async function handleSignOut() {
     try {
@@ -1147,43 +1174,13 @@ function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() 
         </div>
 
         <nav className="sidebar-nav">
-          <a className={active === 'dashboard' ? 'active' : ''} href="/dashboard">
-            <Gauge size={18} />
-            <span>Dashboard</span>
-          </a>
-          <a className={active === 'records' ? 'active' : ''} href="/records">
-            <FileText size={18} />
-            <span>Library</span>
-          </a>
-          <a className={active === 'classify' ? 'active' : ''} href="/classify">
-            <UploadCloud size={18} />
-            <span>Upload</span>
-          </a>
-          {canSynthesise && (
-            <a className={active === 'synthesise' ? 'active' : ''} href="/synthesise">
-              <Layers size={18} />
-              <span>Synthesise</span>
+          {visibleNavItems.map(item => (
+            <a key={item.path} className={active === item.activeKey ? 'active' : ''} href={item.path}>
+              {item.icon}
+              <span>{item.label}</span>
+              {item.badge != null && <strong className="nav-badge">{item.badge}</strong>}
             </a>
-          )}
-          {canAsk && (
-            <a className={active === 'ask' ? 'active' : ''} href="/ask">
-              <span className="nav-emoji" aria-hidden="true">🔍</span>
-              <span>Ask Zenex</span>
-            </a>
-          )}
-          <a className={active === 'knowledge' ? 'active' : ''} href="/products">
-            <span className="nav-emoji" aria-hidden="true">📄</span>
-            <span>Products</span>
-          </a>
-          <a className={active === 'queue' ? 'active' : ''} href="/queue">
-            <CheckCircle2 size={18} />
-            <span>Workspace</span>
-            <strong className="nav-badge">{queueBadge}</strong>
-          </a>
-          <a className={active === 'settings' ? 'active' : ''} href="/settings">
-            <Users size={18} />
-            <span>Settings</span>
-          </a>
+          ))}
           <button className="sidebar-signout" type="button" onClick={handleSignOut}>
             <LogOut size={18} />
             <span>Sign Out</span>
@@ -1900,6 +1897,17 @@ function DashboardPage() {
               <p className="gap-priority-counter">
                 Showing {visibleGaps.length} of {totalGapsIdentified} priority evidence gaps
               </p>
+            )}
+            {user.role === 'CEO_EXEC' && (
+              <article className="ceo-brief-prominent-card">
+                <div>
+                  <p className="ceo-brief-prominent-eyebrow">CEO Evidence Brief</p>
+                  <p className="ceo-brief-prominent-sub">One-click executive summary for board and Exco use.</p>
+                </div>
+                <button className="ceo-brief-prominent-btn" type="button" onClick={() => setCeoBriefOpen(true)}>
+                  Generate CEO Brief →
+                </button>
+              </article>
             )}
           </div>
         </section>
