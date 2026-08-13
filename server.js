@@ -120,31 +120,6 @@ app.use('/api/workspace', workspaceRoutes);
 app.use('/api/brief', briefRoutes);
 app.use('/api', knowledgeRoutes);
 
-app.get('/api/exec-summary', authenticate(), assertNoBoardAccess, async (req, res, next) => {
-  if (req.user.role !== 'CEO_EXEC' && req.user.role !== 'ORGANISATION_LEAD') {
-    return res.status(403).json({ error: 'Executive view only' });
-  }
-
-  try {
-    const { records, queue } = await loadTenantRecordsAndQueue(req.tenant);
-    const tierOne = records.filter(r => (r.confidence_tier || r.eqs_tier) === 'TIER_1');
-    res.json({
-      tenant: req.tenant.slug,
-      organisation: req.tenant.name,
-      evidence_health_score: records.length ? Math.round((tierOne.length / records.length) * 100) : 0,
-      tier_1_documents_this_week: tierOne.slice(0, 5).map(r => ({
-        id: r.id || r.adei_record_id,
-        programme_name: r.programme_name || r.programme,
-        key_finding_1: r.key_finding_1,
-      })),
-      queue_items_pending: queue.length,
-      generated_at: new Date().toISOString(),
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
 app.use((err, req, res, _next) => {
   console.error(`[ERROR] ${req.method} ${req.path}: ${err.message}`);
   res.status(err.status || 500).json({ error: err.message });

@@ -5948,93 +5948,6 @@ function SettingsPage() {
   );
 }
 
-function ExecPage() {
-  const { records } = useLiveRecords();
-  const [summary, setSummary] = useState(null);
-  const topFindings = records.flatMap(record => [
-    record.key_finding_1,
-    record.key_finding_2,
-  ]).filter(Boolean).slice(0, 5);
-  const healthScore = summary?.evidence_health_score ?? 82;
-
-  useEffect(() => {
-    let cancelled = false;
-    apiRequest('/api/exec-summary', { role: 'CEO_EXEC' })
-      .then(data => {
-        if (!cancelled) setSummary(data);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <main className="exec-shell">
-      <section className="exec-header">
-        <div>
-          <img src={tenantConfig.logoUrl} alt="Zenex Foundation" />
-          <p className="eyebrow">Executive evidence link</p>
-          <h1>Weekly Evidence Summary</h1>
-        </div>
-        <div className="exec-auth-chip">
-          <KeyRound size={16} />
-          <span>Email-link access</span>
-        </div>
-      </section>
-
-      <section className="exec-score-card">
-        <div>
-          <p className="eyebrow">Evidence Health Score</p>
-          <strong>{healthScore}</strong>
-          <span>Strong portfolio readiness with targeted evidence gaps.</span>
-        </div>
-        <Gauge size={68} />
-      </section>
-
-      <section className="exec-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Top 5 findings this quarter</p>
-            <h2>What leadership should know</h2>
-          </div>
-        </div>
-        <div className="exec-findings">
-          {topFindings.map((finding, index) => (
-            <article key={finding}>
-              <span>{index + 1}</span>
-              <p>{finding}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="exec-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Decision Capital</p>
-            <h2>Current leadership signal</h2>
-          </div>
-          <TrendingUp size={24} />
-        </div>
-        <div className="exec-decision-grid">
-          <article>
-            <strong>3</strong>
-            <span>Briefs ready for senior decision use</span>
-          </article>
-          <article>
-            <strong>{summary?.queue_items_pending ?? 2}</strong>
-            <span>Evidence gaps or queue items needing attention</span>
-          </article>
-          <article>
-            <strong>1</strong>
-            <span>Scale pathway supported with Tier 1 evidence</span>
-          </article>
-        </div>
-      </section>
-    </main>
-  );
-}
 
 function App() {
   const [path, setPath] = useState(window.location.pathname);
@@ -6067,7 +5980,10 @@ function App() {
   if (path === '/knowledge') return <KnowledgePage />;
   if (path.startsWith('/provenance/')) return <ProvenancePage />;
   if (path === '/settings') return <SettingsPage />;
-  if (path === '/exec') return <ExecPage />;
+  if (path === '/exec') {
+    navigateInApp('/dashboard');
+    return <DashboardPage />;
+  }
   return <LandingPage />;
 }
 
