@@ -1536,8 +1536,8 @@ function DashboardPage() {
             </button>
             <article className="estate-stat-tile">
               <strong>{statsLoading ? '...' : stats?.independent_evaluations || 0}</strong>
-              <span>Independent Evaluations</span>
-              <small className="estate-tile-subtitle">Standalone assessments</small>
+              <span>Evaluations</span>
+              <small className="estate-tile-subtitle">Distinct evaluation studies</small>
             </article>
             <article className="estate-stat-tile">
               <strong>{estateLoading ? '...' : estate?.total_programmes || 0}</strong>
