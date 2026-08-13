@@ -189,8 +189,8 @@ function decodeJwtPayload(token) {
 function routeForAuthToken(token) {
   const payload = decodeJwtPayload(token);
   const role = payload['custom:role'] || payload['custom:custom:role'] || payload.role || 'ORGANISATION_LEAD';
-  if (role === 'CEO_EXEC') return '/exec';
-  if (role === 'COMMUNICATIONS') return '/products';
+  // CEO_EXEC, ORGANISATION_LEAD and COMMUNICATIONS all land on the same
+  // dashboard. EVIDENCE_ANALYST still lands on Library.
   if (role === 'EVIDENCE_ANALYST') return '/records';
   return '/dashboard';
 }
