@@ -53,12 +53,17 @@ Use language that:
 }
 
 function buildUserPrompt({
-  today, totalDocs, totalInvestment, programmes,
+  today, totalInvestment, programmes,
   tier1, tier2, tier3, avgEqs,
   positiveOutcomes, nullFindings, highInvestmentWeakEvidence,
   strongest, contradictions, gaps,
   evidenceCapitalRand, eroiScore, eroiLabel,
   highInvestmentNoEndline, highInvestmentNoEndlineTotal,
+  distinctStudies, totalDocuments, tier1Count,
+  financialCapitalMillions, evidenceCapitalMillions, accountabilityGapMillions,
+  topGap1Programme, topGap1GrantMillions,
+  topGap2Programme, topGap2GrantMillions,
+  topGap3Programme, topGap3GrantMillions,
 }) {
   const strongestBlock = strongest.length
     ? strongest.map(r =>
@@ -86,7 +91,7 @@ function buildUserPrompt({
   return `Generate a CEO Decision Brief for Zenex Foundation using this live evidence data.
 
 DATE: ${today}
-CORPUS: ${totalDocs} classified evaluations
+CORPUS: ${distinctStudies} distinct evaluation studies (${totalDocuments} total documents classified)
 INVESTMENT TRACKED: R${totalInvestment.toLocaleString()}
 PROGRAMMES: ${programmes}
 
@@ -128,6 +133,9 @@ Generate the brief with these nine sections. Each section must open with the dec
 
 1. Evidence Position
    What does Zenex's evidence estate tell us about the organisation's knowledge maturity right now?
+   Section 1 must open with this exact framing. Use the live figures provided. Do not paraphrase:
+   'Zenex enters this leadership transition with a maturing evidence estate. Across ${distinctStudies} distinct evaluation studies covering R${financialCapitalMillions}m in investment, the organisation has generated substantial knowledge but has not yet converted enough of it into defensible, board-citable evidence assets. This is an evidence capitalisation gap. The immediate decision is not whether the evidence is good enough, but which gaps to close first and in what sequence.'
+   Do not use the phrase 'under-capitalised' anywhere. Do not describe the estate as 'uneven'.
 
 2. What We Know With Confidence
    What can Zenex claim with board-level confidence? (Use only TIER_1 findings)
@@ -143,9 +151,17 @@ Generate the brief with these nine sections. Each section must open with the dec
 
 6. Contradictions and Risks
    Where does the evidence contradict itself? What does that mean for resource allocation?
+   Section 6 must use this framing. Do not paraphrase:
+   '[Number] programme areas currently show mixed or conflicting signals. These are best read as implementation-condition signals: the evidence is telling us something about context, fidelity or delivery conditions that has not yet been fully explained. A structured synthesis across the conflicting evaluations should precede the next funding cycle for these clusters.'
+   Do not frame mixed findings as programme problems or failures.
 
 7. Priority Research Decisions
    What should Zenex commission next, and why? (Use the top 3 gaps data) For each, add: Consider [action].
+   Section 7 must use this exact sequenced structure:
+   First: ${topGap1Programme} (R${topGap1GrantMillions}m) - commission endline evaluation.
+   Second: ${topGap2Programme} (R${topGap2GrantMillions}m) - verify active status, then decide on evaluation.
+   Third: ${topGap3Programme} (R${topGap3GrantMillions}m) - assess pairing or coordinated evaluation with the second programme given thematic overlap.
+   Do not add language that withholds further disbursement. Keep recommendations as evaluation actions only.
 
 8. Capital and Return Position
    What is the evidence-adjusted return on Zenex's investment?
@@ -155,9 +171,21 @@ Generate the brief with these nine sections. Each section must open with the dec
    Second sentence: separately describe the evidence-accountability gap as the difference between financial_capital and evidence_capital.
    Example framing:
    'An EROI score of [N]/100 indicates that Zenex's measured institutional return across adoption, policy influence, learning outcomes, knowledge assets and capital leverage is at a developing stage. Separately, financial capital of R[X] recorded in the corpus exceeds evidence-adjusted capital of R[Y], indicating an evidence accountability gap of R[Z] that represents investment not yet substantiated by classified evidence.'
+   Section 8 must include this structured display block. Wrap it in [CAPITAL_BLOCK] tags:
+   [CAPITAL_BLOCK]
+   R${financialCapitalMillions}m | Financial capital evidenced
+   R${evidenceCapitalMillions}m | Evidence-adjusted capital
+   R${accountabilityGapMillions}m | Evidence accountability gap
+   [/CAPITAL_BLOCK]
+   Follow with this exact sentence:
+   'The gap represents investment for which sufficient evidence is not yet represented in the classified corpus.'
+   Do not use 'substantiated' without the corpus qualifier. Do not propose closing any portion of the gap in any timeframe.
 
 9. The Question for the Board
    One sentence: what is the most important evidence question Zenex's board should discuss at its next meeting?
+   End Section 9 with this board question constructed from live data:
+   'Given that only ${tier1Count} of ${distinctStudies} distinct evaluation studies currently meet EvidenceOS board-citable standard, and R${topGap1GrantMillions}m in investment has no endline evidence on record, what minimum evidence threshold should Zenex require before approving the next round of programme disbursements?'
+   Use the live figures provided. Do not paraphrase the structure.
 
 After each gap or weakness, include action buttons in the response as plain text markers:
 [EXPLORE_EVIDENCE: programme_name]
@@ -231,6 +259,28 @@ router.post('/ceo',
       `, [tenantId]);
       const corpus = corpusResult.rows[0];
 
+      // STEP 1B: corpus counts for the prompt's live figures - distinct
+      // studies (root records only) vs total documents classified, alongside
+      // the existing corpus stats query above.
+      const countsResult = await pool.query(`
+        SELECT
+          COUNT(*) as total_documents,
+          COUNT(*) FILTER (WHERE parent_record_id IS NULL) as distinct_studies,
+          COUNT(*) FILTER (WHERE eqs_tier = 'TIER_1') as tier1_count,
+          COUNT(*) FILTER (WHERE eqs_tier = 'TIER_2') as tier2_count,
+          COUNT(*) FILTER (WHERE eqs_tier = 'TIER_3') as tier3_count
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+      `, [tenantId]);
+      const {
+        total_documents: totalDocuments,
+        distinct_studies: distinctStudies,
+        tier1_count: tier1Count,
+        tier2_count: tier2Count,
+        tier3_count: tier3Count,
+      } = countsResult.rows[0];
+
       // STEP 2: top 3 priority evidence gaps - reuses the same prioritisation
       // engine as GET /api/stats/gaps rather than re-deriving its own.
       const { gaps: rawGaps } = await stats.getPriorityGaps(pool, schema, tenantId, 3);
@@ -239,6 +289,17 @@ router.post('/ceo',
         ...g,
         years_without_endline: g.last_evaluation_year != null ? currentYear - g.last_evaluation_year : null,
       }));
+
+      // STEP 2B: top gap figures for Section 7's sequenced structure.
+      const topGap1 = gaps[0];
+      const topGap2 = gaps[1];
+      const topGap3 = gaps[2];
+      const topGap1Programme = topGap1?.programme_name || 'Not identified';
+      const topGap1GrantMillions = topGap1 ? Math.round(topGap1.total_grant_rand / 1000000 * 10) / 10 : 0;
+      const topGap2Programme = topGap2?.programme_name || 'Not identified';
+      const topGap2GrantMillions = topGap2 ? Math.round(topGap2.total_grant_rand / 1000000 * 10) / 10 : 0;
+      const topGap3Programme = topGap3?.programme_name || 'Not identified';
+      const topGap3GrantMillions = topGap3 ? Math.round(topGap3.total_grant_rand / 1000000 * 10) / 10 : 0;
 
       // STEP 3: strongest records - Tier 1, highest EQS first.
       const strongestResult = await pool.query(`
@@ -308,10 +369,15 @@ router.post('/ceo',
       const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
       const totalInvestment = evidenceCapital.financial_capital_total;
 
+      // Capital figures in millions, rounded to 1 decimal, for the Section 1
+      // opening framing and the Section 8 [CAPITAL_BLOCK] display.
+      const financialCapitalMillions = Math.round(totalInvestment / 1000000 * 10) / 10;
+      const evidenceCapitalMillions = Math.round(evidenceCapital.rand_value / 1000000 * 10) / 10;
+      const accountabilityGapMillions = Math.round((totalInvestment - evidenceCapital.rand_value) / 1000000 * 10) / 10;
+
       const systemPrompt = buildSystemPrompt();
       const userPrompt = buildUserPrompt({
         today,
-        totalDocs: toNumber(corpus.total_docs),
         totalInvestment,
         programmes: toNumber(corpus.programmes),
         tier1: toNumber(corpus.tier1),
@@ -329,6 +395,18 @@ router.post('/ceo',
         eroiLabel: eroi.label,
         highInvestmentNoEndline,
         highInvestmentNoEndlineTotal,
+        distinctStudies: toNumber(distinctStudies),
+        totalDocuments: toNumber(totalDocuments),
+        tier1Count: toNumber(tier1Count),
+        financialCapitalMillions,
+        evidenceCapitalMillions,
+        accountabilityGapMillions,
+        topGap1Programme,
+        topGap1GrantMillions,
+        topGap2Programme,
+        topGap2GrantMillions,
+        topGap3Programme,
+        topGap3GrantMillions,
       });
 
       const message = await anthropic.messages.create({

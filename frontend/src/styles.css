@@ -1123,6 +1123,37 @@ button:disabled {
   line-height: 1.6;
 }
 
+.ceo-brief-capital-block {
+  background: #F8F9FA;
+  border-left: 3px solid #EF7218;
+  padding: 12px 16px;
+  margin: 12px 0;
+  border-radius: 4px;
+}
+
+.ceo-brief-capital-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #EEE;
+}
+
+.ceo-brief-capital-row:last-child {
+  border-bottom: none;
+}
+
+.ceo-brief-capital-amount {
+  font-weight: 700;
+  color: #0A1628;
+  font-size: 16px;
+}
+
+.ceo-brief-capital-label {
+  color: #666666;
+  font-size: 13px;
+}
+
 .brief-action-btn {
   display: inline-block;
   margin: 0 6px 4px 0;

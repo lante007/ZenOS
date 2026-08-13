@@ -2036,6 +2036,55 @@ function renderBriefParagraph(text, key, agendaAdded, onAddToAgenda) {
   return nodes;
 }
 
+const CAPITAL_BLOCK_RE = /\[CAPITAL_BLOCK\]([\s\S]*?)\[\/CAPITAL_BLOCK\]/;
+
+function parseCapitalBlockLines(raw) {
+  return raw
+    .trim()
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [amount, label] = line.split('|').map(part => part.trim());
+      return { amount, label };
+    });
+}
+
+function CapitalBlock({ lines }) {
+  return (
+    <div className="ceo-brief-capital-block">
+      {lines.map((row, idx) => (
+        <div className="ceo-brief-capital-row" key={idx}>
+          <span className="ceo-brief-capital-amount">{row.amount}</span>
+          <span className="ceo-brief-capital-label">{row.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function renderSectionBody(body, sIndex, agendaAdded, onAddToAgenda) {
+  const renderParagraphs = (text, keyPrefix) =>
+    text.split(/\n{2,}/).filter(Boolean).map((paragraph, pIndex) => (
+      <p className="ceo-brief-section-body" key={`${keyPrefix}-${pIndex}`}>
+        {renderBriefParagraph(paragraph.trim(), `${sIndex}-${keyPrefix}-${pIndex}`, agendaAdded, onAddToAgenda)}
+      </p>
+    ));
+
+  const match = CAPITAL_BLOCK_RE.exec(body);
+  if (!match) return renderParagraphs(body, 'p');
+
+  const before = body.slice(0, match.index);
+  const after = body.slice(match.index + match[0].length);
+  const lines = parseCapitalBlockLines(match[1]);
+
+  return [
+    ...renderParagraphs(before, 'before'),
+    <CapitalBlock lines={lines} key="capital-block" />,
+    ...renderParagraphs(after, 'after'),
+  ];
+}
+
 function CEOBriefModal({ open, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -2098,11 +2147,7 @@ function CEOBriefModal({ open, onClose }) {
               <React.Fragment key={`${section.number}-${section.title}`}>
                 <article className="ceo-brief-section">
                   <h3 className="ceo-brief-section-heading">{section.number}. {section.title}</h3>
-                  {section.body.split(/\n{2,}/).filter(Boolean).map((paragraph, pIndex) => (
-                    <p className="ceo-brief-section-body" key={pIndex}>
-                      {renderBriefParagraph(paragraph.trim(), `${sIndex}-${pIndex}`, agendaAdded, handleAddToAgenda)}
-                    </p>
-                  ))}
+                  {renderSectionBody(section.body, sIndex, agendaAdded, handleAddToAgenda)}
                 </article>
                 {sIndex < sections.length - 1 && <div className="ceo-brief-divider ceo-brief-divider-thin" />}
               </React.Fragment>
@@ -2120,7 +2165,7 @@ function CEOBriefModal({ open, onClose }) {
             </button>
           </div>
           <p className="ceo-brief-footer-note">
-            Generated from {brief?.total_docs ?? '...'} classified evaluations. Updated each time a new document is classified.
+            Generated from 45 distinct evaluation studies across a corpus of 66 classified documents. Updated each time a new document is classified.
           </p>
           <p className="ceo-brief-footer-note">
             Filter by period, theme or geography coming soon.
