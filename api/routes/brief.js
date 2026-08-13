@@ -40,7 +40,16 @@ Writing rules:
 - Maximum 700 words total
 - Each section opens with the decision implication, not the evidence description
 - End each gap or weakness with a recommended action in the format: Consider [specific action]
-- Do not use 'robust', 'comprehensive', 'leverage' or 'utilise'`;
+- Do not use 'robust', 'comprehensive', 'leverage' or 'utilise'
+
+Write as a trusted senior adviser briefing the CEO, not as an external auditor finding fault.
+
+Use language that:
+- States facts clearly without catastrophising
+- Frames gaps as opportunities for decision rather than failures
+- Uses 'the evidence suggests' rather than 'the board should treat this as provisional'
+- Reserves words like 'risk' and 'governance failure' for genuine material issues only
+- Addresses Sibongile directly as a decision-maker with agency, not as a recipient of bad news`;
 }
 
 function buildUserPrompt({
@@ -49,6 +58,7 @@ function buildUserPrompt({
   positiveOutcomes, nullFindings, highInvestmentWeakEvidence,
   strongest, contradictions, gaps,
   evidenceCapitalRand, eroiScore, eroiLabel,
+  highInvestmentNoEndline, highInvestmentNoEndlineTotal,
 }) {
   const strongestBlock = strongest.length
     ? strongest.map(r =>
@@ -68,6 +78,10 @@ function buildUserPrompt({
         `- ${g.programme_name}: ${formatRandCompact(g.total_grant_rand)} invested, ${g.years_without_endline != null ? `${g.years_without_endline} years` : 'unknown years'} without an endline evaluation.`
       ).join('\n')
     : 'No priority gaps currently identified.';
+
+  const noEndlineBlock = highInvestmentNoEndline.length
+    ? highInvestmentNoEndline.map(g => `- ${g.programme}: ${formatRandCompact(g.grant)}`).join('\n')
+    : 'No high investment programmes (above R5m) currently without an endline evaluation.';
 
   return `Generate a CEO Decision Brief for Zenex Foundation using this live evidence data.
 
@@ -95,6 +109,12 @@ ${contradictionsBlock}
 
 PRIORITY EVIDENCE GAPS:
 ${gapsBlock}
+
+HIGH INVESTMENT PROGRAMMES WITH NO ENDLINE (verified from corpus):
+${noEndlineBlock}
+Total: ${formatRandCompact(highInvestmentNoEndlineTotal)}
+
+Use only these verified programmes and this verified total when making claims about unexamined investment. Do not calculate or infer figures not in this list.
 
 EROI POSITION:
 Financial Capital: R${totalInvestment.toLocaleString()}
@@ -129,6 +149,12 @@ Generate the brief with these nine sections. Each section must open with the dec
 
 8. Capital and Return Position
    What is the evidence-adjusted return on Zenex's investment?
+   IMPORTANT: Do not describe EROI as a ratio of financial to evidence capital. EROI is a weighted institutional return score across five dimensions: system adoption, policy influence, learning outcomes, knowledge assets and capital leverage.
+   For Section 8, use this framing:
+   First sentence: describe EROI as a score measuring institutional return, not a spending ratio.
+   Second sentence: separately describe the evidence-accountability gap as the difference between financial_capital and evidence_capital.
+   Example framing:
+   'An EROI score of [N]/100 indicates that Zenex's measured institutional return across adoption, policy influence, learning outcomes, knowledge assets and capital leverage is at a developing stage. Separately, financial capital of R[X] recorded in the corpus exceeds evidence-adjusted capital of R[Y], indicating an evidence accountability gap of R[Z] that represents investment not yet substantiated by classified evidence.'
 
 9. The Question for the Board
    One sentence: what is the most important evidence question Zenex's board should discuss at its next meeting?
@@ -244,6 +270,34 @@ router.post('/ceo',
         LIMIT 3
       `, [tenantId]);
 
+      // STEP 5: verified high-investment (>R5m) programmes with no endline
+      // evaluation on record. Passed to Claude as a closed, pre-computed list
+      // so the model cannot infer or calculate its own unverified total.
+      const noEndlineResult = await pool.query(`
+        SELECT
+          COALESCE(canonical_programme_name, programme_name) as programme,
+          MAX(total_cost_rand) as grant,
+          bool_or(
+            record_series = 'ENDLINE'
+            OR endline_available = true
+            OR secondary_document_type = 'Impact Evaluation'
+          ) as has_endline
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+          AND total_cost_rand > 5000000
+        GROUP BY COALESCE(canonical_programme_name, programme_name)
+        HAVING NOT bool_or(
+          record_series = 'ENDLINE'
+          OR endline_available = true
+          OR secondary_document_type = 'Impact Evaluation'
+        )
+        ORDER BY MAX(total_cost_rand) DESC
+        LIMIT 5
+      `, [tenantId]);
+      const highInvestmentNoEndline = noEndlineResult.rows;
+      const highInvestmentNoEndlineTotal = highInvestmentNoEndline.reduce((sum, r) => sum + toNumber(r.grant), 0);
+
       // EROI position - reuses the same computation as GET /api/stats/cascade.
       // Also the source of total investment: family-group deduplicated, not
       // a raw SUM/SUM(DISTINCT) over total_cost_rand, which double-counts or
@@ -273,6 +327,8 @@ router.post('/ceo',
         evidenceCapitalRand: evidenceCapital.rand_value,
         eroiScore: eroi.index,
         eroiLabel: eroi.label,
+        highInvestmentNoEndline,
+        highInvestmentNoEndlineTotal,
       });
 
       const message = await anthropic.messages.create({
