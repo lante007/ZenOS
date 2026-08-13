@@ -170,7 +170,7 @@ Generate the brief with these nine sections. Each section must open with the dec
    First sentence: describe EROI as a score measuring institutional return, not a spending ratio.
    Second sentence: separately describe the evidence-accountability gap as the difference between financial_capital and evidence_capital.
    Example framing:
-   'An EROI score of [N]/100 indicates that Zenex's measured institutional return across adoption, policy influence, learning outcomes, knowledge assets and capital leverage is at a developing stage. Separately, financial capital of R[X] recorded in the corpus exceeds evidence-adjusted capital of R[Y], indicating an evidence accountability gap of R[Z] that represents investment not yet substantiated by classified evidence.'
+   'An EROI score of [N]/100 indicates that Zenex's measured institutional return across adoption, policy influence, learning outcomes, knowledge assets and capital leverage is at a developing stage. Separately, financial capital of R[X] recorded in the corpus exceeds evidence-adjusted capital of R[Y], indicating an evidence accountability gap of R[Z] that represents investment whose associated evidence has depreciated in currency.'
    Section 8 must include this structured display block. Wrap it in [CAPITAL_BLOCK] tags:
    [CAPITAL_BLOCK]
    R${financialCapitalMillions}m | Financial capital evidenced
