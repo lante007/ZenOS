@@ -183,7 +183,6 @@ router.post('/ceo',
           ROUND(AVG(eqs_composite)::numeric, 2) as avg_eqs,
           COUNT(DISTINCT programme_name) as programmes,
           COUNT(DISTINCT programme_area) as areas,
-          SUM(DISTINCT total_cost_rand) as total_investment,
           COUNT(*) FILTER (
             WHERE effect_direction = 'Positive'
             AND eqs_tier IN ('TIER_1', 'TIER_2')
@@ -246,10 +245,14 @@ router.post('/ceo',
       `, [tenantId]);
 
       // EROI position - reuses the same computation as GET /api/stats/cascade.
+      // Also the source of total investment: family-group deduplicated, not
+      // a raw SUM/SUM(DISTINCT) over total_cost_rand, which double-counts or
+      // under-counts when a programme has multiple evaluation records each
+      // carrying the same grant figure.
       const { evidenceCapital, eroi } = await stats.computeEvidenceCapitalAndEroi(pool, schema, tenantId);
 
       const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-      const totalInvestment = toNumber(corpus.total_investment);
+      const totalInvestment = evidenceCapital.financial_capital_total;
 
       const systemPrompt = buildSystemPrompt();
       const userPrompt = buildUserPrompt({

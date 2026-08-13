@@ -172,19 +172,47 @@ async function computeEvidenceCapitalAndEroi(pool, schema, tenantId) {
   // Evidence Capital = Financial Capital x Evidence Decay (NOT Financial Capital x EQS).
   // The Rand value of investment that remains decision-relevant after
   // accounting for evidence aging (half_life_rating).
+  //
+  // Grouped by programme family (falling back to the record's own id for
+  // records with no family) and de-duplicated to one grant per group via
+  // MAX(total_cost_rand) - a programme with a baseline and an endline record
+  // both carrying the same total_cost_rand must only count that investment
+  // once, not once per evaluation record. The decay rating used per group is
+  // the most-current one available in that family (CURRENT beats AGING beats
+  // HISTORICAL), since a programme's evidence currency should be judged by
+  // its freshest evaluation, not diluted by an older duplicate row.
   const DECAY = { CURRENT: 1.0, AGING: 0.6, HISTORICAL: 0.3 };
   const decayResult = await pool.query(`
-    SELECT total_cost_rand, half_life_rating
-    FROM ${schema}.intelligence_records
-    WHERE tenant_id = $1
-      AND record_status = 'ACTIVE'
-      AND total_cost_rand IS NOT NULL
+    WITH family_grants AS (
+      SELECT
+        COALESCE(programme_family_id, id::text) as group_key,
+        MAX(total_cost_rand) as grant_per_group
+      FROM ${schema}.intelligence_records
+      WHERE tenant_id = $1
+        AND record_status = 'ACTIVE'
+        AND total_cost_rand IS NOT NULL
+      GROUP BY group_key
+    ),
+    family_decay AS (
+      SELECT DISTINCT ON (COALESCE(programme_family_id, id::text))
+        COALESCE(programme_family_id, id::text) as group_key,
+        half_life_rating
+      FROM ${schema}.intelligence_records
+      WHERE tenant_id = $1
+        AND record_status = 'ACTIVE'
+        AND total_cost_rand IS NOT NULL
+      ORDER BY group_key,
+        CASE half_life_rating WHEN 'CURRENT' THEN 1 WHEN 'AGING' THEN 2 WHEN 'HISTORICAL' THEN 3 ELSE 4 END ASC
+    )
+    SELECT fg.grant_per_group, fd.half_life_rating
+    FROM family_grants fg
+    JOIN family_decay fd ON fd.group_key = fg.group_key
   `, [tenantId]);
 
   let evidenceCapitalRand = 0;
   let financialCapitalTotal = 0;
   decayResult.rows.forEach(r => {
-    const grant = parseFloat(r.total_cost_rand) || 0;
+    const grant = parseFloat(r.grant_per_group) || 0;
     const decay = DECAY[r.half_life_rating] ?? 0.5;
     financialCapitalTotal += grant;
     evidenceCapitalRand += grant * decay;
@@ -384,7 +412,19 @@ router.get('/cascade',
       const fcResult = await pool.query(`
         SELECT
           COUNT(*) FILTER (WHERE total_cost_rand IS NOT NULL)::int AS audited_count,
-          COALESCE(SUM(total_cost_rand) FILTER (WHERE total_cost_rand IS NOT NULL), 0)::bigint AS total_rand
+          COALESCE((
+            SELECT SUM(grant_per_group)
+            FROM (
+              SELECT
+                COALESCE(programme_family_id, id::text) as group_key,
+                MAX(total_cost_rand) as grant_per_group
+              FROM ${schema}.intelligence_records
+              WHERE tenant_id = $1
+                AND record_status = 'ACTIVE'
+                AND total_cost_rand IS NOT NULL
+              GROUP BY group_key
+            ) subq
+          ), 0)::bigint AS total_rand
         FROM ${schema}.intelligence_records
         WHERE tenant_id = $1
           AND record_status = 'ACTIVE'
