@@ -177,9 +177,9 @@ Generate the brief with these nine sections. Each section must open with the dec
    R${evidenceCapitalMillions}m | Evidence-adjusted capital
    R${accountabilityGapMillions}m | Evidence accountability gap
    [/CAPITAL_BLOCK]
-   Follow with this exact sentence:
-   'The gap represents investment for which sufficient evidence is not yet represented in the classified corpus.'
-   Do not use 'substantiated' without the corpus qualifier. Do not propose closing any portion of the gap in any timeframe.
+   After the [CAPITAL_BLOCK], include this exact sentence:
+   'The R${accountabilityGapMillions}m gap reflects evidence depreciation: investment whose associated evaluations have aged beyond current decision-relevance thresholds. The underlying evidence exists in the corpus but carries reduced decision weight given its currency.'
+   Do not describe the gap as unclassified or unsubstantiated investment. All R${financialCapitalMillions}m is classified. The gap reflects evidence currency decay, not absence of evidence.
 
 9. The Question for the Board
    One sentence: what is the most important evidence question Zenex's board should discuss at its next meeting?
