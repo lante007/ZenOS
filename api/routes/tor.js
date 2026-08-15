@@ -728,7 +728,7 @@ async function runTorGeneration(tenant, { programmeName, strategicFocus, records
 }
 
 router.post('/generate',
-  requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'),
+  requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'),
   async (req, res, next) => {
     // Auth and tenant access are already enforced above this handler by
     // authenticate()/assertNoBoardAccess (server.js) and requireRoles just
@@ -794,7 +794,7 @@ router.post('/generate',
 );
 
 router.get('/generate/status/:jobId',
-  requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'),
+  requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'),
   (req, res, next) => {
     try {
       schemaFor(req.tenant);

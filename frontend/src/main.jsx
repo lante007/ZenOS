@@ -2798,7 +2798,9 @@ function computeWhyMatters(opportunities) {
 
 function TorGeneratorPage() {
   const user = currentUser();
-  const canGenerate = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
+  const canGenerate = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'].includes(user.role);
+  const canEditTor = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
+  const canSaveToWorkspace = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
   const [programmeName, setProgrammeName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -3092,9 +3094,11 @@ function TorGeneratorPage() {
               <Download size={16} />
               <span>Download Word</span>
             </button>
-            <button className="btn-primary" type="button" disabled={!result || reviewSaving} onClick={handleSendForReview}>
-              {reviewSaved ? 'Sent to Workspace' : reviewSaving ? 'Sending...' : 'Save to Workspace'}
-            </button>
+            {canSaveToWorkspace && (
+              <button className="btn-primary" type="button" disabled={!result || reviewSaving} onClick={handleSendForReview}>
+                {reviewSaved ? 'Sent to Workspace' : reviewSaving ? 'Sending...' : 'Save to Workspace'}
+              </button>
+            )}
           </div>
         </header>
 
@@ -3220,6 +3224,7 @@ function TorGeneratorPage() {
                         value={section.body}
                         onChange={event => updateSectionBody(i, event.target.value)}
                         rows={Math.max(4, Math.ceil(section.body.length / 90))}
+                        readOnly={!canEditTor}
                       />
                     )}
                   </article>
@@ -3246,16 +3251,18 @@ function TorGeneratorPage() {
                     {strategicIntelligence.generated_at && ` Last refreshed ${new Date(strategicIntelligence.generated_at).toLocaleString('en-ZA')}.`}
                   </p>
                 </div>
-                <button className="btn-secondary" type="button" disabled={siRefreshing} onClick={handleRefreshStrategicIntelligence}>
-                  {siRefreshing ? (
-                    <span className="button-loading">
-                      Refreshing intelligence...
-                      <span className="pulse-dot" />
-                      <span className="pulse-dot" />
-                      <span className="pulse-dot" />
-                    </span>
-                  ) : 'Refresh strategic intelligence'}
-                </button>
+                {canEditTor && (
+                  <button className="btn-secondary" type="button" disabled={siRefreshing} onClick={handleRefreshStrategicIntelligence}>
+                    {siRefreshing ? (
+                      <span className="button-loading">
+                        Refreshing intelligence...
+                        <span className="pulse-dot" />
+                        <span className="pulse-dot" />
+                        <span className="pulse-dot" />
+                      </span>
+                    ) : 'Refresh strategic intelligence'}
+                  </button>
+                )}
               </div>
 
               {strategicIntelligence.error && <div className="synthesis-error">{strategicIntelligence.error}</div>}
@@ -3268,14 +3275,16 @@ function TorGeneratorPage() {
                       const Icon = meta.icon;
                       return (
                         <article key={opp.opportunity_type} className={`tor-strategic-card tor-strategic-${meta.tone}`}>
-                          <button
-                            type="button"
-                            className="tor-strategic-dismiss"
-                            aria-label={`Dismiss ${meta.label}`}
-                            onClick={() => handleDismissOpportunity(opp.opportunity_type, opp.title)}
-                          >
-                            <X size={14} />
-                          </button>
+                          {canEditTor && (
+                            <button
+                              type="button"
+                              className="tor-strategic-dismiss"
+                              aria-label={`Dismiss ${meta.label}`}
+                              onClick={() => handleDismissOpportunity(opp.opportunity_type, opp.title)}
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
                           <div className="tor-strategic-card-head">
                             <Icon size={20} />
                             <span className="tor-strategic-label">{meta.label}</span>
@@ -3345,12 +3354,16 @@ function TorGeneratorPage() {
               <Download size={16} />
               <span>Download as Word Document</span>
             </button>
-            <button className="btn-primary" type="button" disabled={reviewSaving} onClick={handleSendForReview}>
-              {reviewSaved ? 'Sent for Review' : reviewSaving ? 'Sending...' : 'Send to Fatima for Review'}
-            </button>
-            <button className="btn-secondary" type="button" disabled={draftSaving} onClick={handleSaveDraft}>
-              {draftSaved ? 'Draft Saved' : draftSaving ? 'Saving...' : 'Save Draft'}
-            </button>
+            {canSaveToWorkspace && (
+              <button className="btn-primary" type="button" disabled={reviewSaving} onClick={handleSendForReview}>
+                {reviewSaved ? 'Sent for Review' : reviewSaving ? 'Sending...' : 'Send to Fatima for Review'}
+              </button>
+            )}
+            {canSaveToWorkspace && (
+              <button className="btn-secondary" type="button" disabled={draftSaving} onClick={handleSaveDraft}>
+                {draftSaved ? 'Draft Saved' : draftSaving ? 'Saving...' : 'Save Draft'}
+              </button>
+            )}
           </div>
         )}
       </section>
