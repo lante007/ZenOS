@@ -77,7 +77,7 @@ async function loadRecord(tenant, id) {
   return row || localStore.getRecord(tenant, id);
 }
 
-router.get('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUNICATIONS'), async (req, res, next) => {
+router.get('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUNICATIONS', 'CEO_EXEC'), async (req, res, next) => {
   try {
     const records = await loadRecords(req.tenant, req.query);
     res.json(visibleRecordsForRole(records, req.user.role));
@@ -86,7 +86,7 @@ router.get('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUNICA
   }
 });
 
-router.get('/:id', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUNICATIONS'), async (req, res, next) => {
+router.get('/:id', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUNICATIONS', 'CEO_EXEC'), async (req, res, next) => {
   try {
     const record = await loadRecord(req.tenant, req.params.id);
     if (!record) return res.status(404).json({ error: 'Record not found' });

@@ -47,7 +47,7 @@ function parseSynthesis(text, recordsSearched) {
   };
 }
 
-router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (req, res, next) => {
+router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'), async (req, res, next) => {
   try {
     const question = String(req.body.question || '').trim();
     if (!question) return res.status(400).json({ error: 'question is required' });

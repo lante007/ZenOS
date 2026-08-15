@@ -1,6 +1,6 @@
 'use strict';
 
-const { computePriorityScore, operationalPriorityScore } = require('./priority-score');
+const { computePriorityScore, operationalPriorityScore, tierForScore } = require('./priority-score');
 
 function schemaFor(tenant) {
   const schema = tenant.db_schema || tenant.slug;
@@ -280,7 +280,17 @@ async function runFlywheel(tenant, pool) {
     detectBoardProximity(tenant, pool),
   ]);
 
-  const candidates = batches.flat().sort(
+  const generated = batches.flat();
+
+  // CEO_EXEC sees none of the role-specific queues above, so without this
+  // they never receive any flywheel alert. Escalate a copy of any CRITICAL
+  // tier alert (priority_score >= 80, per tierForScore) to CEO_EXEC as well,
+  // leaving the original role targeting untouched.
+  const ceoExecEscalations = generated
+    .filter(alert => tierForScore(alert.priority_score ?? 0) === 'CRITICAL')
+    .map(alert => ({ ...alert, target_role: 'CEO_EXEC' }));
+
+  const candidates = [...generated, ...ceoExecEscalations].sort(
     (a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0)
   );
 

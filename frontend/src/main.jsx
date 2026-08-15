@@ -1134,7 +1134,7 @@ const NAV_VISIBILITY = {
   '/products': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
   '/tor-generator': ['CEO_EXEC', 'ORGANISATION_LEAD'],
   '/queue': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
-  '/settings': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+  '/settings': ['ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
 };
 
 function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() }) {
@@ -1834,9 +1834,13 @@ function DashboardPage() {
                     ? `${completenessData.critical_gaps_count ?? 0} of ${completenessData.total_active_records ?? 0} records have critical missing fields`
                     : 'Checking corpus completeness...'}
                 </p>
-                <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
-                  Complete in Workspace →
-                </a>
+                {user.role === 'CEO_EXEC' ? (
+                  <p className="completeness-detail-note">Evidence gaps are being reviewed by the research team.</p>
+                ) : (
+                  <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
+                    Complete in Workspace →
+                  </a>
+                )}
               </div>
             </div>
 
@@ -2810,6 +2814,8 @@ function TorGeneratorPage() {
   const [dismissedTypes, setDismissedTypes] = useState(new Set());
   const [pendingFocus, setPendingFocus] = useState(null);
   const [progressMessage, setProgressMessage] = useState('');
+  const [gapOptions, setGapOptions] = useState([]);
+  const [gapQuery, setGapQuery] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -2820,6 +2826,19 @@ function TorGeneratorPage() {
     if (programmeName) handleGenerate(programmeName);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programmeName]);
+
+  useEffect(() => {
+    if (programmeName) return;
+    apiRequest('/api/stats/gaps')
+      .then(data => setGapOptions(Array.isArray(data?.gaps) ? data.gaps : []))
+      .catch(() => {});
+  }, [programmeName]);
+
+  const filteredGapOptions = useMemo(() => {
+    const q = gapQuery.trim().toLowerCase();
+    if (!q) return gapOptions.slice(0, 8);
+    return gapOptions.filter(g => (g.programme_name || '').toLowerCase().includes(q)).slice(0, 8);
+  }, [gapOptions, gapQuery]);
 
   if (!canGenerate) {
     return (
@@ -3079,6 +3098,36 @@ function TorGeneratorPage() {
           </div>
         </header>
 
+        {!programmeName && !loading && !result && (
+          <article className="empty-panel tor-landing-panel">
+            <h2>Terms of Reference Generator</h2>
+            <p>Select a priority evidence gap from the dashboard to generate a Terms of Reference, or search for a programme below.</p>
+            <label className="ask-input tor-landing-search">
+              <Search size={20} />
+              <input
+                type="text"
+                placeholder="Search programmes..."
+                value={gapQuery}
+                onChange={(event) => setGapQuery(event.target.value)}
+              />
+            </label>
+            {filteredGapOptions.length > 0 && (
+              <ul className="tor-landing-results">
+                {filteredGapOptions.map(g => (
+                  <li key={g.programme_name}>
+                    <a
+                      href={`/tor-generator?programme=${encodeURIComponent(g.programme_name)}`}
+                      onClick={(event) => { event.preventDefault(); navigate(`/tor-generator?programme=${encodeURIComponent(g.programme_name)}`); }}
+                    >
+                      {g.programme_name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+        )}
+
         {error && <div className="synthesis-error">{error}</div>}
 
         {pendingFocus && (
@@ -3319,7 +3368,7 @@ function AskZenexPage() {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [supportOpen, setSupportOpen] = useState(true);
   const [estateCount, setEstateCount] = useState(0);
-  const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
+  const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'].includes(user.role);
 
   const supportingRecords = useMemo(() => {
     const ids = result?.supporting_record_ids || [];
