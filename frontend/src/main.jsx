@@ -1125,15 +1125,15 @@ function queueCount(queueItems = FALLBACK_QUEUE_EMPTY) {
 }
 
 // Which roles see each sidebar destination. CEO_EXEC does not action
-// Upload, Synthesise or Workspace, so those are simply absent from her
-// nav rather than shown-then-disabled.
+// Upload, Library, Synthesise, Products, Workspace or Settings, so those
+// are simply absent from her nav rather than shown-then-disabled.
 const NAV_VISIBILITY = {
   '/dashboard': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
-  '/records': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+  '/records': ['ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
   '/classify': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
   '/synthesise': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
   '/ask': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
-  '/products': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
+  '/products': ['ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
   '/tor-generator': ['CEO_EXEC', 'ORGANISATION_LEAD'],
   '/queue': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
   '/settings': ['ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
