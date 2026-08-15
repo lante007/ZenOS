@@ -27,6 +27,7 @@ function buildCorpusSummary(records) {
     effect_size_composite: record.effect_size_composite,
     effect_direction: record.effect_direction,
     implementing_organisation_name: record.implementing_organisation_name,
+    responsible_pm: record.responsible_pm,
   }));
 }
 

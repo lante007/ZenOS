@@ -129,6 +129,8 @@ const adeiFieldLabels = [
   ['half_life_rating', 'Half-Life Rating'],
   ['audience_relevance', 'Audience Relevance'],
   ['expert_review_required', 'Expert Review Required'],
+  ['responsible_pm', 'Responsible PM'],
+  ['total_cost_rand', 'Total Cost (Rand)'],
 ];
 
 const FALLBACK_RECORDS_EMPTY = [];
@@ -2816,6 +2818,7 @@ function TorGeneratorPage() {
   const [dismissedTypes, setDismissedTypes] = useState(new Set());
   const [pendingFocus, setPendingFocus] = useState(null);
   const [progressMessage, setProgressMessage] = useState('');
+  const [progressSubtext, setProgressSubtext] = useState('');
   const [gapOptions, setGapOptions] = useState([]);
   const [gapQuery, setGapQuery] = useState('');
 
@@ -2869,9 +2872,20 @@ function TorGeneratorPage() {
   function pollJobStatus(jobId) {
     return new Promise(resolve => {
       const startedAt = Date.now();
-      const progressTimer = window.setTimeout(() => setProgressMessage('Generating TOR sections...'), 15000);
+      const progressTimer15 = window.setTimeout(() => {
+        setProgressMessage('Generating Terms of Reference...');
+        setProgressSubtext('');
+      }, 15000);
+      const progressTimer30 = window.setTimeout(() => {
+        setProgressMessage('Applying strategic intelligence...');
+      }, 30000);
 
-      const finish = () => { window.clearTimeout(progressTimer); setLoading(false); resolve(); };
+      const finish = () => {
+        window.clearTimeout(progressTimer15);
+        window.clearTimeout(progressTimer30);
+        setLoading(false);
+        resolve();
+      };
 
       const poll = async () => {
         if (Date.now() - startedAt > 3 * 60 * 1000) {
@@ -2906,7 +2920,8 @@ function TorGeneratorPage() {
     if (!targetName) return;
     setLoading(true);
     setError(null);
-    setProgressMessage('Analysing evidence record...');
+    setProgressMessage('Analysing evidence and preparing Terms of Reference...');
+    setProgressSubtext('This may take up to 30 seconds.');
     try {
       const job = await apiRequest('/api/tor/generate', {
         method: 'POST',
@@ -3142,7 +3157,15 @@ function TorGeneratorPage() {
         )}
 
         {loading && !result && (
-          <p className="workspace-loading">{progressMessage || `Drafting Terms of Reference for ${programmeName}...`}</p>
+          <div className="tor-generating-panel">
+            <div className="pulse-loading">
+              <span className="pulse-dot" />
+              <span className="pulse-dot" />
+              <span className="pulse-dot" />
+              <span>{progressMessage || `Analysing evidence and preparing Terms of Reference for ${programmeName}...`}</span>
+            </div>
+            {progressSubtext && <p className="upload-progress-subtext">{progressSubtext}</p>}
+          </div>
         )}
 
         {result && (
