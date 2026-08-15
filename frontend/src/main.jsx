@@ -590,6 +590,38 @@ function financialEditFromRecord(record) {
   };
 }
 
+function DownloadPdfButton({ record, variant = 'ghost', label = 'Download PDF' }) {
+  const [state, setState] = useState('idle');
+
+  if (!record?.s3_key) return null;
+
+  async function handleDownload(event) {
+    event.stopPropagation();
+    if (state === 'loading') return;
+    setState('loading');
+    try {
+      const data = await apiRequest(`/api/records/${record.id || record.adei_record_id}/download`);
+      window.open(data.url, '_blank');
+      setState('idle');
+    } catch {
+      setState('error');
+      window.setTimeout(() => setState('idle'), 3000);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className={`download-pdf-button download-pdf-button-${variant}`}
+      onClick={handleDownload}
+      disabled={state === 'loading'}
+    >
+      <Download size={variant === 'primary' ? 16 : 12} />
+      <span>{state === 'loading' ? 'Downloading...' : state === 'error' ? 'Download unavailable' : label}</span>
+    </button>
+  );
+}
+
 function RecordDetailModal({ record, onClose, userRole = currentUser().role }) {
   const [displayRecord, setDisplayRecord] = useState(record || {});
   const [financialEdit, setFinancialEdit] = useState(() => financialEditFromRecord(record));
@@ -647,6 +679,7 @@ function RecordDetailModal({ record, onClose, userRole = currentUser().role }) {
             <h2>{displayRecord.programme_name}</h2>
             <p>{displayRecord.filename}</p>
             <PathwayBadge pathway={displayRecord.eqs_scoring_pathway} />
+            <DownloadPdfButton record={displayRecord} variant="primary" label="Download Source Document" />
           </div>
           <button className="icon-button" type="button" aria-label="Close record detail" onClick={onClose}>
             <X size={18} />
@@ -2334,6 +2367,7 @@ function RecordsPage() {
               <span>Province</span>
               <span>Tier</span>
               <span>EQS</span>
+              <span></span>
             </div>
             {filteredRecords.map((record) => (
               <div className="records-row" role="row" key={record.adei_record_id} onClick={() => setSelectedRecord(record)}>
@@ -2357,6 +2391,9 @@ function RecordsPage() {
                   <PathwayBadge pathway={record.eqs_scoring_pathway} />
                 </span>
                 <span>{record.eqs_composite}</span>
+                <span onClick={(event) => event.stopPropagation()}>
+                  <DownloadPdfButton record={record} />
+                </span>
               </div>
             ))}
           </div>

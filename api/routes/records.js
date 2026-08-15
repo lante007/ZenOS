@@ -1,12 +1,17 @@
 'use strict';
 
 const express = require('express');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const db = require('../services/db');
 const localStore = require('../services/local-store');
 const { requireRoles } = require('../middleware/permissions');
 const { ALLOWED_FIELD_NAMES, fieldDef } = require('../services/workspace-fields');
 
 const router = express.Router();
+const s3Client = new S3Client({
+  region: process.env.AWS_DEFAULT_REGION || process.env.AWS_REGION || 'us-east-1',
+});
 
 function schemaFor(tenant) {
   const schema = tenant.db_schema || tenant.slug || 'zenex';
@@ -92,6 +97,27 @@ router.get('/:id', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUN
     if (!record) return res.status(404).json({ error: 'Record not found' });
     const visible = visibleRecordsForRole([record], req.user.role)[0];
     res.json(visible);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:id/download', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'COMMUNICATIONS', 'CEO_EXEC'), async (req, res, next) => {
+  try {
+    const record = await loadRecord(req.tenant, req.params.id);
+    if (!record || !record.s3_key) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const safeName = String(record.filename || 'document').replace(/["\r\n]/g, '');
+    const command = new GetObjectCommand({
+      Bucket: req.tenant.s3_vault_bucket,
+      Key: record.s3_key,
+      ResponseContentDisposition: `attachment; filename="${safeName}"`,
+    });
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+
+    res.json({ url });
   } catch (err) {
     next(err);
   }
