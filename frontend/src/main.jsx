@@ -3377,7 +3377,7 @@ function TorGeneratorPage() {
             </button>
             {canSaveToWorkspace && (
               <button className="btn-primary" type="button" disabled={reviewSaving} onClick={handleSendForReview}>
-                {reviewSaved ? 'Sent for Review' : reviewSaving ? 'Sending...' : 'Send to Fatima for Review'}
+                {reviewSaved ? 'Sent for Review' : reviewSaving ? 'Sending...' : 'Send for Review'}
               </button>
             )}
             {canSaveToWorkspace && (
@@ -5975,9 +5975,9 @@ function SettingsPage() {
                 This action is recorded with your name and timestamp.
               </p>
               <p className="muted">
-                Fatima Adam is the methodology ratifier. Process evaluations are scored
-                for implementation quality, and research studies are scored for synthesis
-                quality and policy relevance.
+                The methodology ratifier reviews and approves all EQS scoring decisions.
+                Process evaluations are scored for implementation quality and research
+                studies are scored for synthesis quality and policy relevance.
               </p>
             </div>
             <button
