@@ -1134,7 +1134,6 @@ const NAV_VISIBILITY = {
   '/synthesise': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
   '/ask': ['CEO_EXEC', 'ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
   '/products': ['ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
-  '/tor-generator': ['CEO_EXEC', 'ORGANISATION_LEAD'],
   '/queue': ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'],
   '/settings': ['ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
 };
@@ -1147,7 +1146,6 @@ function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() 
     { path: '/synthesise', activeKey: 'synthesise', icon: <Layers size={18} />, label: 'Synthesise' },
     { path: '/ask', activeKey: 'ask', icon: <span className="nav-emoji" aria-hidden="true">🔍</span>, label: 'Ask Zenex' },
     { path: '/products', activeKey: 'knowledge', icon: <span className="nav-emoji" aria-hidden="true">📄</span>, label: 'Products' },
-    { path: '/tor-generator', activeKey: 'tor-generator', icon: <Edit3 size={18} />, label: 'TOR Generator' },
     { path: '/queue', activeKey: 'queue', icon: <CheckCircle2 size={18} />, label: 'Workspace', badge: queueBadge },
     { path: '/settings', activeKey: 'settings', icon: <Users size={18} />, label: 'Settings' },
   ];
