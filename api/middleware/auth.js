@@ -2,6 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const jwksRsa = require('jwks-rsa');
+const { getPool } = require('../services/db');
 
 const cache = new Map();
 
@@ -130,6 +131,21 @@ function authenticate(options = {}) {
       if (req.user.tenant_id !== req.tenant.slug) {
         return res.status(403).json({ error: 'Token tenant does not match request tenant' });
       }
+
+      try {
+        const pool = getPool();
+        if (pool) {
+          await pool.query(`
+            UPDATE zenex.users
+            SET last_login_at = NOW()
+            WHERE tenant_id = $1
+            AND email = $2
+          `, [req.user.tenant_id, req.user.email]);
+        }
+      } catch {
+        // A failed last_login_at write should never block the request.
+      }
+
       next();
     } catch (err) {
       res.status(401).json({ error: 'Invalid authentication token' });
