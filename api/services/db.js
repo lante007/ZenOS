@@ -96,7 +96,8 @@ async function listRecords(tenant, filters = {}) {
     const res = await client.query(`
       SELECT r.*, d.filename, d.s3_key,
         d.mime_type, d.file_size_bytes,
-        d.rights_status AS doc_rights_status
+        d.rights_status AS doc_rights_status,
+        d.extraction_quality
       FROM intelligence_records r
       LEFT JOIN documents d ON d.id = r.document_id
       WHERE ${where.join(' AND ')}

@@ -73,64 +73,81 @@ function formatEqsTier(tier) {
   return tier ? String(tier).replace(/_/g, ' ') : 'N/A';
 }
 
-const adeiFieldLabels = [
-  ['adei_record_id', 'ADEI Record ID'],
-  ['tenant_id', 'Tenant ID'],
-  ['filename', 'Filename'],
-  ['source_uri', 'Source URI'],
-  ['institution', 'Institution'],
-  ['programme_name', 'Programme Name'],
-  ['document_type', 'Document Type'],
-  ['publication_year', 'Publication Year'],
-  ['classification_date', 'Classification Date'],
-  ['evaluation_design', 'Evaluation Design'],
-  ['methodology', 'Methodology'],
-  ['sample_size', 'Sample Size'],
-  ['unit_of_analysis', 'Unit of Analysis'],
-  ['province', 'Province'],
-  ['district', 'District'],
-  ['phase', 'Phase'],
-  ['grade', 'Grade'],
-  ['subject_area', 'Subject Area'],
-  ['intervention_type', 'Intervention Type'],
-  ['implementation_period', 'Implementation Period'],
-  ['population_served', 'Population Served'],
-  ['comparison_group', 'Comparison Group'],
-  ['data_sources', 'Data Sources'],
-  ['baseline_available', 'Baseline Available'],
-  ['endline_available', 'Endline Available'],
-  ['key_finding_1', 'Key Finding 1'],
-  ['key_finding_2', 'Key Finding 2'],
-  ['key_finding_3', 'Key Finding 3'],
-  ['null_findings', 'Null Findings'],
-  ['non_significant_variables', 'Non-Significant Variables'],
-  ['effect_direction', 'Effect Direction'],
-  ['effect_size', 'Effect Size'],
-  ['cost_data_source', 'Cost Data Source'],
-  ['audited_financials_used', 'Audited Financials Used'],
-  ['sroi_ready', 'SROI Ready'],
-  ['policy_alignment', 'Policy Alignment'],
-  ['decision_relevance', 'Decision Relevance'],
-  ['assumption_challenge', 'Assumption Challenge'],
-  ['evidence_gap', 'Evidence Gap'],
-  ['replication_conditions', 'Replication Conditions'],
-  ['limitations', 'Limitations'],
-  ['equity_considerations', 'Equity Considerations'],
-  ['data_quality_score', 'Data Quality Score'],
-  ['rigour_score', 'Rigour Score'],
-  ['transparency_score', 'Transparency Score'],
-  ['replicability_score', 'Replicability Score'],
-  ['policy_relevance_score', 'Policy Relevance Score'],
-  ['eqs_composite', 'EQS Composite'],
-  ['eqs_tier', 'EQS Tier'],
-  ['confidence_tier', 'Confidence Tier'],
-  ['board_citable', 'Board Citable'],
-  ['evidence_capital_score', 'Evidence Capital Score'],
-  ['half_life_rating', 'Half-Life Rating'],
-  ['audience_relevance', 'Audience Relevance'],
-  ['expert_review_required', 'Expert Review Required'],
-  ['responsible_pm', 'Responsible PM'],
-  ['total_cost_rand', 'Total Cost (Rand)'],
+// ADEI taxonomy v2.1 CSV export columns, in section order. `source` is the
+// actual record property when it differs from the exported column name;
+// `type` drives array/boolean formatting in exportRecordsCsv.
+// grantee_organisation has no dedicated column - sourced from
+// implementing_organisation_name, the nearest real field. sample_size_teachers
+// is omitted entirely: no such column exists in the schema.
+const adeiExportFields = [
+  // Admin
+  { key: 'adei_record_id', source: 'id' },
+  { key: 'programme_name' },
+  { key: 'canonical_programme_name' },
+  { key: 'programme_area' },
+  { key: 'document_type' },
+  { key: 'secondary_document_type' },
+  { key: 'publication_year', source: 'year' },
+  { key: 'classification_date', source: 'classified_at' },
+  { key: 'record_series' },
+  { key: 'record_status' },
+  // Financial
+  { key: 'total_cost_rand' },
+  { key: 'responsible_pm' },
+  { key: 'grantee_organisation', source: 'implementing_organisation_name' },
+  { key: 'optimy_project_id' },
+  // Geographic
+  { key: 'province', source: 'provinces', type: 'array' },
+  { key: 'district', type: 'array' },
+  { key: 'phase' },
+  { key: 'grade' },
+  { key: 'subject_area' },
+  // Methodology
+  { key: 'evaluation_design' },
+  { key: 'evaluation_subtype' },
+  { key: 'intervention_type' },
+  { key: 'implementation_period' },
+  { key: 'comparison_group' },
+  { key: 'has_control_group', type: 'boolean' },
+  { key: 'sample_size_learners' },
+  { key: 'sample_size_schools' },
+  { key: 'data_sources' },
+  { key: 'baseline_available', type: 'boolean' },
+  { key: 'endline_available', type: 'boolean' },
+  { key: 'baseline_year' },
+  { key: 'endline_year' },
+  { key: 'external_evaluator', type: 'boolean' },
+  // Findings
+  { key: 'key_finding_1' },
+  { key: 'key_finding_2' },
+  { key: 'key_finding_3' },
+  { key: 'effect_direction' },
+  { key: 'effect_size_composite' },
+  { key: 'null_findings_reported', type: 'boolean' },
+  { key: 'non_significant_variables' },
+  { key: 'limitations' },
+  { key: 'equity_considerations' },
+  { key: 'replication_conditions' },
+  // Policy and strategy
+  { key: 'policy_alignment' },
+  { key: 'nls_alignment', type: 'boolean' },
+  { key: 'funrs_alignment', type: 'boolean' },
+  { key: 'dbe_adoption_status' },
+  { key: 'theory_of_change_explicit', type: 'boolean' },
+  { key: 'fidelity_reported', type: 'boolean' },
+  { key: 'dosage_documented', type: 'boolean' },
+  // Evidence quality
+  { key: 'eqs_composite' },
+  { key: 'eqs_tier' },
+  { key: 'eqs_pathway' },
+  { key: 'dim_methodological_rigour' },
+  { key: 'dim_data_quality' },
+  { key: 'dim_transparency' },
+  { key: 'dim_replicability' },
+  { key: 'dim_context_relevance' },
+  { key: 'board_citable', type: 'boolean' },
+  { key: 'half_life_rating' },
+  { key: 'extraction_quality' },
 ];
 
 const FALLBACK_RECORDS_EMPTY = [];
@@ -2217,12 +2234,20 @@ function normalizeFilterValue(value) {
   return String(value || '').toLowerCase();
 }
 
+function formatCsvFieldValue(record, field) {
+  const raw = record[field.source || field.key];
+  if (raw == null) return '';
+  if (field.type === 'array') return Array.isArray(raw) ? raw.join(', ') : String(raw);
+  if (field.type === 'boolean') return raw === true ? 'Yes' : raw === false ? 'No' : '';
+  return String(raw);
+}
+
 function exportRecordsCsv(records) {
-  const headers = adeiFieldLabels.map(([field]) => field);
+  const headers = adeiExportFields.map(f => f.key);
   const csvRows = [
     headers.join(','),
-    ...records.map(record => headers.map(field => {
-      const value = record[field] == null ? '' : String(record[field]);
+    ...records.map(record => adeiExportFields.map(field => {
+      const value = formatCsvFieldValue(record, field);
       return `"${value.replace(/"/g, '""')}"`;
     }).join(',')),
   ];
