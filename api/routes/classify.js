@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('crypto');
 const multer = require('multer');
 const fs = require('fs');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -58,11 +59,27 @@ async function classifyFromS3Key(tenant, s3Key, filename, institution, user) {
     filename: record.filename,
     programme_name: record.programme_name,
     confidence_tier: record.confidence_tier,
+    eqs_tier: record.eqs_tier,
     eqs_composite: record.eqs_composite,
     extraction_quality: record.extraction_quality,
     fatima_queue_items: record.fatima_queue_items,
   };
 }
+
+// In-memory async job store for POST /process - same pattern as
+// api/routes/tor.js's `jobs`. Large-file classification (S3 download +
+// text extraction + Claude call) can run 60-120s, which exceeds
+// CloudFront's origin read timeout if done synchronously, so the request
+// returns immediately and the caller polls GET /process/status/:jobId.
+// Jobs do not survive a pm2 restart.
+const classifyJobs = {};
+const CLASSIFY_JOB_TTL_MS = 10 * 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - CLASSIFY_JOB_TTL_MS;
+  for (const [id, job] of Object.entries(classifyJobs)) {
+    if (job.createdAt < cutoff) delete classifyJobs[id];
+  }
+}, 60 * 1000).unref();
 
 router.get('/presign', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), async (req, res, next) => {
   try {
@@ -167,26 +184,87 @@ router.post('/process', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), a
       return res.status(400).json({ error: 's3_key required' });
     }
 
-    const result = await classifyFromS3Key(
-      req.tenant,
-      s3Key,
-      filename,
-      institution || req.tenant.name,
-      req.user
+    const tenant = req.tenant;
+
+    // De-dup: reuse an existing pending job for the same document rather
+    // than spawning a second classification from a rapid double-click.
+    const existing = Object.entries(classifyJobs).find(([, job]) =>
+      job.status === 'pending' &&
+      job.tenantId === tenant.slug &&
+      job.s3Key === s3Key
     );
+    if (existing) {
+      return res.status(202).json({ jobId: existing[0], status: 'pending' });
+    }
 
-    await db.createAuditLog(req.tenant, 'document_uploaded', {
-      s3_key: s3Key,
-      filename: filename || result.filename,
-    }, req.user.email || req.user.sub);
-    await db.createAuditLog(req.tenant, 'classification_triggered', {
-      s3_key: s3Key,
-      record_id: result.record_id,
-    }, req.user.email || req.user.sub);
+    const jobId = crypto.randomUUID();
+    classifyJobs[jobId] = {
+      status: 'pending',
+      result: null,
+      error: null,
+      tenantId: tenant.slug,
+      userId: req.user?.sub || null,
+      s3Key,
+      createdAt: Date.now(),
+    };
 
-    return res.json(result);
+    res.status(202).json({ jobId, status: 'pending' });
+
+    (async () => {
+      try {
+        const result = await classifyFromS3Key(tenant, s3Key, filename, institution || tenant.name, req.user);
+
+        await db.createAuditLog(tenant, 'document_uploaded', {
+          s3_key: s3Key,
+          filename: filename || result.filename,
+        }, req.user.email || req.user.sub);
+        await db.createAuditLog(tenant, 'classification_triggered', {
+          s3_key: s3Key,
+          record_id: result.record_id,
+        }, req.user.email || req.user.sub);
+
+        classifyJobs[jobId].status = 'complete';
+        classifyJobs[jobId].result = result;
+      } catch (err) {
+        const message = err.code === 'DUPLICATE_DOCUMENT'
+          ? 'A document with this filename or identical content already exists in the archive.'
+          : err.message;
+        console.error(`[classify] process job ${jobId} failed: ${err.message}`);
+        classifyJobs[jobId].status = 'failed';
+        classifyJobs[jobId].error = message;
+      }
+    })();
   } catch (err) {
-    if (err.code === 'DUPLICATE_DOCUMENT') return sendDuplicateResponse(res, err);
+    next(err);
+  }
+});
+
+router.get('/status/:jobId', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), (req, res, next) => {
+  try {
+    const job = classifyJobs[req.params.jobId];
+    // A jobId alone is not an authorisation boundary: a job belonging to
+    // a different tenant or a different user within the same tenant
+    // returns 404, not 403, so its existence is never confirmed to an
+    // unauthorised caller.
+    if (!job || job.tenantId !== req.tenant.slug || job.userId !== (req.user?.sub || null)) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (job.status === 'pending') {
+      return res.json({ status: 'pending' });
+    }
+    if (job.status === 'failed') {
+      return res.json({ status: 'failed', error: job.error });
+    }
+    return res.json({
+      status: 'complete',
+      record_id: job.result.record_id,
+      programme_name: job.result.programme_name,
+      eqs_tier: job.result.eqs_tier,
+      eqs_composite: job.result.eqs_composite,
+      extraction_quality: job.result.extraction_quality,
+    });
+  } catch (err) {
     next(err);
   }
 });

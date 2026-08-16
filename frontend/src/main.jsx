@@ -3651,10 +3651,12 @@ function ClassifyPage() {
   const [comparisonSubmitting, setComparisonSubmitting] = useState(false);
   const [comparisonSubmitted, setComparisonSubmitted] = useState(false);
   const classifyTimersRef = useRef([]);
+  const classifyPollRef = useRef(null);
 
   function clearClassifyTimers() {
     classifyTimersRef.current.forEach(id => window.clearTimeout(id));
     classifyTimersRef.current = [];
+    if (classifyPollRef.current) classifyPollRef.current.cancelled = true;
   }
 
   useEffect(() => () => clearClassifyTimers(), []);
@@ -3725,7 +3727,7 @@ function ClassifyPage() {
         window.setTimeout(() => setClassifyPhaseIdx(index), phase.delay)
       );
 
-      const result = await apiRequest('/api/classify/process', {
+      const submission = await apiRequest('/api/classify/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3735,32 +3737,66 @@ function ClassifyPage() {
         }),
       });
 
-      if (result?.success || result?.record_id) {
-        let record = result;
-        if (result.record_id) {
-          try {
-            record = await apiRequest(`/api/records/${result.record_id}`);
-          } catch {
-            record = result;
-          }
-        }
-        clearClassifyTimers();
-        setClassifiedRecord(record);
-        setManualComparison(buildManualComparison(record));
-        setUploadPhase('complete');
-        setClassificationResult(`Created ${result.record_id || result.filename}`);
-        return result;
+      if (!submission?.jobId) {
+        throw new Error(submission?.error || 'Classification failed to start');
       }
 
-      throw new Error(result?.error || 'Classification failed');
-    } catch (err) {
-      clearClassifyTimers();
-      if (err.status === 409 && err.payload?.error === 'duplicate_detected') {
-        setDuplicateInfo(err.payload);
-        setUploadPhase('duplicate');
-        setClassificationResult(err.payload.message || 'Document already exists');
+      // Extraction runs in the background on the API (60-120s for large
+      // PDFs, which exceeds CloudFront's origin read timeout if awaited
+      // synchronously) - poll for the result instead. CLASSIFY_PHASES above
+      // keeps driving the visible phase labels; this loop only decides
+      // when the job has actually finished.
+      const pollToken = { cancelled: false };
+      classifyPollRef.current = pollToken;
+      const pollStart = Date.now();
+      const POLL_INTERVAL_MS = 3000;
+      const POLL_TIMEOUT_MS = 180000;
+      let status = null;
+
+      while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
+        await new Promise(resolve => window.setTimeout(resolve, POLL_INTERVAL_MS));
+        if (pollToken.cancelled) return null;
+        status = await apiRequest(`/api/classify/status/${submission.jobId}`);
+        if (status.status === 'complete' || status.status === 'failed') break;
+        status = null;
+      }
+
+      if (!status) {
+        clearClassifyTimers();
+        setUploadPhase('error');
+        setClassificationResult('Classification is taking longer than expected for this document. Check the Library in a few minutes for the result.');
         return null;
       }
+
+      if (status.status === 'failed') {
+        clearClassifyTimers();
+        if (status.error && status.error.includes('already exists')) {
+          setDuplicateInfo({ message: status.error });
+          setUploadPhase('duplicate');
+          setClassificationResult(status.error);
+          return null;
+        }
+        setUploadPhase('error');
+        setClassificationResult(status.error || 'Classification failed');
+        return null;
+      }
+
+      let record = status;
+      if (status.record_id) {
+        try {
+          record = await apiRequest(`/api/records/${status.record_id}`);
+        } catch {
+          record = status;
+        }
+      }
+      clearClassifyTimers();
+      setClassifiedRecord(record);
+      setManualComparison(buildManualComparison(record));
+      setUploadPhase('complete');
+      setClassificationResult(`Created ${status.record_id || file.name}`);
+      return status;
+    } catch (err) {
+      clearClassifyTimers();
       setUploadPhase('error');
       setClassificationResult(err.message || 'Upload failed');
       console.error('Upload error:', err);
