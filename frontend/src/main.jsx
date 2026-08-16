@@ -5542,11 +5542,11 @@ function AdminLoginPage() {
     setBusy(true);
     setError('');
     try {
-      const username = email.trim();
-      const result = await signInWithClient(tenantConfig.adminCognitoClientId, username, password);
+      const loginEmail = email.trim().toLowerCase();
+      const result = await signInWithClient(tenantConfig.adminCognitoClientId, loginEmail, password);
       if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         sessionStorage.setItem('evidenceos_new_password_session', result.Session);
-        sessionStorage.setItem('evidenceos_new_password_username', username);
+        sessionStorage.setItem('evidenceos_new_password_username', loginEmail);
         sessionStorage.setItem('evidenceos_new_password_client', 'admin');
         navigateInApp('/change-password');
         return;
@@ -5580,7 +5580,7 @@ function AdminLoginPage() {
             <span>Email</span>
             <div className="auth-input">
               <Mail size={18} />
-              <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="name@auxeira.com" required />
+              <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="name@auxeira.com (not case-sensitive)" required />
             </div>
           </label>
           <label>

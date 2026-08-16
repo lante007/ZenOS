@@ -10,10 +10,24 @@ Continuing EvidenceOS work.
 
 ## CRITICAL before any frontend build
 
+The build must include **both** the main tenant and admin console Cognito
+client IDs. Omitting `VITE_ADMIN_COGNITO_CLIENT_ID` silently disables the
+admin login button (it goes through `disabled={... || !tenantConfig.adminCognitoClientId}`
+with no error shown) — this caused a real incident, don't repeat it.
+
 ```
-echo "VITE_COGNITO_CLIENT_ID=5vieei8509fca2r05na4tjg619" > \
+printf 'VITE_COGNITO_CLIENT_ID=5vieei8509fca2r05na4tjg619\nVITE_ADMIN_COGNITO_CLIENT_ID=2cr63ditp2laakafpn0inh9urf\n' > \
   /tmp/ZenOS-audit/frontend/.env.production
 ```
+
+After building, verify both landed in the bundle before deploying:
+
+```
+grep -c "5vieei8509fca2r05na4tjg619" frontend/dist/assets/index-*.js
+grep -c "2cr63ditp2laakafpn0inh9urf" frontend/dist/assets/index-*.js
+```
+
+Both must return `1`. If either returns `0`, stop before syncing to S3.
 
 ## Clone repo if not present
 
