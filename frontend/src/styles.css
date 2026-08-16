@@ -2684,6 +2684,11 @@ button.estate-stat-tile {
   color: rgba(245, 242, 238, 0.62);
 }
 
+.drop-zone-disabled {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 .file-picker {
   position: relative;
   overflow: hidden;
@@ -2694,6 +2699,15 @@ button.estate-stat-tile {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.file-picker-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-picker-disabled input {
+  cursor: not-allowed;
 }
 
 .selected-file {
@@ -2801,14 +2815,37 @@ button.estate-stat-tile {
 .upload-warning-ocr p {
   font-size: 13px;
   color: var(--color-muted);
-  margin: 0;
+  margin: 0 0 8px;
+}
+
+.upload-warning-ocr strong {
+  display: block;
+  color: #D97706;
+  margin-bottom: 4px;
+}
+
+.upload-warning-icon {
+  color: #D97706;
+  flex-shrink: 0;
+}
+
+.upload-warning-list {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.upload-warning-list li {
+  margin-bottom: 4px;
 }
 
 .upload-error {
-  color: #EF7218;
+  color: #DC2626;
   font-size: 14px;
   padding: 12px;
-  background: rgba(239, 114, 24, 0.1);
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
   border-radius: 6px;
   text-align: center;
 }

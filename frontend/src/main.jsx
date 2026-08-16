@@ -3770,14 +3770,20 @@ function ClassifyPage() {
 
       if (status.status === 'failed') {
         clearClassifyTimers();
-        if (status.error && status.error.includes('already exists')) {
-          setDuplicateInfo({ message: status.error });
+        if (status.code === 'NEEDS_OCR') {
+          setUploadPhase('needs_ocr');
+          setClassificationResult(status.error);
+          return null;
+        }
+        if (status.code === 'DUPLICATE_DOCUMENT' || (status.error && status.error.includes('already exists'))) {
+          setDuplicateInfo({ message: status.error, existingRecordId: status.existing_record_id });
           setUploadPhase('duplicate');
           setClassificationResult(status.error);
           return null;
         }
+        console.error('Classification failed:', status.error);
         setUploadPhase('error');
-        setClassificationResult(status.error || 'Classification failed');
+        setClassificationResult('Classification failed. Please try again or contact your system administrator.');
         return null;
       }
 
@@ -3852,14 +3858,13 @@ function ClassifyPage() {
 
   const isComplete = uploadPhase === 'complete';
   const isRunning = ['requesting', 'uploading', 'classifying'].includes(uploadPhase);
-  const canStart = driveFileId.trim() || (selectedFile && ['idle', 'error', 'duplicate'].includes(uploadPhase));
+  const canStart = driveFileId.trim() || (selectedFile && ['idle', 'error', 'duplicate', 'needs_ocr'].includes(uploadPhase));
   const currentClassifyPhase = classifyPhaseIdx >= 0 ? CLASSIFY_PHASES[classifyPhaseIdx] : null;
   const recordId = classifiedRecord?.id || classifiedRecord?.record_id || classifiedRecord?.adei_record_id || '';
   const eqsTierDisplay = formatEqsTier(classifiedRecord?.eqs_tier || classifiedRecord?.confidence_tier);
   const eqsCompositeDisplay = classifiedRecord?.eqs_composite != null
     ? `${Number(classifiedRecord.eqs_composite).toFixed(2)}/5.0`
     : 'N/A';
-  const needsOcr = classifiedRecord?.extraction_quality === 'NEEDS_OCR';
 
   return (
     <AppShell active="classify">
@@ -3878,10 +3883,11 @@ function ClassifyPage() {
         <section className="classify-grid">
           <article className="upload-panel">
             <div
-              className="drop-zone"
+              className={`drop-zone${isRunning ? ' drop-zone-disabled' : ''}`}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
                 event.preventDefault();
+                if (isRunning) return;
                 handleFile(event.dataTransfer.files[0]);
               }}
             >
@@ -3922,21 +3928,34 @@ function ClassifyPage() {
                     />
                   </div>
                   <p className="upload-progress-label">
-                    {currentClassifyPhase ? currentClassifyPhase.label : 'Uploading document...'}
+                    {currentClassifyPhase ? currentClassifyPhase.label : 'Analysing document and preparing classification...'}
                   </p>
-                  {currentClassifyPhase?.subtext && (
-                    <p className="upload-progress-subtext">{currentClassifyPhase.subtext}</p>
-                  )}
+                  <p className="upload-progress-subtext">
+                    {currentClassifyPhase?.subtext || 'This may take up to 60 seconds for large documents.'}
+                  </p>
                 </div>
               )}
-              {uploadPhase === 'complete' && needsOcr && (
+              {uploadPhase === 'needs_ocr' && (
                 <div className="upload-warning-ocr">
-                  <span className="duplicate-icon">⚠</span>
-                  <p>
-                    This document appears to be a scanned image. Text extraction quality may be reduced.
-                    Classification has been completed with available text but some fields may be incomplete.
-                    Consider uploading a text-searchable version for more accurate results.
-                  </p>
+                  <AlertTriangle size={20} className="upload-warning-icon" />
+                  <div>
+                    <strong>Text layer required</strong>
+                    <p>
+                      EvidenceOS classifies documents by reading their text content.
+                      This file appears to be a scanned image PDF with no readable text layer.
+                    </p>
+                    <p>To classify this document:</p>
+                    <ul className="upload-warning-list">
+                      <li>Open the PDF and check whether you can select and copy text</li>
+                      <li>If not, request a text-layer version from the document author</li>
+                      <li>PDF files exported from Word or generated digitally will work correctly</li>
+                    </ul>
+                    <div className="upload-success-actions">
+                      <button type="button" className="secondary-action" onClick={resetForm}>
+                        Upload a Different Document
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
               {uploadPhase === 'complete' && (
@@ -3957,7 +3976,7 @@ function ClassifyPage() {
               )}
               {uploadPhase === 'error' && (
                 <div className="upload-error">
-                  Upload failed. Please try again or contact your system administrator.
+                  {classificationResult || 'Classification failed. Please try again or contact your system administrator.'}
                 </div>
               )}
               {uploadPhase === 'duplicate' && duplicateInfo && (
@@ -3968,16 +3987,22 @@ function ClassifyPage() {
                     <p>
                       This document is already in the archive. View the existing record in the Library or upload a revised version with a different filename.
                     </p>
-                    <a href="/records" className="btn-ghost">
-                      View in Library
+                    <a
+                      href={duplicateInfo.existingRecordId
+                        ? `/records?record=${encodeURIComponent(duplicateInfo.existingRecordId)}`
+                        : '/records'}
+                      className="btn-ghost"
+                    >
+                      View existing record <ArrowRight size={16} />
                     </a>
                   </div>
                 </div>
               )}
-              <label className="secondary-action file-picker">
+              <label className={`secondary-action file-picker${isRunning ? ' file-picker-disabled' : ''}`}>
                 <input
                   type="file"
                   accept=".pdf,.doc,.docx,.ppt,.pptx"
+                  disabled={isRunning}
                   onChange={(event) => handleFile(event.target.files[0])}
                 />
                 <FileText size={17} />

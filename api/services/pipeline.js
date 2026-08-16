@@ -28,12 +28,17 @@ function buildRecordId(tenant, sourceId) {
 async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Document }) {
   const extraction = await extractText(buffer, mimeType, filename);
   if (extraction.quality === 'FAILED') throw new Error('Text extraction failed');
+  if (extraction.quality === 'NEEDS_OCR') {
+    const needsOcr = new Error(`Insufficient text for classification: ${extraction.charCount || 0} chars`);
+    needsOcr.code = 'NEEDS_OCR';
+    throw needsOcr;
+  }
 
   if (process.env.DATABASE_URL) {
     const pool = db.getPool();
     const schema = tenant.db_schema || tenant.slug || 'zenex';
     const existingDoc = await pool.query(`
-      SELECT d.id, d.filename, COALESCE(r.record_status, d.ingestion_status) AS record_status
+      SELECT d.id, d.filename, r.id AS record_id, COALESCE(r.record_status, d.ingestion_status) AS record_status
       FROM ${schema}.documents d
       LEFT JOIN ${schema}.intelligence_records r
         ON r.document_id = d.id
@@ -57,6 +62,8 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
 
   // Minimum text gate before Claude call. Use fullText (not the legacy
   // pre-truncated extraction.text) so this reflects genuine content volume.
+  // NEEDS_OCR (empty text) is caught above with a specific error code; this
+  // gate now only covers genuinely short-but-readable extractions.
   const fullText = extraction.fullText || extraction.text;
   if (fullText.length < 2000) {
     throw new Error(`Insufficient text for classification: ${fullText.length} chars`);

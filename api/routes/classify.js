@@ -29,6 +29,7 @@ function sendDuplicateResponse(res, err) {
     error: 'duplicate_detected',
     message: 'A document with this filename or identical content already exists in the archive.',
     existing_document_id: existing.id,
+    existing_record_id: existing.record_id,
     existing_record_status: existing.record_status,
     action: 'Use the existing record or upload a revised version with a different filename.',
   });
@@ -202,6 +203,8 @@ router.post('/process', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), a
       status: 'pending',
       result: null,
       error: null,
+      code: null,
+      existingRecordId: null,
       tenantId: tenant.slug,
       userId: req.user?.sub || null,
       s3Key,
@@ -232,6 +235,8 @@ router.post('/process', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), a
         console.error(`[classify] process job ${jobId} failed: ${err.message}`);
         classifyJobs[jobId].status = 'failed';
         classifyJobs[jobId].error = message;
+        classifyJobs[jobId].code = err.code || null;
+        classifyJobs[jobId].existingRecordId = err.existingDocument?.record_id || null;
       }
     })();
   } catch (err) {
@@ -254,7 +259,12 @@ router.get('/status/:jobId', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST
       return res.json({ status: 'pending' });
     }
     if (job.status === 'failed') {
-      return res.json({ status: 'failed', error: job.error });
+      return res.json({
+        status: 'failed',
+        error: job.error,
+        code: job.code,
+        existing_record_id: job.existingRecordId,
+      });
     }
     return res.json({
       status: 'complete',
