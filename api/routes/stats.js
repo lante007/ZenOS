@@ -111,7 +111,7 @@ router.get('/estate',
 
       const row = summary.rows[0] || {};
       const yearsSpan = row.latest_year && row.earliest_year
-        ? row.latest_year - row.earliest_year
+        ? row.latest_year - row.earliest_year + 1
         : 0;
 
       return res.json({
