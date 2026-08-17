@@ -2219,7 +2219,7 @@ function CEOBriefModal({ open, onClose }) {
             </button>
           </div>
           <p className="ceo-brief-footer-note">
-            Generated from 45 distinct evaluation studies across a corpus of 66 classified documents. Updated each time a new document is classified.
+            Generated from {brief?.distinct_studies ?? '—'} distinct evaluation studies across a corpus of {brief?.total_documents ?? '—'} classified documents. Updated each time a new document is classified.
           </p>
           <p className="ceo-brief-footer-note">
             Filter by period, theme or geography coming soon.

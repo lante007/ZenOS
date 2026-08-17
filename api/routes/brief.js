@@ -428,6 +428,8 @@ router.post('/ceo',
         brief_text: sanitised,
         generated_at: new Date().toISOString(),
         total_docs: toNumber(corpus.total_docs),
+        distinct_studies: toNumber(distinctStudies),
+        total_documents: toNumber(totalDocuments),
         filters_applied: false,
         filters_note: 'Filter by period, theme or geography coming soon.',
         filters_received: {
