@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { extractText, extractWithOCR, qualityFromLength } = require('../../src/text-extractor');
+const { extractText, extractWithTextract, qualityFromLength } = require('../../src/text-extractor');
 const { detectProgramme } = require('../../src/programme-detector');
 const {
   classifyPass1,
@@ -57,13 +57,13 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
   }
 
   if (extraction.quality === 'NEEDS_OCR') {
-    console.log(`Text layer insufficient for ${filename}, attempting OCR...`);
-    const ocr = await extractWithOCR(buffer);
+    console.log(`Text layer insufficient for ${filename}, attempting Textract OCR...`);
+    const ocr = await extractWithTextract(tenant.s3_vault_bucket, s3Document?.key);
     const ocrChars = ocr.text ? ocr.text.length : 0;
 
     if (ocrChars > 100) {
       const ocrQuality = qualityFromLength(ocrChars);
-      console.log(`OCR extracted ${ocrChars} chars across ${ocr.pages_processed} page(s) for ${filename}, quality=${ocrQuality}`);
+      console.log(`Textract extracted ${ocrChars} chars after ${ocr.poll_attempts} poll(s) for ${filename}, quality=${ocrQuality}`);
       extraction = {
         ...extraction,
         text: ocrChars > 10000
@@ -96,7 +96,7 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
   // committed to the OCR path.
   const fullText = extraction.fullText || extraction.text;
   if (fullText.length < 2000) {
-    if (extraction.method === 'tesseract-ocr') {
+    if (extraction.method === 'textract-ocr') {
       console.log(`OCR text for ${filename} too short to classify (${fullText.length} chars) - routing to manual review`);
       return createManualReviewRecord({
         tenant, extraction, filename, mimeType, buffer, user, s3Document,

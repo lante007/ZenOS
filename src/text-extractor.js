@@ -14,6 +14,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const {
+  TextractClient,
+  StartDocumentTextDetectionCommand,
+  GetDocumentTextDetectionCommand,
+} = require('@aws-sdk/client-textract');
+
+const TEXTRACT_REGION = process.env.AWS_REGION || 'us-east-1';
+const textractClient = new TextractClient({ region: TEXTRACT_REGION });
 
 const SUPPORTED_TYPES = [
   'application/pdf',
@@ -77,63 +85,73 @@ async function extractFromPDF(buffer) {
   };
 }
 
-const OCR_MAX_PAGES = 20;
+const TEXTRACT_POLL_INTERVAL_MS = 10000;
+const TEXTRACT_MAX_POLL_ATTEMPTS = 30; // 30 * 10s = 5 min ceiling for a large scanned PDF
+
+function linesFromBlocks(blocks) {
+  return (blocks || [])
+    .filter(b => b.BlockType === 'LINE')
+    .map(b => b.Text)
+    .join('\n');
+}
 
 /**
  * OCR fallback for scanned/image PDFs that fail the pdf-parse text-layer
- * gate (charsPerPage < 100 in extractFromPDF). Rasterizes at most the first
- * 20 pages (executive summary / key findings / methodology - sufficient for
- * ADEI classification, and keeps a 90MB+ scanned report from taking minutes
- * per page) and runs tesseract per page. Uses execFileSync with argument
- * arrays (matching extractFromPPTX's python-pptx call below), not a
- * template-string execSync, so page filenames can never be interpreted as
- * shell syntax.
+ * gate (charsPerPage < 100 in extractFromPDF). Runs against the object
+ * already sitting in S3 via Textract's async document API - no local
+ * rasterization or OCR binary involved, so this can't repeat the resource
+ * exhaustion a local tesseract/pdftoppm install caused on this instance
+ * (see commit history: that approach took prod down and was reverted).
+ * Requires the object to already be in S3 (bucket/key), unlike the old
+ * buffer-based approach - callers without an S3-backed document can't OCR.
  */
-async function extractWithOCR(buffer) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-'));
-  const pdfPath = path.join(tmpDir, 'source.pdf');
-  fs.writeFileSync(pdfPath, buffer);
+async function extractWithTextract(bucket, key) {
+  if (!bucket || !key) {
+    return { text: '', method: 'OCR_FAILED', reason: 'no_s3_location' };
+  }
 
   try {
-    try {
-      execFileSync('pdftoppm', [
-        '-jpeg', '-r', '150',
-        '-f', '1', '-l', String(OCR_MAX_PAGES),
-        pdfPath, path.join(tmpDir, 'page'),
-      ], { timeout: 120000 });
-    } catch (err) {
-      return { text: '', method: 'OCR_FAILED', reason: `pdftoppm_failed: ${err.message}` };
-    }
+    console.log('Attempting Textract OCR for:', key);
+    const start = await textractClient.send(new StartDocumentTextDetectionCommand({
+      DocumentLocation: { S3Object: { Bucket: bucket, Name: key } },
+    }));
+    const jobId = start.JobId;
+    console.log('Textract job:', jobId);
 
-    const images = fs.readdirSync(tmpDir)
-      .filter(f => f.endsWith('.jpg'))
-      .sort();
+    let status = 'IN_PROGRESS';
+    let attempts = 0;
 
-    if (images.length === 0) {
-      return { text: '', method: 'OCR_FAILED', reason: 'no_pages_rasterized' };
-    }
+    while (status === 'IN_PROGRESS' && attempts < TEXTRACT_MAX_POLL_ATTEMPTS) {
+      await new Promise(resolve => setTimeout(resolve, TEXTRACT_POLL_INTERVAL_MS));
+      const result = await textractClient.send(new GetDocumentTextDetectionCommand({ JobId: jobId }));
+      status = result.JobStatus;
+      attempts++;
 
-    let fullText = '';
-    for (const img of images) {
-      const imgPath = path.join(tmpDir, img);
-      try {
-        const pageText = execFileSync('tesseract', [imgPath, 'stdout', '-l', 'eng'], {
-          timeout: 30000,
-          maxBuffer: 10 * 1024 * 1024,
-        }).toString();
-        fullText += pageText + '\n\n';
-      } catch (err) {
-        console.warn('OCR failed for page:', img, err.message);
+      if (status === 'SUCCEEDED') {
+        let fullText = linesFromBlocks(result.Blocks);
+        let nextToken = result.NextToken;
+        while (nextToken) {
+          const page = await textractClient.send(new GetDocumentTextDetectionCommand({ JobId: jobId, NextToken: nextToken }));
+          fullText += '\n\n' + linesFromBlocks(page.Blocks);
+          nextToken = page.NextToken;
+        }
+        console.log('Textract extracted:', fullText.trim().length, 'chars for', key);
+        return { text: fullText.trim(), method: 'textract-ocr', poll_attempts: attempts };
+      }
+
+      if (status === 'FAILED') {
+        console.error('Textract job failed:', jobId, 'for', key);
+        return { text: '', method: 'OCR_FAILED', reason: 'textract_job_failed' };
       }
     }
 
-    return {
-      text: fullText.trim(),
-      method: 'tesseract-ocr',
-      pages_processed: images.length,
-    };
-  } finally {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+    if (status === 'IN_PROGRESS') {
+      return { text: '', method: 'OCR_FAILED', reason: 'textract_timeout' };
+    }
+    return { text: '', method: 'OCR_FAILED', reason: `textract_status_${status}` };
+  } catch (err) {
+    console.error('Textract error for', key, ':', err.message);
+    return { text: '', method: 'OCR_FAILED', reason: `textract_error: ${err.message}` };
   }
 }
 
@@ -318,4 +336,4 @@ async function extractText(buffer, mimeType, filename) {
   };
 }
 
-module.exports = { extractText, isSupportedType, extractWithOCR, qualityFromLength };
+module.exports = { extractText, isSupportedType, extractWithTextract, qualityFromLength };
