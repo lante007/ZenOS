@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  Activity,
   AlertTriangle,
   ArrowRight,
   BarChart3,
@@ -5628,13 +5629,25 @@ function AdminShell({ active, children }) {
             <Gauge size={18} />
             <span>Dashboard</span>
           </a>
-          <a className={active === 'ask' ? 'active' : ''} href="/admin/ask">
-            <Search size={18} />
-            <span>Ask Auxeira</span>
+          <a className={active === 'usage' ? 'active' : ''} href="/admin/usage">
+            <BarChart3 size={18} />
+            <span>Usage Surveillance</span>
+          </a>
+          <a className={active === 'corpus-health' ? 'active' : ''} href="/admin/corpus-health">
+            <ShieldCheck size={18} />
+            <span>Corpus Health</span>
+          </a>
+          <a className={active === 'system-health' ? 'active' : ''} href="/admin/system-health">
+            <Activity size={18} />
+            <span>System Health</span>
           </a>
           <a className={active === 'tenants' ? 'active' : ''} href="/admin/tenants">
             <Database size={18} />
             <span>Tenants</span>
+          </a>
+          <a className={active === 'ask' ? 'active' : ''} href="/admin/ask">
+            <Search size={18} />
+            <span>Ask Auxeira</span>
           </a>
           <a className={active === 'support' ? 'active' : ''} href="/admin/support">
             <KeyRound size={18} />
@@ -5689,6 +5702,294 @@ function AdminDashboardPage() {
             </article>
           ))}
         </section>
+      </section>
+    </AdminShell>
+  );
+}
+
+function usageResponseColor(len) {
+  if (len == null) return 'var(--color-muted)';
+  if (len < 200) return '#EF4444';
+  if (len <= 500) return '#F59E0B';
+  return '#4CAF50';
+}
+
+function abbreviateEmail(email) {
+  if (!email) return 'Unknown user';
+  const [local, domain] = email.split('@');
+  return `${(local || '').slice(0, 3)}***@${domain || ''}`;
+}
+
+function AdminUsagePage() {
+  const [usage, setUsage] = useState(null);
+  useEffect(() => {
+    adminApi('/usage').then(setUsage).catch(() => setUsage(null));
+  }, []);
+
+  const featureSummary = usage?.feature_summary || [];
+  const recentQueries = (usage?.top_queries || []).filter(q => q.feature === 'ASK_ZENEX');
+  const gapSignals = usage?.gap_signals || [];
+  const torSummary = featureSummary.find(f => f.feature === 'TOR');
+  const ceoBriefSummary = featureSummary.find(f => f.feature === 'CEO_BRIEF');
+
+  return (
+    <AdminShell active="usage">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Founder console</p>
+            <h1>Usage Surveillance</h1>
+          </div>
+        </header>
+
+        {usage?.note && <p className="form-error">{usage.note}</p>}
+
+        <section className="admin-section-heading">
+          <div>
+            <p className="eyebrow">Section 1</p>
+            <h2>Feature Usage Summary</h2>
+          </div>
+        </section>
+        <section className="table-panel">
+          <table className="records-table users-table">
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Feature</th>
+                <th>Uses</th>
+                <th>Unique Users</th>
+                <th>Last Used</th>
+              </tr>
+            </thead>
+            <tbody>
+              {featureSummary.map((row, i) => (
+                <tr key={`${row.tenant_id}-${row.feature}-${i}`}>
+                  <td>{row.tenant_id}</td>
+                  <td>{row.feature}</td>
+                  <td>{row.usage_count}</td>
+                  <td>{row.unique_users}</td>
+                  <td>{row.last_used ? new Date(row.last_used).toLocaleString() : '—'}</td>
+                </tr>
+              ))}
+              {featureSummary.length === 0 && (
+                <tr><td colSpan={5}>No usage data yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="admin-section-heading">
+          <div>
+            <p className="eyebrow">Section 2</p>
+            <h2>Recent Ask Zenex Queries</h2>
+          </div>
+        </section>
+        <section className="table-panel">
+          <table className="records-table users-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Query</th>
+                <th>Response Length</th>
+                <th>Cited Records</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentQueries.map((row, i) => (
+                <tr key={i}>
+                  <td>{row.created_at ? new Date(row.created_at).toLocaleString() : '—'}</td>
+                  <td>{row.user_email}</td>
+                  <td>{row.query_text}</td>
+                  <td style={{ color: usageResponseColor(row.response_length) }}>{row.response_length ?? '—'}</td>
+                  <td>{row.records_cited ?? '—'}</td>
+                </tr>
+              ))}
+              {recentQueries.length === 0 && (
+                <tr><td colSpan={5}>No Ask Zenex activity yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="admin-section-heading">
+          <div>
+            <p className="eyebrow">Section 3</p>
+            <h2>Corpus Gap Signals</h2>
+            <p className="explanation-quality">Questions with weak answers — these queries returned short responses, indicating potential corpus gaps.</p>
+          </div>
+        </section>
+        <div className="admin-record-grid">
+          {gapSignals.map((row, i) => (
+            <article className="admin-record-card" key={i}>
+              <strong>{abbreviateEmail(row.user_email)}</strong>
+              <span>{row.query_text}</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+                {row.created_at ? new Date(row.created_at).toLocaleDateString() : ''}
+              </span>
+            </article>
+          ))}
+          {gapSignals.length === 0 && <p>No gap signals recorded yet.</p>}
+        </div>
+
+        <section className="admin-section-heading">
+          <div>
+            <p className="eyebrow">Section 4</p>
+            <h2>TOR and CEO Brief Usage</h2>
+          </div>
+        </section>
+        <section className="kpi-grid">
+          <article className="metric-card">
+            <span>TORs generated</span>
+            <strong>{torSummary?.usage_count ?? 0}</strong>
+          </article>
+          <article className="metric-card">
+            <span>CEO Briefs generated</span>
+            <strong>{ceoBriefSummary?.usage_count ?? 0}</strong>
+          </article>
+          <article className="metric-card">
+            <span>Last TOR</span>
+            <strong>{torSummary?.last_used ? new Date(torSummary.last_used).toLocaleDateString() : '—'}</strong>
+          </article>
+          <article className="metric-card">
+            <span>Last CEO Brief</span>
+            <strong>{ceoBriefSummary?.last_used ? new Date(ceoBriefSummary.last_used).toLocaleDateString() : '—'}</strong>
+          </article>
+        </section>
+      </section>
+    </AdminShell>
+  );
+}
+
+function corpusHealthBorderColor(avgEqs) {
+  const n = Number(avgEqs);
+  if (!Number.isFinite(n)) return 'var(--color-border)';
+  if (n >= 3.0) return '#4CAF50';
+  if (n >= 2.5) return '#F59E0B';
+  return '#EF4444';
+}
+
+function AdminCorpusHealthPage() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    adminApi('/corpus-health').then(setData).catch(() => setData(null));
+  }, []);
+
+  const tenants = data?.tenants || [];
+
+  return (
+    <AdminShell active="corpus-health">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Founder console</p>
+            <h1>Corpus Health</h1>
+          </div>
+        </header>
+
+        <div className="admin-record-grid">
+          {tenants.map(t => (
+            <article
+              className="admin-record-card"
+              key={t.tenant}
+              style={{ borderColor: corpusHealthBorderColor(t.avg_eqs), borderWidth: '2px', borderStyle: 'solid' }}
+            >
+              <strong>{t.name || t.tenant}</strong>
+              {t.error ? (
+                <span>Error: {t.error}</span>
+              ) : (
+                <>
+                  <span>Total records: {t.total}</span>
+                  <span>TIER_1: {t.tier1} · TIER_2: {t.tier2} · TIER_3: {t.tier3}</span>
+                  <span>Avg EQS: {t.avg_eqs ?? '—'}</span>
+                  <span>Missing grant: {t.missing_grant}</span>
+                  <span>Missing PM: {t.missing_pm}</span>
+                  <span>Missing province: {t.missing_province}</span>
+                  <span>Evidence gaps: {t.evidence_gaps}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+                    Last classified: {t.last_classified ? new Date(t.last_classified).toLocaleDateString() : '—'}
+                  </span>
+                </>
+              )}
+            </article>
+          ))}
+          {tenants.length === 0 && <p>No tenant data available.</p>}
+        </div>
+      </section>
+    </AdminShell>
+  );
+}
+
+function formatUptime(seconds) {
+  if (!Number.isFinite(seconds)) return '—';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
+
+function AdminSystemHealthPage() {
+  const [health, setHealth] = useState(null);
+  const [lastCheckedAt, setLastCheckedAt] = useState(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+
+  useEffect(() => {
+    function load() {
+      adminApi('/system-health').then(data => {
+        setHealth(data);
+        setLastCheckedAt(Date.now());
+      }).catch(() => setHealth(null));
+    }
+    load();
+    const refreshInterval = setInterval(load, 60000);
+    return () => clearInterval(refreshInterval);
+  }, []);
+
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setLastCheckedAt(current => {
+        if (current) setSecondsAgo(Math.round((Date.now() - current) / 1000));
+        return current;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, []);
+
+  const statusColor = health?.status === 'healthy' ? '#4CAF50' : '#EF4444';
+  const tiles = [
+    ['DB Status', health?.status ? health.status.toUpperCase() : 'UNKNOWN', statusColor],
+    ['Server Uptime', formatUptime(health?.server_uptime_seconds), null],
+    ['Memory Used', health ? `${health.memory_mb?.used ?? '—'}MB / ${health.memory_mb?.total ?? '—'}MB` : '—', null],
+    ['Active Tenants', health?.active_tenants ?? '—', null],
+    ['Total Records', health?.total_active_records ?? '—', null],
+    ['Node Version', health?.node_version ?? '—', null],
+  ];
+
+  return (
+    <AdminShell active="system-health">
+      <section className="dashboard-main">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Founder console</p>
+            <h1>System Health</h1>
+          </div>
+          <p style={{ color: 'var(--color-muted)' }}>
+            {lastCheckedAt ? `Last checked: ${secondsAgo}s ago` : 'Checking...'}
+          </p>
+        </header>
+
+        <section className="kpi-grid">
+          {tiles.map(([label, value, color]) => (
+            <article className="metric-card" key={label}>
+              <span>{label}</span>
+              <strong style={color ? { color } : undefined}>{value}</strong>
+            </article>
+          ))}
+        </section>
+
+        <p style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+          Checked: {health?.checked_at ? new Date(health.checked_at).toLocaleString() : '—'}
+        </p>
+        {health?.error && <p className="form-error">{health.error}</p>}
       </section>
     </AdminShell>
   );
@@ -6223,6 +6524,9 @@ function App() {
 
   if (path === '/admin/login') return <AdminLoginPage />;
   if (path === '/admin/dashboard') return <AdminDashboardPage />;
+  if (path === '/admin/usage') return <AdminUsagePage />;
+  if (path === '/admin/corpus-health') return <AdminCorpusHealthPage />;
+  if (path === '/admin/system-health') return <AdminSystemHealthPage />;
   if (path === '/admin/ask') return <AdminAskPage />;
   if (path === '/admin/tenants') return <AdminTenantsPage />;
   if (path === '/admin/support') return <AdminSupportPage />;
