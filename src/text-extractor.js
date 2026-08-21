@@ -77,6 +77,66 @@ async function extractFromPDF(buffer) {
   };
 }
 
+const OCR_MAX_PAGES = 20;
+
+/**
+ * OCR fallback for scanned/image PDFs that fail the pdf-parse text-layer
+ * gate (charsPerPage < 100 in extractFromPDF). Rasterizes at most the first
+ * 20 pages (executive summary / key findings / methodology - sufficient for
+ * ADEI classification, and keeps a 90MB+ scanned report from taking minutes
+ * per page) and runs tesseract per page. Uses execFileSync with argument
+ * arrays (matching extractFromPPTX's python-pptx call below), not a
+ * template-string execSync, so page filenames can never be interpreted as
+ * shell syntax.
+ */
+async function extractWithOCR(buffer) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-'));
+  const pdfPath = path.join(tmpDir, 'source.pdf');
+  fs.writeFileSync(pdfPath, buffer);
+
+  try {
+    try {
+      execFileSync('pdftoppm', [
+        '-jpeg', '-r', '150',
+        '-f', '1', '-l', String(OCR_MAX_PAGES),
+        pdfPath, path.join(tmpDir, 'page'),
+      ], { timeout: 120000 });
+    } catch (err) {
+      return { text: '', method: 'OCR_FAILED', reason: `pdftoppm_failed: ${err.message}` };
+    }
+
+    const images = fs.readdirSync(tmpDir)
+      .filter(f => f.endsWith('.jpg'))
+      .sort();
+
+    if (images.length === 0) {
+      return { text: '', method: 'OCR_FAILED', reason: 'no_pages_rasterized' };
+    }
+
+    let fullText = '';
+    for (const img of images) {
+      const imgPath = path.join(tmpDir, img);
+      try {
+        const pageText = execFileSync('tesseract', [imgPath, 'stdout', '-l', 'eng'], {
+          timeout: 30000,
+          maxBuffer: 10 * 1024 * 1024,
+        }).toString();
+        fullText += pageText + '\n\n';
+      } catch (err) {
+        console.warn('OCR failed for page:', img, err.message);
+      }
+    }
+
+    return {
+      text: fullText.trim(),
+      method: 'tesseract-ocr',
+      pages_processed: images.length,
+    };
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+  }
+}
+
 /**
  * Extract text from DOCX buffer: raw body text via mammoth, plus any
  * tables rendered separately as tab-separated rows and appended after
@@ -258,4 +318,4 @@ async function extractText(buffer, mimeType, filename) {
   };
 }
 
-module.exports = { extractText, isSupportedType };
+module.exports = { extractText, isSupportedType, extractWithOCR, qualityFromLength };

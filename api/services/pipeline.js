@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { extractText } = require('../../src/text-extractor');
+const { extractText, extractWithOCR, qualityFromLength } = require('../../src/text-extractor');
 const { detectProgramme } = require('../../src/programme-detector');
 const {
   classifyPass1,
@@ -26,14 +26,12 @@ function buildRecordId(tenant, sourceId) {
 }
 
 async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Document }) {
-  const extraction = await extractText(buffer, mimeType, filename);
+  let extraction = await extractText(buffer, mimeType, filename);
   if (extraction.quality === 'FAILED') throw new Error('Text extraction failed');
-  if (extraction.quality === 'NEEDS_OCR') {
-    const needsOcr = new Error(`Insufficient text for classification: ${extraction.charCount || 0} chars`);
-    needsOcr.code = 'NEEDS_OCR';
-    throw needsOcr;
-  }
 
+  // Dedup check runs before any OCR attempt (on file_hash/filename, both
+  // available regardless of extraction quality) so a file already in the
+  // corpus never pays the OCR cost just because its text layer is missing.
   if (process.env.DATABASE_URL) {
     const pool = db.getPool();
     const schema = tenant.db_schema || tenant.slug || 'zenex';
@@ -58,14 +56,53 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
     }
   }
 
+  if (extraction.quality === 'NEEDS_OCR') {
+    console.log(`Text layer insufficient for ${filename}, attempting OCR...`);
+    const ocr = await extractWithOCR(buffer);
+    const ocrChars = ocr.text ? ocr.text.length : 0;
+
+    if (ocrChars > 100) {
+      const ocrQuality = qualityFromLength(ocrChars);
+      console.log(`OCR extracted ${ocrChars} chars across ${ocr.pages_processed} page(s) for ${filename}, quality=${ocrQuality}`);
+      extraction = {
+        ...extraction,
+        text: ocrChars > 10000
+          ? ocr.text.substring(0, 8000) + '\n\n[...]\n\n' + ocr.text.substring(ocrChars - 2000)
+          : ocr.text,
+        fullText: ocr.text,
+        fullTextLength: ocrChars,
+        quality: ocrQuality,
+        method: ocr.method,
+        flag: ocrQuality === 'FAILED' ? 'EXTRACTION_POOR' : null,
+      };
+    } else {
+      console.log(`OCR produced insufficient text for ${filename} (${ocrChars} chars, ${ocr.reason || 'unknown reason'}) - routing to manual review`);
+      return createManualReviewRecord({
+        tenant, extraction, filename, mimeType, buffer, user, s3Document,
+        reason: ocr.reason || 'ocr_insufficient_text',
+      });
+    }
+  }
+
   const detection = detectProgramme(filename, extraction.text.substring(0, 500));
 
   // Minimum text gate before Claude call. Use fullText (not the legacy
   // pre-truncated extraction.text) so this reflects genuine content volume.
-  // NEEDS_OCR (empty text) is caught above with a specific error code; this
-  // gate now only covers genuinely short-but-readable extractions.
+  // A total NEEDS_OCR miss (empty text) is caught above with its own error
+  // code; this gate covers genuinely short-but-readable extractions - which,
+  // for an OCR'd page, means OCR technically produced text (>100 chars) but
+  // not enough to classify. Route that to manual review like any other
+  // OCR shortfall, rather than throwing, since the document was already
+  // committed to the OCR path.
   const fullText = extraction.fullText || extraction.text;
   if (fullText.length < 2000) {
+    if (extraction.method === 'tesseract-ocr') {
+      console.log(`OCR text for ${filename} too short to classify (${fullText.length} chars) - routing to manual review`);
+      return createManualReviewRecord({
+        tenant, extraction, filename, mimeType, buffer, user, s3Document,
+        reason: `ocr_below_classification_threshold: ${fullText.length} chars`,
+      });
+    }
     throw new Error(`Insufficient text for classification: ${fullText.length} chars`);
   }
 
@@ -174,6 +211,81 @@ async function classifyBuffer({ tenant, buffer, filename, mimeType, user, s3Docu
   } else {
     localStore.saveRecord(tenant, record);
     localStore.addQueueItems(tenant, record, queueItems);
+  }
+
+  return record;
+}
+
+/**
+ * OCR-shortfall path: the document is a scanned/image PDF where OCR either
+ * produced nothing usable (<=100 chars) or produced too little to classify
+ * (<2000 chars). Rather than throwing NEEDS_OCR and leaving no trace in the
+ * corpus, this still creates a document + intelligence_records row so the
+ * file is visible and can be picked up for manual review (e.g. re-sourcing
+ * a text-layer copy) instead of silently disappearing on every retry.
+ *
+ * No Claude classification is attempted - there's no reliable text to
+ * classify - so eqs_composite/eqs_tier etc. are left null. record_status is
+ * set to PENDING_REVIEW (the same status the queue-item mechanism already
+ * uses for low-confidence fields) so it surfaces in the existing Workspace
+ * queue rather than requiring a new review surface.
+ */
+async function createManualReviewRecord({ tenant, extraction, filename, mimeType, buffer, user, s3Document, reason }) {
+  const detection = detectProgramme(filename, '');
+  const recordId = buildRecordId(tenant, s3Document?.key || filename);
+
+  const record = {
+    id: recordId,
+    adei_record_id: recordId,
+    tenant_id: tenant.slug,
+    filename,
+    institution: tenant.name,
+    programme: detection.programme,
+    role: detection.role,
+    programme_name: detection.programme,
+    phase: detection.phase,
+    extraction_quality: 'FAILED',
+    rights_status: extraction.rights || 'CLEAR',
+    eqs_composite: null,
+    confidence_tier: 'N_A',
+    classification_confidence: {},
+    validation_flags: [{
+      field: 'extraction',
+      severity: 'HIGH',
+      message: `OCR could not produce enough text to classify (${reason}). Needs manual review or a re-sourced text-layer document.`,
+    }],
+    fatima_queue: [{
+      field: 'extraction_quality',
+      claudeValue: null,
+      claudeConf: 0,
+      systemRecommendation: 'Manual review required: OCR could not extract usable text from this document.',
+    }],
+    fatima_queue_items: 1,
+    api_usage: null,
+    classified_at: new Date().toISOString(),
+    taxonomy_version: 'v2.1',
+    scoring_logic_version: 'v0.2',
+    status: 'PENDING_REVIEW',
+    classified_by: 'ocr-pipeline',
+    extraction_pass: 1,
+  };
+
+  await storage.uploadProcessedText({ tenant, recordId, text: '' });
+  await storage.uploadProcessedRecord({ tenant, record });
+
+  const document = s3Document ? {
+    s3_key: s3Document.key,
+    filename,
+    mime_type: mimeType,
+    file_size_bytes: buffer.length,
+    file_hash: extraction.hash,
+  } : {};
+
+  if (process.env.DATABASE_URL) {
+    await db.createRecord(tenant, record, document);
+  } else {
+    localStore.saveRecord(tenant, record);
+    localStore.addQueueItems(tenant, record, record.fatima_queue);
   }
 
   return record;
