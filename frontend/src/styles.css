@@ -375,31 +375,32 @@
 
 .report-card {
   padding: 24px;
-  border: 1px solid var(--border);
-  background: #F7F5F0;
-  color: #182033;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e0e0e0;
 }
 
 .report-card header {
   padding-bottom: 18px;
-  border-bottom: 1px solid rgba(24, 32, 51, 0.16);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .report-card h2 {
   margin: 0 0 12px;
-  color: #311F47;
+  color: #ffffff;
   font-size: 24px;
 }
 
 .report-card header p {
   margin: 4px 0;
-  color: #334155;
+  color: rgba(255, 255, 255, 0.7);
   font-weight: 700;
 }
 
 .report-card section {
   padding: 18px 0;
-  border-bottom: 1px solid rgba(24, 32, 51, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .report-card h3 {
@@ -411,7 +412,7 @@
 
 .report-card p {
   margin: 0;
-  color: #1E293B;
+  color: rgba(255, 255, 255, 0.85);
   line-height: 1.65;
 }
 

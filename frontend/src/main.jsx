@@ -60,7 +60,7 @@ const knowledgeAudiences = [
 // resolving (success or error) advances past pct 90. See uploadAndClassify.
 const CLASSIFY_PHASES = [
   { label: 'Extracting text...', subtext: '', delay: 3000, pct: 25 },
-  { label: 'Classifying document structure...', subtext: '', delay: 8000, pct: 50 },
+  { label: 'Analysing document structure...', subtext: '', delay: 8000, pct: 50 },
   {
     label: 'Running methodological analysis...',
     subtext: 'This may take up to 30 seconds for detailed evaluations.',
@@ -479,7 +479,7 @@ function AlertPriorityInfoModal({ open, onClose }) {
       <section className="formula-modal" role="dialog" aria-modal="true" aria-label="How priority is determined" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <p className="eyebrow">Intelligence Alerts</p>
+            <p className="eyebrow">Evidence Alerts</p>
             <h2>How priority is determined</h2>
           </div>
           <button className="icon-button" type="button" aria-label="Close explanation" onClick={onClose}>
@@ -2025,9 +2025,9 @@ function DashboardPage() {
         <section className="alerts-section" aria-label="Intelligence alerts">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Learning Flywheel</p>
+              <p className="eyebrow">Evidence Signals</p>
               <h2>
-                Intelligence Alerts
+                Evidence Alerts
                 <button
                   className="priority-info-trigger"
                   type="button"
@@ -2037,7 +2037,7 @@ function DashboardPage() {
                   ⓘ
                 </button>
               </h2>
-              <span>EvidenceOS surfaces the right intelligence to the right person at the right moment</span>
+              <span>Surfaces critical evidence signals for the right person at the right moment</span>
             </div>
             <span className="live-badge">Live</span>
           </div>
@@ -2173,7 +2173,16 @@ function CapitalBlock({ lines }) {
   );
 }
 
+function sanitiseDashes(text) {
+  return text
+    .replace(/—/g, ',')
+    .replace(/–/g, ',')
+    .replace(/---/g, ',')
+    .replace(/ -- /g, ', ');
+}
+
 function renderSectionBody(body, sIndex, agendaAdded, onAddToAgenda) {
+  const sanitisedBody = sanitiseDashes(body);
   const renderParagraphs = (text, keyPrefix) =>
     text.split(/\n{2,}/).filter(Boolean).map((paragraph, pIndex) => (
       <p className="ceo-brief-section-body" key={`${keyPrefix}-${pIndex}`}>
@@ -2181,11 +2190,11 @@ function renderSectionBody(body, sIndex, agendaAdded, onAddToAgenda) {
       </p>
     ));
 
-  const match = CAPITAL_BLOCK_RE.exec(body);
-  if (!match) return renderParagraphs(body, 'p');
+  const match = CAPITAL_BLOCK_RE.exec(sanitisedBody);
+  if (!match) return renderParagraphs(sanitisedBody, 'p');
 
-  const before = body.slice(0, match.index);
-  const after = body.slice(match.index + match[0].length);
+  const before = sanitisedBody.slice(0, match.index);
+  const after = sanitisedBody.slice(match.index + match[0].length);
   const lines = parseCapitalBlockLines(match[1]);
 
   return [
@@ -2275,7 +2284,7 @@ function CEOBriefModal({ open, onClose }) {
             </button>
           </div>
           <p className="ceo-brief-footer-note">
-            Generated from {brief?.distinct_studies ?? '—'} distinct evaluation studies across a corpus of {brief?.total_documents ?? '—'} classified documents. Updated each time a new document is classified.
+            Generated from {brief?.distinct_studies ?? '0'} distinct evaluation studies across a corpus of {brief?.total_documents ?? '0'} classified documents. Updated each time a new document is classified.
           </p>
           <p className="ceo-brief-footer-note">
             Filter by period, theme or geography coming soon.
@@ -2319,7 +2328,7 @@ function exportRecordsCsv(records) {
 }
 
 function RecordsPage() {
-  const { records, source } = useLiveRecords();
+  const { records } = useLiveRecords();
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('search') || '');
   const [filters, setFilters] = useState({ tier: 'all', type: 'all', phase: 'all', province: 'all' });
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -2430,7 +2439,7 @@ function RecordsPage() {
         <section className="table-panel" aria-label="Classified evidence records">
           <div className="table-summary">
             <span>{filteredRecords.length} records</span>
-            <span>{source === 'live' ? 'Live API' : 'Offline preview'} · 55-field ADEI taxonomy v2.1</span>
+            <span>ADEI TAXONOMY V2.1</span>
           </div>
           <div className="records-table" role="table">
             <div className="records-row records-head" role="row">
@@ -2887,6 +2896,10 @@ function parseTorSections(text) {
   return sections.map(s => ({ ...s, body: s.body.trim() }));
 }
 
+// TOR Section 4 (Strategic Intelligence) is hidden pending sign-off; the
+// fetch/state logic keeps running as normal, only the render is gated.
+const SHOW_STRATEGIC_INTELLIGENCE = false;
+
 const SI_ORDER = ['POLICY_ALIGNMENT', 'SECTOR_WHITE_SPACE', 'ZENEX_ADVANTAGE'];
 
 const SI_CARD_META = {
@@ -2993,7 +3006,7 @@ function TorGeneratorPage() {
         setProgressSubtext('');
       }, 15000);
       const progressTimer30 = window.setTimeout(() => {
-        setProgressMessage('Applying strategic intelligence...');
+        setProgressMessage('Reviewing evidence base...');
       }, 30000);
 
       const finish = () => {
@@ -3036,7 +3049,7 @@ function TorGeneratorPage() {
     if (!targetName) return;
     setLoading(true);
     setError(null);
-    setProgressMessage('Analysing evidence and preparing Terms of Reference...');
+    setProgressMessage('Preparing Terms of Reference...');
     setProgressSubtext('This may take up to 30 seconds.');
     try {
       const job = await apiRequest('/api/tor/generate', {
@@ -3278,7 +3291,7 @@ function TorGeneratorPage() {
               <span className="pulse-dot" />
               <span className="pulse-dot" />
               <span className="pulse-dot" />
-              <span>{progressMessage || `Analysing evidence and preparing Terms of Reference for ${programmeName}...`}</span>
+              <span>{progressMessage || `Preparing Terms of Reference for ${programmeName}...`}</span>
             </div>
             {progressSubtext && <p className="upload-progress-subtext">{progressSubtext}</p>}
           </div>
@@ -3373,7 +3386,7 @@ function TorGeneratorPage() {
           </section>
         )}
 
-        {strategicIntelligence && (() => {
+        {SHOW_STRATEGIC_INTELLIGENCE && strategicIntelligence && (() => {
           const visibleOpportunities = SI_ORDER
             .map(type => (strategicIntelligence.opportunities || []).find(o => o.opportunity_type === type))
             .filter(o => o && !dismissedTypes.has(o.opportunity_type));
@@ -3386,8 +3399,7 @@ function TorGeneratorPage() {
                   <p className="eyebrow">Section 4 · Strategic Intelligence</p>
                   <h2>What the sector does not yet know</h2>
                   <p className="section-meta">
-                    Powered by real-time strategy alignment. Refreshes on generation.
-                    {strategicIntelligence.generated_at && ` Last refreshed ${new Date(strategicIntelligence.generated_at).toLocaleString('en-ZA')}.`}
+                    {strategicIntelligence.generated_at && `Last refreshed ${new Date(strategicIntelligence.generated_at).toLocaleString('en-ZA')}.`}
                   </p>
                 </div>
                 {canEditTor && (
@@ -3585,7 +3597,7 @@ function AskZenexPage() {
           <div>
             <p className="eyebrow">Evidence synthesis</p>
             <h1>Ask Zenex</h1>
-            <p>Search {searchRecordCount} classified intelligence records</p>
+            <p>Search the evidence base</p>
           </div>
         </header>
 
@@ -3604,7 +3616,7 @@ function AskZenexPage() {
               onKeyDown={event => {
                 if (event.key === 'Enter') submitAsk();
               }}
-              placeholder="Ask anything about Zenex's evidence base..."
+              placeholder="Search the evidence base..."
             />
           </label>
           <button className="primary-action" type="button" disabled={!question.trim() || loading} onClick={() => submitAsk()}>
@@ -4100,7 +4112,7 @@ function ClassifyPage() {
           <article className="pipeline-panel">
             <div className="panel-title">
               <Clock3 size={20} />
-              <span>Classification pipeline</span>
+              <span>Processing pipeline</span>
             </div>
 
             <div className="pipeline-list">
@@ -5150,7 +5162,7 @@ function KnowledgePage() {
         <header className="dashboard-header">
           <div>
             <p className="eyebrow">Knowledge products</p>
-            <h1>Generate Knowledge Product</h1>
+            <h1>Knowledge Products</h1>
           </div>
         </header>
 
@@ -5271,7 +5283,7 @@ function KnowledgePage() {
             disabled={!(selectedRecord || synthesisId) || !audienceSelected}
           >
             <Edit3 size={18} />
-            <span>{isGenerating ? `Generating ${selectedAudience.label} brief for ${displayProgrammeName}...` : 'Generate Brief'}</span>
+            <span>{isGenerating ? `Generating ${selectedAudience.label} brief for ${displayProgrammeName}...` : 'Create Brief'}</span>
           </button>
         </section>
 
