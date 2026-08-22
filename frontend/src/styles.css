@@ -1030,7 +1030,8 @@ button:disabled {
   max-height: min(860px, calc(100vh - 56px));
   overflow: auto;
   border-radius: 8px;
-  background: #ffffff;
+  background: #0d1b2e;
+  color: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow);
 }
 
@@ -1056,14 +1057,14 @@ button:disabled {
 
 .ceo-brief-title {
   margin: 0 0 6px;
-  color: #0A1628;
+  color: rgba(255, 255, 255, 0.9);
   font-size: 18px;
   font-weight: 800;
 }
 
 .ceo-brief-meta {
   margin: 0;
-  color: #6B7686;
+  color: rgba(255, 255, 255, 0.6);
   font-size: 12px;
 }
 
@@ -1071,7 +1072,7 @@ button:disabled {
   position: absolute;
   top: 24px;
   right: 24px;
-  color: #6B7686;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .ceo-brief-divider {
@@ -1084,7 +1085,7 @@ button:disabled {
 .ceo-brief-divider-thin {
   height: 1px;
   margin: 18px 32px;
-  background: rgba(239, 114, 24, 0.28);
+  background: rgba(239, 114, 24, 0.3);
   opacity: 1;
 }
 
@@ -1095,13 +1096,13 @@ button:disabled {
 .ceo-brief-loading,
 .ceo-brief-error {
   padding: 40px 0;
-  color: #6B7686;
+  color: rgba(255, 255, 255, 0.7);
   font-size: 14px;
   text-align: center;
 }
 
 .ceo-brief-error {
-  color: #C53030;
+  color: #FF6B6B;
 }
 
 .ceo-brief-section {
@@ -1110,7 +1111,7 @@ button:disabled {
 
 .ceo-brief-section-heading {
   margin: 0 0 10px;
-  color: #0A1628;
+  color: #EF7218;
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -1119,13 +1120,13 @@ button:disabled {
 
 .ceo-brief-section-body {
   margin: 0 0 12px;
-  color: #334155;
+  color: rgba(255, 255, 255, 0.85);
   font-size: 14px;
   line-height: 1.6;
 }
 
 .ceo-brief-capital-block {
-  background: #F8F9FA;
+  background: rgba(239, 114, 24, 0.1);
   border-left: 3px solid #EF7218;
   padding: 12px 16px;
   margin: 12px 0;
@@ -1137,7 +1138,7 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid #EEE;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .ceo-brief-capital-row:last-child {
@@ -1146,12 +1147,12 @@ button:disabled {
 
 .ceo-brief-capital-amount {
   font-weight: 700;
-  color: #0A1628;
+  color: #ffffff;
   font-size: 16px;
 }
 
 .ceo-brief-capital-label {
-  color: #666666;
+  color: rgba(255, 255, 255, 0.65);
   font-size: 13px;
 }
 
@@ -1189,7 +1190,7 @@ button:disabled {
 
 .ceo-brief-footer {
   padding: 20px 32px 28px;
-  border-top: 1px solid #F0F2F5;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .ceo-brief-footer-actions {
@@ -1203,7 +1204,7 @@ button:disabled {
   min-height: 40px;
   border: none;
   border-radius: 6px;
-  background: #0A1628;
+  background: #EF7218;
   color: #ffffff;
   font-size: 13px;
   font-weight: 700;
@@ -1211,13 +1212,13 @@ button:disabled {
 }
 
 .ceo-brief-footer .btn-ghost {
-  color: #334155;
-  border-color: #DDE3EA;
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .ceo-brief-footer-note {
   margin: 4px 0 0;
-  color: #94A3B8;
+  color: rgba(255, 255, 255, 0.5);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -1226,6 +1227,7 @@ button:disabled {
   .ceo-brief-modal,
   .ceo-brief-modal * {
     visibility: visible;
+    color: black !important;
   }
 
   .ceo-brief-modal {
@@ -1236,6 +1238,7 @@ button:disabled {
     margin: 0;
     border: 0;
     box-shadow: none;
+    background: white !important;
   }
 
   .ceo-brief-close,
@@ -4633,7 +4636,7 @@ button.estate-stat-tile {
 }
 
 .synthesis-section h3 {
-  color: #00B4D8;
+  color: #EF7218;
   font-size: 28px;
 }
 
@@ -4642,10 +4645,11 @@ button.estate-stat-tile {
 .leverage-card,
 .pattern-card {
   margin-top: 14px;
-  padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: rgba(10, 22, 40, 0.52);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .finding-header,
