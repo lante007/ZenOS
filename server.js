@@ -29,6 +29,7 @@ const statsRoutes = require('./api/routes/stats');
 const financialRoutes = require('./api/routes/financial');
 const workspaceRoutes = require('./api/routes/workspace');
 const briefRoutes = require('./api/routes/brief');
+const meRoutes = require('./api/routes/me');
 const db = require('./api/services/db');
 const localStore = require('./api/services/local-store');
 
@@ -118,6 +119,7 @@ app.use('/api/provenance', provenanceRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/workspace', workspaceRoutes);
 app.use('/api/brief', briefRoutes);
+app.use('/api/me', meRoutes);
 app.use('/api', knowledgeRoutes);
 
 app.use((err, req, res, _next) => {

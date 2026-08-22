@@ -156,8 +156,32 @@ const FALLBACK_RECORDS_EMPTY = [];
 const API_BASE = tenantConfig.apiUrl.replace(/\/$/, '');
 const ID_TOKEN_STORAGE_KEY = 'evidenceos_id_token';
 const ACCESS_TOKEN_STORAGE_KEY = 'evidenceos_access_token';
+const FEATURES_STORAGE_KEY = 'evidenceos_features_enabled';
 let browserIdToken = sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || '';
 let browserAccessToken = sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) || '';
+let browserFeaturesEnabled = (() => {
+  try {
+    return JSON.parse(sessionStorage.getItem(FEATURES_STORAGE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+})();
+
+function currentFeatures() {
+  return browserFeaturesEnabled;
+}
+
+// A zone with no entry in features_enabled (undefined) falls back to
+// role-based NAV_VISIBILITY; features_enabled can only narrow access
+// below what the role already permits, never grant beyond it.
+function canAccess(zone, features = currentFeatures()) {
+  return features[zone] === undefined || features[zone] === true;
+}
+
+function cacheFeaturesEnabled(features) {
+  browserFeaturesEnabled = features || {};
+  sessionStorage.setItem(FEATURES_STORAGE_KEY, JSON.stringify(browserFeaturesEnabled));
+}
 
 function currentUser() {
   const payload = decodeJwtPayload(browserIdToken);
@@ -192,6 +216,10 @@ function setInMemoryToken(idToken, accessToken = '') {
   else sessionStorage.removeItem(ID_TOKEN_STORAGE_KEY);
   if (browserAccessToken) sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, browserAccessToken);
   else sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  if (!browserIdToken) {
+    browserFeaturesEnabled = {};
+    sessionStorage.removeItem(FEATURES_STORAGE_KEY);
+  }
 }
 
 function decodeJwtPayload(token) {
@@ -517,6 +545,16 @@ async function apiRequest(path, options = {}) {
     throw error;
   }
   return response.json();
+}
+
+async function fetchAndCacheFeatures() {
+  try {
+    const data = await apiRequest('/api/me');
+    cacheFeaturesEnabled(data?.features_enabled || {});
+  } catch {
+    cacheFeaturesEnabled({});
+  }
+  return browserFeaturesEnabled;
 }
 
 function normalizeRecord(record) {
@@ -1189,6 +1227,21 @@ const NAV_VISIBILITY = {
   '/settings': ['ORGANISATION_LEAD', 'COMMUNICATIONS', 'EVIDENCE_ANALYST'],
 };
 
+// features_enabled keys don't share the nav paths' spelling (records is
+// "library", classify is "upload", ask is "ask_zenex", queue is
+// "workspace") so this can't be derived from the path string - it needs
+// an explicit map.
+const NAV_PATH_TO_ZONE = {
+  '/dashboard': 'dashboard',
+  '/records': 'library',
+  '/classify': 'upload',
+  '/synthesise': 'synthesise',
+  '/ask': 'ask_zenex',
+  '/products': 'products',
+  '/queue': 'workspace',
+  '/settings': 'settings',
+};
+
 function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() }) {
   const navItems = [
     { path: '/dashboard', activeKey: 'dashboard', icon: <Gauge size={18} />, label: 'Dashboard' },
@@ -1201,7 +1254,7 @@ function DashboardNav({ active, queueBadge = queueCount(), user = currentUser() 
     { path: '/settings', activeKey: 'settings', icon: <Users size={18} />, label: 'Settings' },
   ];
   const visibleNavItems = navItems.filter(item =>
-    (NAV_VISIBILITY[item.path] || []).includes(user.role)
+    (NAV_VISIBILITY[item.path] || []).includes(user.role) && canAccess(NAV_PATH_TO_ZONE[item.path])
   );
 
   async function handleSignOut() {
@@ -1571,7 +1624,7 @@ function DashboardPage() {
               <h2>Zenex Foundation</h2>
             </div>
             <div className="estate-header-right">
-              {user.role === 'CEO_EXEC' && (
+              {user.role === 'CEO_EXEC' && canAccess('ceo_brief') && (
                 <button className="ceo-brief-trigger" type="button" onClick={() => setCeoBriefOpen(true)}>
                   CEO Brief
                 </button>
@@ -1887,11 +1940,11 @@ function DashboardPage() {
                 </p>
                 {user.role === 'CEO_EXEC' ? (
                   <p className="completeness-detail-note">Evidence gaps are being reviewed by the research team.</p>
-                ) : (
+                ) : canAccess('workspace') ? (
                   <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
                     Complete in Workspace →
                   </a>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -1924,17 +1977,19 @@ function DashboardPage() {
                         </p>
                       </div>
                       <div className="gap-priority-actions">
-                        <a
-                          className="generate-tor-button"
-                          href={`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            commissionGap(gap.programme_name);
-                            navigate(`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`);
-                          }}
-                        >
-                          Generate TOR →
-                        </a>
+                        {canAccess('tor_generator') && (
+                          <a
+                            className="generate-tor-button"
+                            href={`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              commissionGap(gap.programme_name);
+                              navigate(`/tor-generator?programme=${encodeURIComponent(gap.programme_name)}`);
+                            }}
+                          >
+                            Generate TOR →
+                          </a>
+                        )}
                         <button
                           className="gap-dismiss-button"
                           type="button"
@@ -1953,7 +2008,7 @@ function DashboardPage() {
                 Showing {visibleGaps.length} of {totalGapsIdentified} priority evidence gaps
               </p>
             )}
-            {user.role === 'CEO_EXEC' && (
+            {user.role === 'CEO_EXEC' && canAccess('ceo_brief') && (
               <article className="ceo-brief-prominent-card">
                 <div>
                   <p className="ceo-brief-prominent-eyebrow">CEO Evidence Brief</p>
@@ -2017,7 +2072,7 @@ function DashboardPage() {
                   );
                 })}
               </div>
-              {alerts.length > 3 && (
+              {alerts.length > 3 && canAccess('workspace') && (
                 <a className="teal-link earlier-alerts-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
                   + {alerts.length - 3} earlier alerts in your Workspace →
                 </a>
@@ -2861,7 +2916,7 @@ function computeWhyMatters(opportunities) {
 
 function TorGeneratorPage() {
   const user = currentUser();
-  const canGenerate = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'].includes(user.role);
+  const canGenerate = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'].includes(user.role) && canAccess('tor_generator');
   const canEditTor = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
   const canSaveToWorkspace = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST'].includes(user.role);
   const [programmeName, setProgrammeName] = useState('');
@@ -6511,6 +6566,7 @@ function SettingsPage() {
 
 function App() {
   const [path, setPath] = useState(window.location.pathname);
+  const [, setFeaturesLoaded] = useState(false);
 
   useEffect(() => {
     const updatePath = () => setPath(window.location.pathname);
@@ -6521,6 +6577,19 @@ function App() {
       window.removeEventListener('evidenceos:navigate', updatePath);
     };
   }, []);
+
+  useEffect(() => {
+    if (!browserIdToken) return;
+    // features_enabled lives in the DB, not the JWT, so it has to be
+    // fetched separately (login here is in-app via Cognito's API, not a
+    // hosted-UI redirect, so there's no full page reload to hang this
+    // off). Re-running per path change is deliberate: it both catches
+    // the token appearing right after login and keeps the cache fresh
+    // across the session. The state flip just forces a re-render so
+    // pages pick up the cached value (every page reads
+    // currentFeatures()/canAccess() live, not via props).
+    fetchAndCacheFeatures().then(() => setFeaturesLoaded(true));
+  }, [path]);
 
   if (path === '/admin/login') return <AdminLoginPage />;
   if (path === '/admin/dashboard') return <AdminDashboardPage />;
