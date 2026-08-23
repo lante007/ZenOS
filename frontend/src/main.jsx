@@ -1888,7 +1888,7 @@ function DashboardPage() {
             <article className="portfolio-card">
               <h3>Evidence Gaps</h3>
               <strong>{portfolioLoading ? '...' : portfolio?.evidence_gaps || 0} identified</strong>
-              <p>Records with missing endline or documented gaps</p>
+              <p>Programmes with no endline evaluation</p>
             </article>
             <article className="portfolio-card">
               <h3>Programmes Covered</h3>

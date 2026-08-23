@@ -810,16 +810,7 @@ router.get('/portfolio',
           AND record_status = 'ACTIVE'
       `, [req.tenant.slug]);
 
-      const gaps = await pool.query(`
-        SELECT COUNT(*)::int AS gap_count
-        FROM ${schema}.intelligence_records
-        WHERE tenant_id = $1
-          AND record_status = 'ACTIVE'
-          AND (
-            evidence_gap_1 IS NOT NULL OR
-            endline_available = false
-          )
-      `, [req.tenant.slug]);
+      const priorityGaps = await getPriorityGaps(pool, schema, req.tenant.slug);
 
       const queue = await pool.query(`
         SELECT COUNT(*)::int AS pending
@@ -860,7 +851,7 @@ router.get('/portfolio',
           aging_pct: agingPct,
           historical_pct: historicalPct,
         },
-        evidence_gaps: gaps.rows[0]?.gap_count || 0,
+        evidence_gaps: priorityGaps.total_identified,
         pending_review: queue.rows[0]?.pending || 0,
         programmes: programmes.rows,
       });
