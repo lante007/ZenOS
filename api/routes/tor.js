@@ -762,6 +762,7 @@ router.post('/generate',
       }
 
       const jobId = crypto.randomUUID();
+      const startTime = Date.now();
       jobs[jobId] = {
         status: 'pending',
         result: null,
@@ -781,6 +782,30 @@ router.post('/generate',
           });
           jobs[jobId].status = 'complete';
           jobs[jobId].result = result;
+
+          // Non-blocking query log - the job already resolved async of the
+          // HTTP response, so this only needs its own try/catch, not a
+          // further IIFE, to keep a logging failure from ever surfacing.
+          try {
+            await db.getPool().query(
+              `INSERT INTO zenex.query_log (
+                tenant_id, user_email, user_role, feature, query_text,
+                response_length, records_cited, response_time_ms
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [
+                tenant.slug,
+                req.user?.email || 'unknown',
+                req.user?.role || 'unknown',
+                'TOR_GENERATOR',
+                programmeName,
+                result?.tor_text?.length || 0,
+                records.length || 0,
+                Date.now() - startTime,
+              ]
+            );
+          } catch (logErr) {
+            console.error('query_log insert failed:', logErr.message);
+          }
         } catch (err) {
           console.error(`[tor] generation job ${jobId} failed: ${err.message}`);
           jobs[jobId].status = 'failed';

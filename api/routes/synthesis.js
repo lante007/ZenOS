@@ -49,6 +49,7 @@ function parseSynthesis(text, recordsSearched) {
 }
 
 router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'), async (req, res, next) => {
+  const startTime = Date.now();
   try {
     const question = String(req.body.question || '').trim();
     if (!question) return res.status(400).json({ error: 'question is required' });
@@ -84,7 +85,33 @@ ${JSON.stringify(corpusSummary, null, 2)}`;
     });
 
     const text = message.content?.[0]?.text || '';
-    res.json(parseSynthesis(text, corpusSummary.length));
+    const parsed = parseSynthesis(text, corpusSummary.length);
+
+    // Non-blocking query log - never let logging delay or fail the response.
+    (async () => {
+      try {
+        await db.getPool().query(
+          `INSERT INTO zenex.query_log (
+            tenant_id, user_email, user_role, feature, query_text,
+            response_length, records_cited, response_time_ms
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            req.user?.tenant_id || req.tenant?.slug || 'zenex',
+            req.user?.email || 'unknown',
+            req.user?.role || 'unknown',
+            'ASK_ZENEX',
+            question,
+            text.length || 0,
+            parsed.supporting_record_ids?.length || 0,
+            Date.now() - startTime,
+          ]
+        );
+      } catch (logErr) {
+        console.error('query_log insert failed:', logErr.message);
+      }
+    })();
+
+    res.json(parsed);
   } catch (err) {
     next(err);
   }

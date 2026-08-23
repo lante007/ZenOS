@@ -210,6 +210,7 @@ function sanitiseBrief(text) {
 router.post('/ceo',
   requireRoles('CEO_EXEC'),
   async (req, res, next) => {
+    const startTime = Date.now();
     try {
       const pool = getPool();
       if (!pool) return res.status(503).json({ error: 'Database is not configured' });
@@ -423,6 +424,30 @@ router.post('/ceo',
         .join('');
 
       const sanitised = sanitiseBrief(briefText);
+
+      // Non-blocking query log
+      (async () => {
+        try {
+          await pool.query(
+            `INSERT INTO zenex.query_log (
+              tenant_id, user_email, user_role, feature, query_text,
+              response_length, records_cited, response_time_ms
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [
+              req.tenant.slug,
+              req.user?.email || 'unknown',
+              req.user?.role || 'unknown',
+              'CEO_BRIEF',
+              'portfolio_brief',
+              sanitised.length || 0,
+              toNumber(corpus.total_docs) || 0,
+              Date.now() - startTime,
+            ]
+          );
+        } catch (logErr) {
+          console.error('query_log insert failed:', logErr.message);
+        }
+      })();
 
       return res.json({
         brief_text: sanitised,
