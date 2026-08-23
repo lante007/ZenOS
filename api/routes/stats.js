@@ -757,14 +757,19 @@ router.get('/',
           replicability: row.dim_replicability != null ? Number(row.dim_replicability) : null,
           context_relevance: row.dim_context_relevance != null ? Number(row.dim_context_relevance) : null,
         },
-        evidence_freshness: {
-          current: row.freshness_current || 0,
-          aging: row.freshness_aging || 0,
-          historical: row.freshness_historical || 0,
-          current_pct: activeTotal > 0 ? Math.round(((row.freshness_current || 0) / activeTotal) * 100) : 0,
-          aging_pct: activeTotal > 0 ? Math.round(((row.freshness_aging || 0) / activeTotal) * 100) : 0,
-          historical_pct: activeTotal > 0 ? Math.round(((row.freshness_historical || 0) / activeTotal) * 100) : 0,
-        },
+        evidence_freshness: (() => {
+          const currentPct = activeTotal > 0 ? Math.round(((row.freshness_current || 0) / activeTotal) * 100) : 0;
+          const agingPct = activeTotal > 0 ? Math.round(((row.freshness_aging || 0) / activeTotal) * 100) : 0;
+          const historicalPct = activeTotal > 0 ? 100 - currentPct - agingPct : 0;
+          return {
+            current: row.freshness_current || 0,
+            aging: row.freshness_aging || 0,
+            historical: row.freshness_historical || 0,
+            current_pct: currentPct,
+            aging_pct: agingPct,
+            historical_pct: historicalPct,
+          };
+        })(),
         tier_counts: {
           TIER_1: row.tier_1 || 0,
           TIER_2: row.tier_2 || 0,
@@ -838,16 +843,22 @@ router.get('/portfolio',
       `, [req.tenant.slug]);
 
       const fr = freshness.rows[0] || {};
-      const total = fr.total || 1;
+      const total = fr.total || 0;
+      // Round current/aging independently, then take historical as the
+      // remainder so the three always sum to exactly 100% on screen,
+      // regardless of how the individual counts round.
+      const currentPct = total > 0 ? Math.round(((fr.current_count || 0) / total) * 100) : 0;
+      const agingPct = total > 0 ? Math.round(((fr.aging_count || 0) / total) * 100) : 0;
+      const historicalPct = total > 0 ? 100 - currentPct - agingPct : 0;
 
       return res.json({
         freshness: {
           current: fr.current_count || 0,
           aging: fr.aging_count || 0,
           historical: fr.historical_count || 0,
-          current_pct: Math.round(((fr.current_count || 0) / total) * 100),
-          aging_pct: Math.round(((fr.aging_count || 0) / total) * 100),
-          historical_pct: Math.round(((fr.historical_count || 0) / total) * 100),
+          current_pct: currentPct,
+          aging_pct: agingPct,
+          historical_pct: historicalPct,
         },
         evidence_gaps: gaps.rows[0]?.gap_count || 0,
         pending_review: queue.rows[0]?.pending || 0,
