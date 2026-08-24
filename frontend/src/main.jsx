@@ -686,7 +686,7 @@ function RecordDetailModal({ record, onClose, userRole = currentUser().role }) {
   const [financialError, setFinancialError] = useState('');
 
   useEffect(() => {
-    setDisplayRecord(record);
+    setDisplayRecord(record || {});
     setFinancialEdit(financialEditFromRecord(record));
     setFinancialSaved(false);
     setFinancialError('');
