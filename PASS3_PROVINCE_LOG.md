@@ -50,4 +50,4 @@ Post-update smoke test against `/api/stats/cascade` (unaffected by this pass, ru
 
 ## Addendum: EC2 git push auth
 
-Switched the origin remote from HTTPS (no stored credentials, push was failing) to SSH using a repo-scoped deploy key (, write access enabled). No token or password is stored on the instance; git config user.name/user.email were also set (previously unconfigured, causing commits to auto-attribute to root@ip-...ec2.internal).
+Switched the origin remote from HTTPS (no stored credentials, push was failing) to SSH using a repo-scoped deploy key (`ec2-evidenceos-zenos`, write access enabled). No token or password is stored on the instance; git config user.name/user.email were also set (previously unconfigured, causing commits to auto-attribute to root@ip-...ec2.internal).
