@@ -20,3 +20,18 @@ batch-summary-*.json
 Thumbs.db
 
 frontend/.env.production
+
+# EC2 scratch scripts
+audit_step3_tmp.js
+b8_*.js
+b8_*.txt
+check_*.js
+dryrun*.js
+find_oversized.js
+fix1_apply.js
+gaps_check.js
+get11oversized.js
+load-processed-records.js
+test_isasa_extract.js
+tmp_b8_*
+web.bak.*/
