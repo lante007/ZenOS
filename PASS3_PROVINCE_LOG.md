@@ -47,3 +47,7 @@ Province coverage across all 70 active records: **100%** (was 74% / 52 of 70 bef
 ## Verification
 
 Post-update smoke test against `/api/stats/cascade` (unaffected by this pass, run as a regression check): Financial 278839394, avg_eqs 2.79, EROI 38, Records 70 — all match the established baseline.
+
+## Addendum: EC2 git push auth
+
+Switched the origin remote from HTTPS (no stored credentials, push was failing) to SSH using a repo-scoped deploy key (, write access enabled). No token or password is stored on the instance; git config user.name/user.email were also set (previously unconfigured, causing commits to auto-attribute to root@ip-...ec2.internal).
