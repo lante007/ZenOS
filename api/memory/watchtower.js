@@ -114,7 +114,9 @@ async function recordObservation(sourceId, obs) {
   )).rows[0] || null;
 
   const fp = obs.content != null ? fingerprint(obs.content) : (obs.content_fingerprint || null);
-  const changed = Boolean(fp && (!prev || prev.content_fingerprint !== fp));
+  // A first observation is a baseline, not a change: `changed` is only true
+  // when there IS a previous successful observation and the fingerprint moved.
+  const changed = Boolean(fp && prev && prev.content_fingerprint !== fp);
 
   const res = await q(`
     INSERT INTO public.wt_observations
