@@ -1,13 +1,9 @@
 'use strict';
 
 // api/intelligence/live-data.js
-// Request-time live data injection for the Intelligence Console.
-// Patterned on api/routes/admin-ask.js: run read-only queries against the
-// operating corpus, then hand back a plain-text block that the orchestrator
-// appends to the specialist context string before the answering call.
-//
-// Only Chief of Staff and Evidence Analyst receive live data. External
-// Intelligence, Product Memory and Engineering Copilot stay fully static.
+// Request-time live corpus data for the Intelligence Console, patterned on
+// api/routes/admin-ask.js: run read-only queries against the operating
+// corpus and hand back a flat object the orchestrator passes to the agents.
 //
 // The capital and EROI figures reuse the exact computation behind
 // GET /api/stats/cascade (stats.js exports it on the router) so the numbers
@@ -22,8 +18,8 @@ const {
   describeFieldFor,
 } = require('../services/workspace-fields');
 
-// The sole operating tenant. The Chief of Staff strategic context is
-// entirely Zenex-facing, so the live block targets the Zenex corpus.
+// The sole operating tenant. The Intelligence Console is entirely
+// Zenex-facing, so the live block targets the Zenex corpus.
 const PRIMARY_TENANT = 'zenex';
 const PRIMARY_SCHEMA = 'zenex';
 
@@ -31,11 +27,6 @@ function assertSchema(schema) {
   if (!/^[a-z][a-z0-9_]*$/.test(schema || '')) {
     throw new Error(`Unsafe tenant schema: ${schema}`);
   }
-}
-
-function randLabel(value) {
-  if (value == null) return 'N/A';
-  return `R${Number(value).toLocaleString('en-GB')}`;
 }
 
 // Replicates the GET /api/stats/completeness computation (filled-cell ratio
@@ -184,61 +175,38 @@ async function evidenceAnalystLiveData(pool) {
   };
 }
 
-function formatChiefOfStaffBlock(d, injectedAt) {
-  return [
-    `LIVE CORPUS DATA (Zenex corpus, pulled ${injectedAt})`,
-    `Treat every figure in this block as KNOWN. It supersedes any dated figure in the static context above.`,
-    ``,
-    `Total classified records: ${d.total_classified_records}`,
-    `Average EQS score: ${d.average_eqs != null ? `${d.average_eqs} / 5.0` : 'N/A'}`,
-    `Data completeness: ${d.data_completeness_pct}%`,
-    `Financial Capital: ${d.financial_capital_value != null ? randLabel(d.financial_capital_value) : 'N/A'}, derived from ${d.financial_capital_source_documents} audited source document${d.financial_capital_source_documents === 1 ? '' : 's'}`,
-    `EROI index: ${d.eroi_index != null ? `${d.eroi_index} / 100` : 'N/A'}`,
-    `Decision Capital: ${d.decision_capital_status}`,
-    `Records pending expert review: ${d.records_pending_expert_review}`,
-    `Records with critical missing fields: ${d.records_with_critical_missing_fields}`,
-    `Last ingestion: ${d.last_ingestion || 'No timestamp on record'}`,
-    ``,
-    `Do not cite Financial Capital or EROI externally. Financial Capital is derived from a partial set of source documents and EROI is structurally incomplete until Decision Capital has confirmed instances.`,
-  ].join('\n');
-}
+// Flat snapshot consumed by the orchestrator and the agents. Merges the
+// Chief-of-Staff-level corpus metrics with the Evidence-Analyst pathway
+// breakdown into the shape the evidence agent's runtime block expects.
+async function getLiveCorpusData(pool) {
+  const [cos, ea] = await Promise.all([
+    chiefOfStaffLiveData(pool),
+    evidenceAnalystLiveData(pool),
+  ]);
 
-function formatEvidenceAnalystBlock(d, injectedAt) {
-  const eqs = d.pathway_avg_eqs;
-  const noEval = d.programmes_without_evaluation.length > 0
-    ? d.programmes_without_evaluation.join('; ')
-    : 'None';
-  return [
-    `LIVE CORPUS DATA (Zenex corpus, pulled ${injectedAt})`,
-    `Treat every figure in this block as KNOWN. It supersedes any dated figure in the static context above.`,
-    ``,
-    `Total classified records: ${d.total_classified_records}`,
-    `Records by EQS pathway: Impact ${d.pathway_counts.IMPACT}, Process ${d.pathway_counts.PROCESS}, Research ${d.pathway_counts.RESEARCH}, Unassigned ${d.pathway_counts.UNASSIGNED}`,
-    `Average EQS by pathway: Impact ${eqs.IMPACT != null ? eqs.IMPACT : 'N/A'}, Process ${eqs.PROCESS != null ? eqs.PROCESS : 'N/A'}, Research ${eqs.RESEARCH != null ? eqs.RESEARCH : 'N/A'}`,
-    `Records rated AGEING (evidence currency below threshold): ${d.records_rated_ageing}`,
-    `Programmes with zero evaluation records on file (${d.programmes_without_evaluation_count}): ${noEval}`,
-    ``,
-    `An evaluation record here means a record on the Impact or Process EQS pathway. Research pathway records are studies, not evaluations.`,
-  ].join('\n');
-}
-
-// Returns { text, values } or throws. The route decides how to handle failure.
-async function buildLiveContext(contextKey, pool) {
-  const injectedAt = new Date().toISOString();
-  if (contextKey === 'chief_of_staff') {
-    const values = await chiefOfStaffLiveData(pool);
-    return { text: formatChiefOfStaffBlock(values, injectedAt), values, injected_at: injectedAt };
-  }
-  if (contextKey === 'evidence_analyst') {
-    const values = await evidenceAnalystLiveData(pool);
-    return { text: formatEvidenceAnalystBlock(values, injectedAt), values, injected_at: injectedAt };
-  }
-  return null;
+  return {
+    records: cos.total_classified_records,
+    avg_eqs: cos.average_eqs,
+    completeness: cos.data_completeness_pct,
+    financial_capital: cos.financial_capital_value,
+    financial_source_count: cos.financial_capital_source_documents,
+    eroi: cos.eroi_index,
+    decision_capital: cos.decision_capital_status,
+    pending_review: cos.records_pending_expert_review,
+    missing_fields: cos.records_with_critical_missing_fields,
+    last_ingestion: cos.last_ingestion,
+    eqs_impact: ea.pathway_avg_eqs.IMPACT,
+    eqs_process: ea.pathway_avg_eqs.PROCESS,
+    eqs_research: ea.pathway_avg_eqs.RESEARCH,
+    pathway_counts: ea.pathway_counts,
+    ageing_count: ea.records_rated_ageing,
+    programmes_without_evaluation: ea.programmes_without_evaluation,
+    programmes_without_evaluation_count: ea.programmes_without_evaluation_count,
+  };
 }
 
 module.exports = {
-  buildLiveContext,
+  getLiveCorpusData,
   chiefOfStaffLiveData,
   evidenceAnalystLiveData,
-  LIVE_CONTEXT_KEYS: ['chief_of_staff', 'evidence_analyst'],
 };

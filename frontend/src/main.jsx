@@ -6258,7 +6258,7 @@ function AdminIntelligencePage() {
         body: JSON.stringify({ question: trimmed }),
       });
       if (!data) return;
-      setAnswer(data);
+      setAnswer(data.data || data);
     } catch (err) {
       setError(err.message || 'The Intelligence Console could not respond. Please try again.');
     } finally {
@@ -6280,7 +6280,7 @@ function AdminIntelligencePage() {
             <h1>Intelligence Console</h1>
             <p className="page-subheader">Auxeira operating intelligence for the founder console</p>
             <p className="admin-ask-subline">
-              One question. The orchestrator routes it to the right specialist context, then answers.
+              One question. The orchestrator runs it past specialist agents in parallel and the Advisor synthesises one answer.
             </p>
           </div>
         </header>
@@ -6314,7 +6314,7 @@ function AdminIntelligencePage() {
             <span className="pulse-dot" />
             <span className="pulse-dot" />
             <span className="pulse-dot" />
-            <span>Routing to the right context...</span>
+            <span>Consulting specialist agents...</span>
           </div>
         )}
 
@@ -6330,21 +6330,24 @@ function AdminIntelligencePage() {
 
         {answer?.answer && (
           <article className="ask-answer-card admin-ask-answer">
-            <div style={{ marginBottom: '0.75rem' }}>
-              <span style={{
-                display: 'inline-block',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                color: '#fff',
-                background: '#F05A28',
-                padding: '3px 10px',
-                borderRadius: '4px',
-              }}>
-                {answer.context_label || answer.context || 'Chief of Staff'}
-              </span>
-            </div>
+            {answer.agents_used && answer.agents_used.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {answer.agents_used.map(agent => (
+                  <span key={agent} style={{
+                    fontSize: 12, fontWeight: 600, color: '#FFFFFF',
+                    background: '#F05A28', padding: '3px 10px', borderRadius: 4,
+                  }}>
+                    {agent.replace('_', ' ')}
+                  </span>
+                ))}
+                <span style={{
+                  fontSize: 12, fontWeight: 600, color: '#FFFFFF',
+                  background: '#2D6A4F', padding: '3px 10px', borderRadius: 4,
+                }}>
+                  synthesised by advisor
+                </span>
+              </div>
+            )}
             <div
               className="ask-answer-body"
               dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(answer.answer) }}
