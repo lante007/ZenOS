@@ -177,14 +177,20 @@ async function evidenceAnalystLiveData(pool) {
 
 // Flat snapshot consumed by the orchestrator and the agents. Merges the
 // Chief-of-Staff-level corpus metrics with the Evidence-Analyst pathway
-// breakdown into the shape the evidence agent's runtime block expects.
+// breakdown. Dates are explicit and never inferred downstream: the current
+// date, the moment the snapshot was taken, and the last ingestion are three
+// separate fields.
 async function getLiveCorpusData(pool) {
+  const now = new Date();
   const [cos, ea] = await Promise.all([
     chiefOfStaffLiveData(pool),
     evidenceAnalystLiveData(pool),
   ]);
 
   return {
+    current_date: now.toISOString().slice(0, 10),
+    corpus_snapshot_at: now.toISOString(),
+    last_ingestion_date: cos.last_ingestion ? cos.last_ingestion.slice(0, 10) : null,
     records: cos.total_classified_records,
     avg_eqs: cos.average_eqs,
     completeness: cos.data_completeness_pct,
@@ -205,8 +211,38 @@ async function getLiveCorpusData(pool) {
   };
 }
 
+// Labelled text block for agent prompts. Everything here is aggregate state,
+// never document-level evidence: it is marked as such so an agent does not
+// mistake a corpus count for a retrieved finding.
+function formatLiveContext(d) {
+  if (!d) return 'LIVE CORPUS CONTEXT\nUnavailable for this request.';
+  const pc = d.pathway_counts || {};
+  const noEval = (d.programmes_without_evaluation || []).slice(0, 20).join('; ') || 'none';
+  return [
+    'LIVE CORPUS CONTEXT (aggregate database state, not document-level evidence)',
+    `Current date: ${d.current_date}`,
+    `Corpus snapshot taken: ${d.corpus_snapshot_at}`,
+    `Last ingestion: ${d.last_ingestion_date || 'no timestamp on record'}`,
+    '',
+    `Total classified records: ${d.records}`,
+    `Average EQS: ${d.avg_eqs != null ? `${d.avg_eqs} / 5.0` : 'N/A'}`,
+    `Data completeness: ${d.completeness}%`,
+    `Records pending expert review: ${d.pending_review}`,
+    `Records with critical missing fields: ${d.missing_fields}`,
+    `Financial Capital: ${d.financial_capital != null ? `R${Number(d.financial_capital).toLocaleString('en-GB')}` : 'N/A'} from ${d.financial_source_count} audited source documents (incomplete, do not cite externally)`,
+    `EROI index: ${d.eroi != null ? `${d.eroi} / 100` : 'N/A'} (Decision Capital ${d.decision_capital})`,
+    `Records by EQS pathway: Impact ${pc.IMPACT ?? 'n/a'}, Process ${pc.PROCESS ?? 'n/a'}, Research ${pc.RESEARCH ?? 'n/a'}, Unassigned ${pc.UNASSIGNED ?? 'n/a'}`,
+    `Average EQS by pathway: Impact ${d.eqs_impact ?? 'n/a'}, Process ${d.eqs_process ?? 'n/a'}, Research ${d.eqs_research ?? 'n/a'}`,
+    `Records rated AGEING: ${d.ageing_count}`,
+    `Programmes with no Impact or Process evaluation on file (${d.programmes_without_evaluation_count}): ${noEval}`,
+    '',
+    'AVAILABLE DOCUMENT EVIDENCE: retrieve specific records with your tools. The figures above are counts and averages, not findings.',
+  ].join('\n');
+}
+
 module.exports = {
   getLiveCorpusData,
+  formatLiveContext,
   chiefOfStaffLiveData,
   evidenceAnalystLiveData,
 };

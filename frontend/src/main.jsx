@@ -6231,38 +6231,82 @@ function AdminAskPage() {
   );
 }
 
+const INTEL_BADGE = {
+  fontSize: 12, fontWeight: 600, color: '#FFFFFF',
+  background: '#F05A28', padding: '3px 10px', borderRadius: 4,
+};
+
+function intelAgentIcon(status) {
+  if (status === 'ok') return '✓';
+  if (status === 'failed') return '✗';
+  return '○';
+}
+
 function AdminIntelligencePage() {
   const examplePrompts = [
     'What should I prioritise today given the Zenex situation?',
     'What does the BTT evaluation say about teacher effect sizes?',
     'Why did we cap navigation at six rooms?',
-    'What are the three Prophet infrastructure gates?',
-    'What is JET Education Services doing on evidence infrastructure?',
+    "Assess Catherine's concern about whether EvidenceOS duplicates Zenex's existing knowledge-management capability.",
   ];
   const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [job, setJob] = useState(null);
+  const [phase, setPhase] = useState('idle'); // idle | starting | running | done | error
   const [error, setError] = useState('');
+  const pollRef = useRef(null);
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+  useEffect(() => stopPolling, []);
+
+  async function pollOnce(jobId) {
+    try {
+      const res = await intelligenceRequest(`/ask/${jobId}`, {});
+      const data = res && (res.data || res);
+      if (!data) return;
+      setJob(data);
+      if (data.status === 'completed') {
+        stopPolling();
+        setPhase('done');
+      } else if (data.status === 'failed') {
+        stopPolling();
+        setPhase('error');
+        setError(data.error || 'The intelligence job failed.');
+      }
+    } catch (err) {
+      stopPolling();
+      setPhase('error');
+      setError(err.message || 'Lost contact with the intelligence job.');
+    }
+  }
 
   async function askIntelligence(value = question) {
     const trimmed = value.trim();
     if (trimmed.length < 3) return;
+    stopPolling();
     setQuestion(trimmed);
-    setLoading(true);
     setError('');
-    setAnswer(null);
+    setJob(null);
+    setPhase('starting');
     try {
-      const data = await intelligenceRequest('/ask', {
+      const res = await intelligenceRequest('/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: trimmed }),
       });
-      if (!data) return;
-      setAnswer(data.data || data);
+      const data = res && (res.data || res);
+      const jobId = data && data.job_id;
+      if (!jobId) throw new Error('The console did not return a job id.');
+      setPhase('running');
+      pollOnce(jobId);
+      pollRef.current = setInterval(() => pollOnce(jobId), 2500);
     } catch (err) {
-      setError(err.message || 'The Intelligence Console could not respond. Please try again.');
-    } finally {
-      setLoading(false);
+      setPhase('error');
+      setError(err.message || 'Could not start the intelligence job.');
     }
   }
 
@@ -6270,6 +6314,9 @@ function AdminIntelligencePage() {
     event.preventDefault();
     askIntelligence();
   }
+
+  const busy = phase === 'starting' || phase === 'running';
+  const structured = job && job.answer_structured;
 
   return (
     <AdminShell active="intelligence">
@@ -6280,12 +6327,12 @@ function AdminIntelligencePage() {
             <h1>Intelligence Console</h1>
             <p className="page-subheader">Auxeira operating intelligence for the founder console</p>
             <p className="admin-ask-subline">
-              One question. The orchestrator runs it past specialist agents in parallel and the Advisor synthesises one answer.
+              One question. The orchestrator runs specialist agents in parallel, each with corpus retrieval, and the Advisor synthesises one answer. Runs as a background job.
             </p>
           </div>
         </header>
 
-        {!answer && !loading && (
+        {phase === 'idle' && (
           <div className="prompt-chip-grid admin-ask-prompts">
             {examplePrompts.map(prompt => (
               <button key={prompt} type="button" onClick={() => askIntelligence(prompt)}>
@@ -6304,56 +6351,74 @@ function AdminIntelligencePage() {
               placeholder="Ask anything about the Auxeira business, the corpus, the product, the infrastructure, or the sector..."
             />
           </label>
-          <button className="primary-action" type="submit" disabled={loading || question.trim().length < 3}>
-            <span>{loading ? 'Thinking...' : 'Ask'}</span>
+          <button className="primary-action" type="submit" disabled={busy || question.trim().length < 3}>
+            <span>{busy ? 'Working...' : 'Ask'}</span>
           </button>
         </form>
 
-        {loading && (
-          <div className="pulse-loading">
-            <span className="pulse-dot" />
-            <span className="pulse-dot" />
-            <span className="pulse-dot" />
-            <span>Consulting specialist agents...</span>
+        {busy && (
+          <div className="pulse-loading" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+            <div>
+              <span className="pulse-dot" />
+              <span className="pulse-dot" />
+              <span className="pulse-dot" />
+              <span> Specialist agents are working. This runs in the background and usually takes 30 to 60 seconds.</span>
+            </div>
+            {job && job.agents && job.agents.length > 0 && (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#4B5563' }}>
+                {job.agents.map(a => (
+                  <li key={a.agent}>
+                    {intelAgentIcon(a.status)} {a.agent.replace(/_/g, ' ')}
+                    {a.tools_used && a.tools_used.length > 0 ? ` · ${a.tools_used.join(', ')}` : ''}
+                    {a.execution_ms ? ` · ${(a.execution_ms / 1000).toFixed(1)}s` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
-        {error && (
+        {phase === 'error' && (
           <div className="brief-error">
             <strong>Intelligence Console failed</strong>
             <p>{error}</p>
+            {job && job.agents && job.agents.length > 0 && (
+              <ul style={{ fontSize: 13 }}>
+                {job.agents.map(a => (
+                  <li key={a.agent}>{intelAgentIcon(a.status)} {a.agent.replace(/_/g, ' ')}{a.error ? ` — ${a.error}` : ''}</li>
+                ))}
+              </ul>
+            )}
             <button className="btn-ghost" type="button" onClick={() => askIntelligence()}>
               Try again
             </button>
           </div>
         )}
 
-        {answer?.answer && (
+        {phase === 'done' && job && job.answer && (
           <article className="ask-answer-card admin-ask-answer">
-            {answer.agents_used && answer.agents_used.length > 0 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                {answer.agents_used.map(agent => (
-                  <span key={agent} style={{
-                    fontSize: 12, fontWeight: 600, color: '#FFFFFF',
-                    background: '#F05A28', padding: '3px 10px', borderRadius: 4,
-                  }}>
-                    {agent.replace('_', ' ')}
-                  </span>
-                ))}
-                <span style={{
-                  fontSize: 12, fontWeight: 600, color: '#FFFFFF',
-                  background: '#2D6A4F', padding: '3px 10px', borderRadius: 4,
-                }}>
-                  synthesised by advisor
-                </span>
-              </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {(job.agents_used || []).map(agent => (
+                <span key={agent} style={INTEL_BADGE}>{agent.replace(/_/g, ' ')}</span>
+              ))}
+              <span style={{ ...INTEL_BADGE, background: '#2D6A4F' }}>synthesised by advisor</span>
+              {structured && structured.overall_confidence && (
+                <span style={{ ...INTEL_BADGE, background: '#334155' }}>confidence: {structured.overall_confidence}</span>
+              )}
+            </div>
+            {job.degraded && (
+              <p style={{ color: '#B45309', fontSize: 13, marginTop: 0 }}>
+                One or more specialist agents did not complete. The synthesis notes where it is limited.
+              </p>
             )}
             <div
               className="ask-answer-body"
-              dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(answer.answer) }}
+              dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(job.answer) }}
             />
             <footer className="ask-result-meta">
-              {dateTimeStamp(answer.generated_at)}
+              {dateTimeStamp(job.completed_at)}
+              {job.telemetry && job.telemetry.total_ms ? ` · ${(job.telemetry.total_ms / 1000).toFixed(1)}s` : ''}
+              {job.telemetry && job.telemetry.model_calls ? ` · ${job.telemetry.model_calls} model calls` : ''}
             </footer>
           </article>
         )}

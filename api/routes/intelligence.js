@@ -1,48 +1,60 @@
 'use strict';
 
 // api/routes/intelligence.js
-// Intelligence Console front door. One question in, one synthesised response
-// out. The multi-agent orchestration lives in api/intelligence/ (orchestrator
-// -> Evidence + Strategy agents in parallel -> Advisor synthesis). This route
-// only gathers live corpus data and delegates.
+// Intelligence Console front door. Asynchronous job model:
+//   POST /api/intelligence      -> create job, return { job_id, status } (202)
+//   GET  /api/intelligence/:id  -> poll job status / result
+// (/ask and /ask/:id are kept as aliases for the existing frontend.)
 //
 // Admin console only. Mounted in server.js behind authenticate(); the
 // in-route guard restricts to the founder roles, same pattern as admin-ask.js.
+// No inline authenticate() here: the mount already authenticates.
 
 const express = require('express');
 const { requireRoles } = require('../middleware/permissions');
-const { getPool } = require('../services/db');
-const { runIntelligence } = require('../intelligence');
-const { getLiveCorpusData } = require('../intelligence/live-data');
+const { createIntelligenceJob, getIntelligenceJob } = require('../intelligence');
 
 const router = express.Router();
 
-router.post('/ask',
-  requireRoles('SUPER_ADMIN', 'AUXEIRA_FOUNDER'),
-  async (req, res) => {
-    const { question } = req.body || {};
+const GUARD = requireRoles('SUPER_ADMIN', 'AUXEIRA_FOUNDER');
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    if (!question || typeof question !== 'string' || question.trim().length === 0) {
-      return res.status(400).json({ success: false, error: 'Question is required.' });
-    }
+router.post(['/', '/ask'], GUARD, (req, res) => {
+  const { question } = req.body || {};
+  if (!question || typeof question !== 'string' || question.trim().length === 0) {
+    return res.status(400).json({ success: false, error: 'Question is required.' });
+  }
 
-    try {
-      const pool = getPool();
-      const liveData = pool ? await getLiveCorpusData(pool) : null;
+  try {
+    const job = createIntelligenceJob({
+      question,
+      userEmail: req.user && req.user.email,
+      userRole: req.user && req.user.role,
+    });
+    return res.status(202).json({
+      success: true,
+      data: { job_id: job.id, status: job.status },
+    });
+  } catch (err) {
+    console.error('Intelligence Console job create failed:', err);
+    return res.status(500).json({ success: false, error: 'Could not start intelligence job.' });
+  }
+});
 
-      const result = await runIntelligence(question.trim(), liveData);
+router.get(['/:jobId', '/ask/:jobId'], GUARD, async (req, res) => {
+  const { jobId } = req.params;
+  if (!UUID_RE.test(jobId || '')) {
+    return res.status(400).json({ success: false, error: 'Invalid job id.' });
+  }
 
-      return res.json({
-        success: true,
-        data: {
-          ...result,
-          generated_at: new Date().toISOString(),
-        },
-      });
-    } catch (err) {
-      console.error('Intelligence Console error:', err);
-      return res.status(500).json({ success: false, error: 'Intelligence query failed.' });
-    }
-  });
+  try {
+    const job = await getIntelligenceJob(jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found.' });
+    return res.json({ success: true, data: job });
+  } catch (err) {
+    console.error('Intelligence Console job read failed:', err);
+    return res.status(500).json({ success: false, error: 'Could not read intelligence job.' });
+  }
+});
 
 module.exports = router;
