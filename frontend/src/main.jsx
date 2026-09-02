@@ -6144,11 +6144,20 @@ function cosStageIcon(status) {
   return '○';
 }
 
-// UNKNOWN signal: the Advisor's structured synthesis carries an explicit
-// overall_confidence enum. UNKNOWN there means the corpus could not answer.
-// This is the reliable signal — not a string match on the answer text.
+// Corpus-absence signal (drives the amber banner). Two structural conditions
+// on the Advisor's structured synthesis, no string matching on the prose:
+//   1. overall_confidence === 'UNKNOWN', and
+//   2. at least one source carries evidence_type 'none' — the Advisor's
+//      explicit marker that a claim has no retrievable source.
+// Condition 2 separates "asked about a specific corpus record that is not
+// there" (BTT) from a judgement question that simply has no document to cite
+// (both otherwise land on overall_confidence UNKNOWN).
+// TODO(backend): replace with an explicit job.corpus_absence boolean set by
+// the orchestrator when the Evidence Analyst ran retrieval and got zero rows.
 function cosIsUnknown(job) {
-  return Boolean(job && job.answer_structured && job.answer_structured.overall_confidence === 'UNKNOWN');
+  const s = job && job.answer_structured;
+  if (!s || s.overall_confidence !== 'UNKNOWN') return false;
+  return Array.isArray(s.sources) && s.sources.some(x => x && x.evidence_type === 'none');
 }
 
 function cosAgentResult(job, key) {
@@ -6160,11 +6169,15 @@ function cosPreview(result, chars = 200) {
   if (!result) return 'No output recorded.';
   if (result.status !== 'ok' || !result.output) return `Did not complete${result.error ? `: ${result.error}` : '.'}`;
   const o = result.output;
+  const pick = k => (Array.isArray(o[k]) ? o[k] : []);
   const parts = []
     .concat(o.bottom_line ? [o.bottom_line] : [])
-    .concat(Array.isArray(o.findings) ? o.findings : [])
-    .concat(Array.isArray(o.known) ? o.known : []);
-  const text = parts.join(' ').trim() || 'Structured output only.';
+    .concat(pick('findings'), pick('known'));
+  // Fall back to what the agent did establish when findings/known are empty
+  // (e.g. an Evidence Analyst that only produced not_known + interpretation).
+  const text = (parts.join(' ').trim()
+    || [].concat(pick('not_known'), pick('interpretation'), pick('risks')).join(' ').trim()
+    || 'Structured output only. Expand for detail.');
   return text.length > chars ? `${text.slice(0, chars).trimEnd()}…` : text;
 }
 
