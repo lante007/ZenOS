@@ -138,7 +138,27 @@ async function recordObservation(sourceId, obs) {
     WHERE id = $1
   `, [sourceId, obs.error || null]);
 
-  return { observation: res.rows[0], changed, previous_observation_id: prev ? prev.id : null };
+  return {
+    observation: res.rows[0],
+    changed,
+    previous_observation_id: prev ? prev.id : null,
+    previous_fingerprint: prev ? prev.content_fingerprint : null,
+  };
+}
+
+// Attach S3 snapshot references to an observation after the raw + metadata
+// objects have been written. Kept separate so a snapshot upload failure never
+// blocks the observation row from being persisted.
+async function updateObservationSnapshot(observationId, { s3_bucket, s3_key, raw_s3_key }) {
+  const res = await q(`
+    UPDATE public.wt_observations
+    SET s3_bucket = COALESCE($2, s3_bucket),
+        s3_key = COALESCE($3, s3_key),
+        raw_s3_key = COALESCE($4, raw_s3_key)
+    WHERE id = $1
+    RETURNING *
+  `, [observationId, s3_bucket || null, s3_key || null, raw_s3_key || null]);
+  return res.rows[0] || null;
 }
 
 // ── signals ──────────────────────────────────────────
@@ -221,7 +241,7 @@ async function listTenantSignals(tenantSlug, { limit } = {}) {
 module.exports = {
   fingerprint,
   registerSource, updateSource, listSources, getDueSources,
-  recordObservation,
+  recordObservation, updateObservationSnapshot,
   createSignal, listSignals, upsertTenantSignalRelevance, listTenantSignals,
   SOURCE_TYPES,
 };

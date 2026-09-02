@@ -20,6 +20,8 @@ async function ensureV11Schema() {
     if (!pool) throw new Error('Database is not configured; V1.1 memory requires PostgreSQL.');
     const sql = fs.readFileSync(MIGRATION, 'utf8');
     await pool.query(sql);
+    // Additive columns introduced after migration 024 (Increment 2).
+    await pool.query(`ALTER TABLE public.wt_observations ADD COLUMN IF NOT EXISTS raw_s3_key TEXT`);
     return true;
   })().catch(err => {
     ready = null;
