@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BarChart3,
   Banknote,
+  Brain,
   Check,
   CheckCircle2,
   ClipboardCopy,
@@ -5599,6 +5600,57 @@ async function adminAskRequest(path, options = {}) {
   return payload || {};
 }
 
+async function intelligenceRequest(path, options = {}) {
+  const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  const response = await fetch(`/api/intelligence${path}`, {
+    ...options,
+    headers: {
+      'x-evidenceos-tenant': 'admin',
+      'x-evidenceos-role': 'SUPER_ADMIN',
+      'x-evidenceos-user': 'emmanuel@auxeira.com',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error('API routing error: received HTML instead of JSON. Check CloudFront configuration.');
+  }
+
+  if (response.status === 401) {
+    browserIdToken = '';
+    browserAccessToken = '';
+    sessionStorage.removeItem(ID_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    window.location.href = '/admin/login?reason=expired';
+    return undefined;
+  }
+
+  const rawText = await response.text();
+  let payload = null;
+  if (rawText) {
+    const looksLikeHtml = /^\s*<!doctype html/i.test(rawText) || /^\s*<html/i.test(rawText);
+    if (looksLikeHtml) {
+      throw new Error('The Intelligence Console received the frontend page instead of the API response. API routing is not reaching /api/intelligence/ask.');
+    }
+    try {
+      payload = JSON.parse(rawText);
+    } catch (err) {
+      if (!response.ok) {
+        throw new Error(rawText.slice(0, 300) || response.statusText || 'Intelligence Console request failed');
+      }
+      throw new Error('The Intelligence Console returned a non-JSON response. Please try again.');
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || response.statusText || 'Intelligence Console request failed');
+  }
+
+  return payload || {};
+}
+
 function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -5715,6 +5767,10 @@ function AdminShell({ active, children }) {
           <a className={active === 'ask' ? 'active' : ''} href="/admin/ask">
             <Search size={18} />
             <span>Ask Auxeira</span>
+          </a>
+          <a className={active === 'intelligence' ? 'active' : ''} href="/admin/intelligence">
+            <Brain size={18} />
+            <span>Intelligence</span>
           </a>
           <a className={active === 'support' ? 'active' : ''} href="/admin/support">
             <KeyRound size={18} />
@@ -6175,6 +6231,134 @@ function AdminAskPage() {
   );
 }
 
+function AdminIntelligencePage() {
+  const examplePrompts = [
+    'What should I prioritise today given the Zenex situation?',
+    'What does the BTT evaluation say about teacher effect sizes?',
+    'Why did we cap navigation at six rooms?',
+    'What are the three Prophet infrastructure gates?',
+    'What is JET Education Services doing on evidence infrastructure?',
+  ];
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function askIntelligence(value = question) {
+    const trimmed = value.trim();
+    if (trimmed.length < 3) return;
+    setQuestion(trimmed);
+    setLoading(true);
+    setError('');
+    setAnswer(null);
+    try {
+      const data = await intelligenceRequest('/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: trimmed }),
+      });
+      if (!data) return;
+      setAnswer(data);
+    } catch (err) {
+      setError(err.message || 'The Intelligence Console could not respond. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    askIntelligence();
+  }
+
+  return (
+    <AdminShell active="intelligence">
+      <section className="dashboard-main admin-ask-page">
+        <header className="dashboard-header">
+          <div>
+            <p className="eyebrow">Operating intelligence</p>
+            <h1>Intelligence Console</h1>
+            <p className="page-subheader">Auxeira operating intelligence for the founder console</p>
+            <p className="admin-ask-subline">
+              One question. The orchestrator routes it to the right specialist context, then answers.
+            </p>
+          </div>
+        </header>
+
+        {!answer && !loading && (
+          <div className="prompt-chip-grid admin-ask-prompts">
+            {examplePrompts.map(prompt => (
+              <button key={prompt} type="button" onClick={() => askIntelligence(prompt)}>
+                {prompt}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <form className="ask-search-panel admin-ask-search" onSubmit={handleSubmit}>
+          <label className="ask-input">
+            <Brain size={20} />
+            <input
+              value={question}
+              onChange={event => setQuestion(event.target.value)}
+              placeholder="Ask anything about the Auxeira business, the corpus, the product, the infrastructure, or the sector..."
+            />
+          </label>
+          <button className="primary-action" type="submit" disabled={loading || question.trim().length < 3}>
+            <span>{loading ? 'Thinking...' : 'Ask'}</span>
+          </button>
+        </form>
+
+        {loading && (
+          <div className="pulse-loading">
+            <span className="pulse-dot" />
+            <span className="pulse-dot" />
+            <span className="pulse-dot" />
+            <span>Routing to the right context...</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="brief-error">
+            <strong>Intelligence Console failed</strong>
+            <p>{error}</p>
+            <button className="btn-ghost" type="button" onClick={() => askIntelligence()}>
+              Try again
+            </button>
+          </div>
+        )}
+
+        {answer?.answer && (
+          <article className="ask-answer-card admin-ask-answer">
+            <div style={{ marginBottom: '0.75rem' }}>
+              <span style={{
+                display: 'inline-block',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                color: '#fff',
+                background: '#F05A28',
+                padding: '3px 10px',
+                borderRadius: '4px',
+              }}>
+                {answer.context_label || answer.context || 'Chief of Staff'}
+              </span>
+            </div>
+            <div
+              className="ask-answer-body"
+              dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(answer.answer) }}
+            />
+            <footer className="ask-result-meta">
+              {dateTimeStamp(answer.generated_at)}
+            </footer>
+          </article>
+        )}
+      </section>
+    </AdminShell>
+  );
+}
+
 function AdminTenantsPage() {
   const [tenants, setTenants] = useState([]);
   const [selected, setSelected] = useState('zenex');
@@ -6609,6 +6793,7 @@ function App() {
   if (path === '/admin/corpus-health') return <AdminCorpusHealthPage />;
   if (path === '/admin/system-health') return <AdminSystemHealthPage />;
   if (path === '/admin/ask') return <AdminAskPage />;
+  if (path === '/admin/intelligence') return <AdminIntelligencePage />;
   if (path === '/admin/tenants') return <AdminTenantsPage />;
   if (path === '/admin/support') return <AdminSupportPage />;
   if (path === '/login') return <LoginPage />;
