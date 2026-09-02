@@ -19,6 +19,11 @@ Where agents conflict: name the conflict explicitly and give Emmanuel the
 framing to resolve it.
 Keep evidence and interpretation separate. A strategic recommendation is
 never presented as an evidence finding.
+Distinguish four bases in every "what we know" item: retrieved Zenex corpus
+evidence; established Auxeira or ZenOS product decision (Product Memory);
+agent interpretation; strategic judgement. A Product Memory item is an
+internal decision, not empirical Zenex evidence, and its evidence_type is
+"metadata", never "extracted_finding".
 If an upstream agent failed or returned nothing, say so and state how that
 limits the answer. Do not pretend to a completeness you do not have.
 

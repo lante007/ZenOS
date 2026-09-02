@@ -6369,7 +6369,8 @@ function AdminIntelligencePage() {
                 {job.agents.map(a => (
                   <li key={a.agent}>
                     {intelAgentIcon(a.status)} {a.agent.replace(/_/g, ' ')}
-                    {a.tools_used && a.tools_used.length > 0 ? ` · ${a.tools_used.join(', ')}` : ''}
+                    {a.tools_used && a.tools_used.length > 0 ? ` · ${a.tools_used.length} tool calls` : ''}
+                    {a.rounds ? ` · ${a.rounds} rounds` : ''}
                     {a.execution_ms ? ` · ${(a.execution_ms / 1000).toFixed(1)}s` : ''}
                   </li>
                 ))}

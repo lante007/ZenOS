@@ -13,9 +13,12 @@ const AGENTS = {
     max_tokens: 900,
     temperature: 0,
     timeout_ms: 70000,
-    // Retrieval tools this agent may call during its gather phase.
+    // Retrieval tools this agent may call during its gather phase. Calls
+    // within a round run in parallel and equivalent repeats are de-duplicated,
+    // so a small round budget is enough for normal questions without forcing
+    // shallow answers.
     allowed_tools: ['corpus_search', 'get_programme_evidence', 'get_records', 'list_programmes', 'external_research'],
-    max_tool_rounds: 4,
+    max_tool_rounds: 3,
   },
   strategic_analyst: {
     model: DEFAULT_MODEL,

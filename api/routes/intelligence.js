@@ -19,14 +19,14 @@ const router = express.Router();
 const GUARD = requireRoles('SUPER_ADMIN', 'AUXEIRA_FOUNDER');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-router.post(['/', '/ask'], GUARD, (req, res) => {
+router.post(['/', '/ask'], GUARD, async (req, res) => {
   const { question } = req.body || {};
   if (!question || typeof question !== 'string' || question.trim().length === 0) {
     return res.status(400).json({ success: false, error: 'Question is required.' });
   }
 
   try {
-    const job = createIntelligenceJob({
+    const job = await createIntelligenceJob({
       question,
       userEmail: req.user && req.user.email,
       userRole: req.user && req.user.role,
@@ -37,7 +37,11 @@ router.post(['/', '/ask'], GUARD, (req, res) => {
     });
   } catch (err) {
     console.error('Intelligence Console job create failed:', err);
-    return res.status(500).json({ success: false, error: 'Could not start intelligence job.' });
+    const dbDown = /Database is not configured/i.test(err.message || '');
+    return res.status(dbDown ? 503 : 500).json({
+      success: false,
+      error: dbDown ? 'Intelligence Console is unavailable: job store is offline.' : 'Could not start intelligence job.',
+    });
   }
 });
 

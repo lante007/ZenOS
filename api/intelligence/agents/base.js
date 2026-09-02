@@ -1,11 +1,12 @@
 'use strict';
 
 // api/intelligence/agents/base.js
-// Shared runner for specialist agents. A specialist optionally runs a bounded
-// tool-use gather loop, then is forced to return a structured analysis via the
-// submit_analysis tool. Returns a rich result object including status, timing,
-// token usage and the tool calls it made, so orchestration and observability
-// never have to guess what happened.
+// Shared runner for specialist agents. A specialist runs a bounded, planned
+// tool-use gather loop (parallel calls per round, equivalent calls
+// de-duplicated, an explicit stop-when-sufficient instruction), then is
+// forced to return a structured analysis via the submit_analysis tool.
+// Returns a rich result: status, timing, token usage, rounds and the tool
+// calls it made, so orchestration and observability never have to guess.
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { agentConfig } = require('../config');
@@ -14,6 +15,19 @@ const { STRUCTURED_OUTPUT_RULES } = require('../contexts/shared');
 const { normaliseConfidence } = require('../confidence');
 
 const client = new Anthropic();
+
+function gatherRules(maxRounds) {
+  return `
+RETRIEVAL DISCIPLINE
+Plan before you retrieve. In your first turn, request every retrieval you can
+foresee needing, batched into that one turn so the calls run in parallel.
+Prefer get_programme_evidence and list_programmes over many narrow
+corpus_search calls. Do not repeat a search you have already run: equivalent
+repeats are rejected and waste a round. As soon as the retrieved evidence is
+sufficient to answer the question, or you have established that the evidence
+is not in the corpus, stop calling tools. You have at most ${maxRounds}
+retrieval rounds.`;
+}
 
 const SUBMIT_ANALYSIS_TOOL = {
   name: 'submit_analysis',
@@ -68,6 +82,16 @@ function addUsage(acc, usage) {
   return acc;
 }
 
+function summariseResult(result) {
+  if (result.error) return result.error;
+  if (result.deduped) return 'deduped';
+  if (result.records) return `records=${result.records.length}`;
+  if (result.record_count != null) return `records=${result.record_count}`;
+  if (result.match_count != null) return `matches=${result.match_count}`;
+  if (result.programme_count != null) return `programmes=${result.programme_count}`;
+  return 'ok';
+}
+
 function normaliseStructured(input, raw) {
   const arr = v => (Array.isArray(v) ? v.filter(x => x != null) : []);
   const out = {
@@ -96,6 +120,7 @@ async function runSpecialistAgent({ role, question, systemPrompt, userContext })
   const startedAt = Date.now();
   const usage = { input_tokens: 0, output_tokens: 0 };
   const toolCalls = [];
+  let rounds = 0;
 
   const work = (async () => {
     const messages = [{
@@ -104,41 +129,39 @@ async function runSpecialistAgent({ role, question, systemPrompt, userContext })
     }];
 
     const toolSpecs = getToolSpecs(cfg.allowed_tools);
+    const gatherSystem = `${systemPrompt}\n${gatherRules(cfg.max_tool_rounds)}`;
+    const seen = new Set();
 
-    // Gather phase: bounded tool-use loop.
-    for (let round = 0; round < cfg.max_tool_rounds && toolSpecs.length > 0; round += 1) {
+    // Gather phase: bounded, parallel, de-duplicated tool-use loop.
+    for (; rounds < cfg.max_tool_rounds && toolSpecs.length > 0; rounds += 1) {
       const resp = await client.messages.create({
         model: cfg.model,
         max_tokens: 1024,
         temperature: cfg.temperature,
-        system: systemPrompt,
+        system: gatherSystem,
         tools: toolSpecs,
         messages,
       });
       addUsage(usage, resp.usage);
       messages.push({ role: 'assistant', content: resp.content });
-
       if (resp.stop_reason !== 'tool_use') break;
 
-      const toolResults = [];
-      for (const block of resp.content) {
-        if (block.type !== 'tool_use') continue;
+      const blocks = resp.content.filter(b => b.type === 'tool_use');
+      const executed = await Promise.all(blocks.map(async block => {
+        const key = `${block.name}:${JSON.stringify(block.input || {})}`.toLowerCase();
+        if (seen.has(key)) {
+          return { block, result: { deduped: true, note: 'Equivalent retrieval already performed this session. Reuse the earlier result; do not repeat.' }, ms: 0, cached: true };
+        }
+        seen.add(key);
         const t0 = Date.now();
         const result = await runTool(block.name, block.input);
-        toolCalls.push({
-          tool: block.name,
-          input: block.input,
-          ok: !result.error,
-          ms: Date.now() - t0,
-          summary: result.error
-            ? result.error
-            : `records=${result.records ? result.records.length : (result.record_count ?? result.match_count ?? 'n/a')}`,
-        });
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: JSON.stringify(result).slice(0, 12000),
-        });
+        return { block, result, ms: Date.now() - t0, cached: false };
+      }));
+
+      const toolResults = [];
+      for (const { block, result, ms, cached } of executed) {
+        toolCalls.push({ tool: block.name, input: block.input, ok: !result.error, cached, ms, summary: summariseResult(result) });
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result).slice(0, 12000) });
       }
       messages.push({ role: 'user', content: toolResults });
     }
@@ -165,25 +188,13 @@ async function runSpecialistAgent({ role, question, systemPrompt, userContext })
   try {
     const output = await withTimeout(work, cfg.timeout_ms, `agent ${role}`);
     return {
-      agent: role,
-      status: 'ok',
-      execution_ms: Date.now() - startedAt,
-      model: cfg.model,
-      usage,
-      tool_calls: toolCalls,
-      output,
-      error: null,
+      agent: role, status: 'ok', execution_ms: Date.now() - startedAt,
+      model: cfg.model, usage, rounds, tool_calls: toolCalls, output, error: null,
     };
   } catch (err) {
     return {
-      agent: role,
-      status: 'failed',
-      execution_ms: Date.now() - startedAt,
-      model: cfg.model,
-      usage,
-      tool_calls: toolCalls,
-      output: null,
-      error: err.message,
+      agent: role, status: 'failed', execution_ms: Date.now() - startedAt,
+      model: cfg.model, usage, rounds, tool_calls: toolCalls, output: null, error: err.message,
     };
   }
 }
