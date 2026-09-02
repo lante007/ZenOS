@@ -207,6 +207,7 @@ function shapeRow(row) {
     })),
     answer: status === 'completed' ? row.answer : null,
     answer_structured: status === 'completed' ? row.answer_structured : null,
+    agent_results: status === 'completed' ? (row.agent_results || null) : null,
     live_data: status === 'completed' ? row.live_data : null,
     telemetry: row.telemetry || null,
     model_calls: row.model_calls || null,

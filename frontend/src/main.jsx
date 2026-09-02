@@ -5748,6 +5748,10 @@ function AdminShell({ active, children }) {
             <Gauge size={18} />
             <span>Dashboard</span>
           </a>
+          <a className={active === 'chief-of-staff' ? 'active' : ''} href="/admin/chief-of-staff">
+            <Brain size={18} />
+            <span>Chief of Staff</span>
+          </a>
           <a className={active === 'usage' ? 'active' : ''} href="/admin/usage">
             <BarChart3 size={18} />
             <span>Usage Surveillance</span>
@@ -5763,14 +5767,6 @@ function AdminShell({ active, children }) {
           <a className={active === 'tenants' ? 'active' : ''} href="/admin/tenants">
             <Database size={18} />
             <span>Tenants</span>
-          </a>
-          <a className={active === 'ask' ? 'active' : ''} href="/admin/ask">
-            <Search size={18} />
-            <span>Ask Auxeira</span>
-          </a>
-          <a className={active === 'intelligence' ? 'active' : ''} href="/admin/intelligence">
-            <Brain size={18} />
-            <span>Intelligence</span>
           </a>
           <a className={active === 'support' ? 'active' : ''} href="/admin/support">
             <KeyRound size={18} />
@@ -6118,150 +6114,121 @@ function AdminSystemHealthPage() {
   );
 }
 
-function AdminAskPage() {
-  const examplePrompts = [
-    'Why did ADEI-ZF-004 score 2.73 on the Research pathway?',
-    'Compare Zenex and Optima corpus coverage',
-    'Explain the Three-Capital Cascade calculation',
-    'Why was a CURRENCY_ALERT generated for Funda Wande?',
-    'What is the EROI index formula?',
-  ];
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+// ── Chief of Staff cockpit ─────────────────────────────────────────────
+// Surfaces the existing three-agent Intelligence runtime (Evidence Analyst,
+// Strategic Analyst, Advisor). The Advisor is the single user-facing voice.
+// Backend unchanged: POST /api/intelligence/ask + GET /api/intelligence/ask/:id.
 
-  async function askAuxeira(value = question) {
-    const trimmed = value.trim();
-    if (trimmed.length < 3) return;
-    setQuestion(trimmed);
-    setLoading(true);
-    setError('');
-    setAnswer(null);
-    try {
-      const data = await adminAskRequest('/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed }),
-      });
-      if (!data) return;
-      setAnswer(data);
-    } catch (err) {
-      setError(err.message || 'Ask Auxeira could not respond. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault();
-    askAuxeira();
-  }
-
-  return (
-    <AdminShell active="ask">
-      <section className="dashboard-main admin-ask-page">
-        <header className="dashboard-header">
-          <div>
-            <p className="eyebrow">Founder intelligence</p>
-            <h1>Ask Auxeira</h1>
-            <p className="page-subheader">Platform intelligence for the Auxeira founder console</p>
-            <p className="admin-ask-subline">
-              Covers EQS methodology, cross-tenant analytics, scoring explanations, and system diagnostics
-            </p>
-          </div>
-        </header>
-
-        {!answer && !loading && (
-          <div className="prompt-chip-grid admin-ask-prompts">
-            {examplePrompts.map(prompt => (
-              <button key={prompt} type="button" onClick={() => askAuxeira(prompt)}>
-                {prompt}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <form className="ask-search-panel admin-ask-search" onSubmit={handleSubmit}>
-          <label className="ask-input">
-            <Search size={20} />
-            <input
-              value={question}
-              onChange={event => setQuestion(event.target.value)}
-              placeholder="Ask anything about the platform, methodology, or tenant performance..."
-            />
-          </label>
-          <button className="primary-action" type="submit" disabled={loading || question.trim().length < 3}>
-            <span>{loading ? 'Asking...' : 'Ask'}</span>
-          </button>
-        </form>
-
-        {loading && (
-          <div className="pulse-loading">
-            <span className="pulse-dot" />
-            <span className="pulse-dot" />
-            <span className="pulse-dot" />
-            <span>Analysing platform context...</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="brief-error">
-            <strong>Ask Auxeira failed</strong>
-            <p>{error}</p>
-            <button className="btn-ghost" type="button" onClick={() => askAuxeira()}>
-              Try again
-            </button>
-          </div>
-        )}
-
-        {answer?.answer && (
-          <article className="ask-answer-card admin-ask-answer">
-            <div
-              className="ask-answer-body"
-              dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(answer.answer) }}
-            />
-            <footer className="ask-result-meta">
-              Covering {answer.tenants_covered || 0} tenants · {dateTimeStamp(answer.generated_at)}
-            </footer>
-          </article>
-        )}
-      </section>
-    </AdminShell>
-  );
-}
-
-const INTEL_BADGE = {
+const COS_BADGE = {
   fontSize: 12, fontWeight: 600, color: '#FFFFFF',
   background: '#F05A28', padding: '3px 10px', borderRadius: 4,
 };
 
-function intelAgentIcon(status) {
+const COS_STAGES = [
+  { key: 'evidence_analyst', label: 'Evidence Analyst', domain: 'Evidence truth' },
+  { key: 'strategic_analyst', label: 'Strategic Analyst', domain: 'Strategic context and product memory' },
+  { key: 'advisor', label: 'Advisor', domain: 'Synthesis' },
+];
+
+const COS_EVIDENCE_TYPE_LABEL = {
+  extracted_finding: 'Retrieved from Zenex corpus',
+  metadata: 'Established product decision — not a corpus finding',
+  aggregate: 'Aggregate corpus statistic',
+  external: 'External source',
+  none: 'No document source',
+};
+
+function cosStageIcon(status) {
   if (status === 'ok') return '✓';
   if (status === 'failed') return '✗';
   return '○';
 }
 
-function AdminIntelligencePage() {
+// UNKNOWN signal: the Advisor's structured synthesis carries an explicit
+// overall_confidence enum. UNKNOWN there means the corpus could not answer.
+// This is the reliable signal — not a string match on the answer text.
+function cosIsUnknown(job) {
+  return Boolean(job && job.answer_structured && job.answer_structured.overall_confidence === 'UNKNOWN');
+}
+
+function cosAgentResult(job, key) {
+  const list = (job && job.agent_results) || [];
+  return list.find(a => a.agent === key) || null;
+}
+
+function cosPreview(result, chars = 200) {
+  if (!result) return 'No output recorded.';
+  if (result.status !== 'ok' || !result.output) return `Did not complete${result.error ? `: ${result.error}` : '.'}`;
+  const o = result.output;
+  const parts = []
+    .concat(o.bottom_line ? [o.bottom_line] : [])
+    .concat(Array.isArray(o.findings) ? o.findings : [])
+    .concat(Array.isArray(o.known) ? o.known : []);
+  const text = parts.join(' ').trim() || 'Structured output only.';
+  return text.length > chars ? `${text.slice(0, chars).trimEnd()}…` : text;
+}
+
+function CosStructuredAgent({ output }) {
+  if (!output) return <p style={{ color: 'var(--color-muted)' }}>No structured output.</p>;
+  const block = (title, items) => (
+    Array.isArray(items) && items.length > 0 ? (
+      <div style={{ marginBottom: 10 }}>
+        <strong style={{ fontSize: 13 }}>{title}</strong>
+        <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 13 }}>
+          {items.map((it, i) => <li key={i}>{typeof it === 'string' ? it : (it.point || JSON.stringify(it))}</li>)}
+        </ul>
+      </div>
+    ) : null
+  );
+  return (
+    <div>
+      {output.confidence && <p style={{ fontSize: 12, margin: '0 0 8px' }}>Agent confidence: <strong>{output.confidence}</strong></p>}
+      {block('Findings', output.findings)}
+      {block('Known', output.known)}
+      {block('Not known', output.not_known)}
+      {block('Interpretation', output.interpretation)}
+      {block('Risks', output.risks)}
+      {block('Recommendations', output.recommendations)}
+      {Array.isArray(output.sources) && output.sources.length > 0 && (
+        <div>
+          <strong style={{ fontSize: 13 }}>Sources</strong>
+          <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 12 }}>
+            {output.sources.map((s, i) => (
+              <li key={i}>{s.claim} — <em>{COS_EVIDENCE_TYPE_LABEL[s.evidence_type] || s.evidence_type}, {s.confidence}{s.record_id ? `, ${s.record_id}` : ''}</em></li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminChiefOfStaffPage() {
   const examplePrompts = [
-    'What should I prioritise today given the Zenex situation?',
-    'What does the BTT evaluation say about teacher effect sizes?',
-    'Why did we cap navigation at six rooms?',
-    "Assess Catherine's concern about whether EvidenceOS duplicates Zenex's existing knowledge-management capability.",
+    'What should I prioritise today given the current Zenex situation?',
+    "Assess Catherine's concern that EvidenceOS duplicates existing Zenex systems",
+    'What does the corpus show about Foundation Phase numeracy gaps?',
+    'Why did we cap EvidenceOS navigation at six rooms?',
+    'What is the current corpus health and what is blocking completion?',
+    'What are the biggest commercial risks in the next four weeks?',
   ];
   const [question, setQuestion] = useState('');
   const [job, setJob] = useState(null);
   const [phase, setPhase] = useState('idle'); // idle | starting | running | done | error
   const [error, setError] = useState('');
+  const [history, setHistory] = useState([]);
+  const [nowTick, setNowTick] = useState(0);
   const pollRef = useRef(null);
 
   function stopPolling() {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }
   useEffect(() => stopPolling, []);
+  useEffect(() => {
+    if (phase !== 'running' && phase !== 'starting') return undefined;
+    const t = setInterval(() => setNowTick(n => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
 
   async function pollOnce(jobId) {
     try {
@@ -6272,6 +6239,7 @@ function AdminIntelligencePage() {
       if (data.status === 'completed') {
         stopPolling();
         setPhase('done');
+        setHistory(h => [{ id: data.job_id, question: data.question, at: data.completed_at, job: data }, ...h.filter(x => x.id !== data.job_id)]);
       } else if (data.status === 'failed') {
         stopPolling();
         setPhase('error');
@@ -6284,7 +6252,7 @@ function AdminIntelligencePage() {
     }
   }
 
-  async function askIntelligence(value = question) {
+  async function ask(value = question) {
     const trimmed = value.trim();
     if (trimmed.length < 3) return;
     stopPolling();
@@ -6310,118 +6278,226 @@ function AdminIntelligencePage() {
     }
   }
 
-  function handleSubmit(event) {
-    event.preventDefault();
-    askIntelligence();
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ask(); }
+  }
+  function replayHistory(entry) {
+    stopPolling();
+    setJob(entry.job);
+    setQuestion(entry.question);
+    setError('');
+    setPhase('done');
   }
 
   const busy = phase === 'starting' || phase === 'running';
   const structured = job && job.answer_structured;
+  const unknown = phase === 'done' && cosIsUnknown(job);
+  const elapsedSec = job && (job.started_at || job.created_at)
+    ? Math.max(0, Math.round((Date.now() - new Date(job.started_at || job.created_at).getTime()) / 1000))
+    : 0;
+  void nowTick;
+
+  const sourceGroups = (structured && Array.isArray(structured.sources) ? structured.sources : [])
+    .reduce((acc, s) => {
+      const k = s.evidence_type || 'none';
+      (acc[k] = acc[k] || []).push(s);
+      return acc;
+    }, {});
+  const totalToolCalls = job && Array.isArray(job.agents)
+    ? job.agents.reduce((n, a) => n + ((a.tools_used || []).length), 0) : 0;
+  const totalRounds = job && Array.isArray(job.agents)
+    ? job.agents.reduce((n, a) => n + (a.rounds || 0), 0) : 0;
 
   return (
-    <AdminShell active="intelligence">
+    <AdminShell active="chief-of-staff">
       <section className="dashboard-main admin-ask-page">
         <header className="dashboard-header">
           <div>
             <p className="eyebrow">Operating intelligence</p>
-            <h1>Intelligence Console</h1>
-            <p className="page-subheader">Auxeira operating intelligence for the founder console</p>
+            <h1>Chief of Staff</h1>
+            <p className="page-subheader">Many brains. One Chief of Staff. One mouth.</p>
             <p className="admin-ask-subline">
-              One question. The orchestrator runs specialist agents in parallel, each with corpus retrieval, and the Advisor synthesises one answer. Runs as a background job.
+              The Advisor answers, drawing on the Evidence Analyst and the Strategic Analyst. Runs as a background job.
             </p>
           </div>
         </header>
 
-        {phase === 'idle' && (
-          <div className="prompt-chip-grid admin-ask-prompts">
-            {examplePrompts.map(prompt => (
-              <button key={prompt} type="button" onClick={() => askIntelligence(prompt)}>
-                {prompt}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <form className="ask-search-panel admin-ask-search" onSubmit={handleSubmit}>
+        {/* Zone 1 — input */}
+        <form className="ask-search-panel admin-ask-search" onSubmit={e => { e.preventDefault(); ask(); }}>
           <label className="ask-input">
             <Brain size={20} />
             <input
               value={question}
-              onChange={event => setQuestion(event.target.value)}
-              placeholder="Ask anything about the Auxeira business, the corpus, the product, the infrastructure, or the sector..."
+              onChange={e => setQuestion(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask the Advisor anything..."
             />
           </label>
           <button className="primary-action" type="submit" disabled={busy || question.trim().length < 3}>
             <span>{busy ? 'Working...' : 'Ask'}</span>
           </button>
         </form>
+        <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: '4px 0 0' }}>Cmd+Enter to submit</p>
 
+        {phase === 'idle' && (
+          <div className="prompt-chip-grid admin-ask-prompts">
+            {examplePrompts.map(p => (
+              <button key={p} type="button" onClick={() => ask(p)}>{p}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Zone 2 — running */}
         {busy && (
-          <div className="pulse-loading" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+          <div className="pulse-loading" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
             <div>
-              <span className="pulse-dot" />
-              <span className="pulse-dot" />
-              <span className="pulse-dot" />
-              <span> Specialist agents are working. This runs in the background and usually takes 30 to 60 seconds.</span>
+              <span className="pulse-dot" /><span className="pulse-dot" /><span className="pulse-dot" />
+              <span> Working{elapsedSec ? ` · ${elapsedSec}s elapsed` : ''}. This runs in the background, usually 30 to 70 seconds.</span>
             </div>
-            {job && job.agents && job.agents.length > 0 && (
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#4B5563' }}>
-                {job.agents.map(a => (
-                  <li key={a.agent}>
-                    {intelAgentIcon(a.status)} {a.agent.replace(/_/g, ' ')}
-                    {a.tools_used && a.tools_used.length > 0 ? ` · ${a.tools_used.length} tool calls` : ''}
-                    {a.rounds ? ` · ${a.rounds} rounds` : ''}
-                    {a.execution_ms ? ` · ${(a.execution_ms / 1000).toFixed(1)}s` : ''}
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#4B5563' }}>
+              {COS_STAGES.map(stage => {
+                const a = job && Array.isArray(job.agents) ? job.agents.find(x => x.agent === stage.key) : null;
+                return (
+                  <li key={stage.key}>
+                    {a ? cosStageIcon(a.status) : '○'} {stage.label} <span style={{ color: 'var(--color-muted)' }}>· {stage.domain}</span>
+                    {a && a.execution_ms ? ` · ${(a.execution_ms / 1000).toFixed(1)}s` : ''}
+                    {a && a.rounds ? ` · ${a.rounds} rounds` : ''}
+                    {a && (a.tools_used || []).length ? ` · ${(a.tools_used || []).length} tool calls` : ''}
                   </li>
-                ))}
-              </ul>
-            )}
+                );
+              })}
+            </ul>
           </div>
         )}
 
         {phase === 'error' && (
           <div className="brief-error">
-            <strong>Intelligence Console failed</strong>
+            <strong>Chief of Staff failed</strong>
             <p>{error}</p>
-            {job && job.agents && job.agents.length > 0 && (
+            {job && Array.isArray(job.agents) && job.agents.length > 0 && (
               <ul style={{ fontSize: 13 }}>
-                {job.agents.map(a => (
-                  <li key={a.agent}>{intelAgentIcon(a.status)} {a.agent.replace(/_/g, ' ')}{a.error ? ` — ${a.error}` : ''}</li>
-                ))}
+                {job.agents.map(a => <li key={a.agent}>{cosStageIcon(a.status)} {a.agent.replace(/_/g, ' ')}{a.error ? ` — ${a.error}` : ''}</li>)}
               </ul>
             )}
-            <button className="btn-ghost" type="button" onClick={() => askIntelligence()}>
-              Try again
-            </button>
+            <button className="btn-ghost" type="button" onClick={() => ask()}>Try again</button>
           </div>
         )}
 
+        {/* Zone 2 — done */}
         {phase === 'done' && job && job.answer && (
-          <article className="ask-answer-card admin-ask-answer">
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-              {(job.agents_used || []).map(agent => (
-                <span key={agent} style={INTEL_BADGE}>{agent.replace(/_/g, ' ')}</span>
-              ))}
-              <span style={{ ...INTEL_BADGE, background: '#2D6A4F' }}>synthesised by advisor</span>
-              {structured && structured.overall_confidence && (
-                <span style={{ ...INTEL_BADGE, background: '#334155' }}>confidence: {structured.overall_confidence}</span>
-              )}
-            </div>
-            {job.degraded && (
-              <p style={{ color: '#B45309', fontSize: 13, marginTop: 0 }}>
-                One or more specialist agents did not complete. The synthesis notes where it is limited.
-              </p>
+          <div>
+            {unknown && (
+              <div style={{
+                background: '#FEF3C7', border: '1px solid #B45309', borderRadius: 6,
+                padding: '12px 16px', marginBottom: 14, color: '#92400E', fontSize: 13.5,
+              }}>
+                <strong>Evidence unavailable</strong> — the system found no corpus record for this topic.
+                Absence of a record does not mean absence of evidence outside the corpus.
+              </div>
             )}
-            <div
-              className="ask-answer-body"
-              dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(job.answer) }}
-            />
-            <footer className="ask-result-meta">
-              {dateTimeStamp(job.completed_at)}
-              {job.telemetry && job.telemetry.total_ms ? ` · ${(job.telemetry.total_ms / 1000).toFixed(1)}s` : ''}
-              {job.telemetry && job.telemetry.model_calls ? ` · ${job.telemetry.model_calls} model calls` : ''}
+
+            <article className="ask-answer-card admin-ask-answer">
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {(job.agents_used || []).map(a => <span key={a} style={COS_BADGE}>{a.replace(/_/g, ' ')}</span>)}
+                <span style={{ ...COS_BADGE, background: '#2D6A4F' }}>synthesised by advisor</span>
+                {structured && structured.overall_confidence && (
+                  <span style={{ ...COS_BADGE, background: unknown ? '#B45309' : '#334155' }}>confidence: {structured.overall_confidence}</span>
+                )}
+              </div>
+              {job.degraded && (
+                <p style={{ color: '#B45309', fontSize: 13, marginTop: 0 }}>
+                  One or more specialist agents did not complete. The synthesis notes where it is limited.
+                </p>
+              )}
+              <div className="ask-answer-body" dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(job.answer) }} />
+            </article>
+
+            {/* Zone 2B — agent contributions */}
+            <details style={{ marginTop: 14, border: '1px solid var(--color-border, #E8E2DC)', borderRadius: 6, padding: '10px 14px' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Agent contributions</summary>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+                {[
+                  { key: 'evidence_analyst', label: 'Evidence Analyst', domain: 'Evidence truth' },
+                  { key: 'strategic_analyst', label: 'Strategic Analyst', domain: 'Strategic context and product memory' },
+                ].map(spec => {
+                  const r = cosAgentResult(job, spec.key);
+                  return (
+                    <div key={spec.key} style={{ flex: '1 1 320px', border: '1px solid var(--color-border, #E8E2DC)', borderRadius: 6, padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{spec.label}</div>
+                      <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 8 }}>{spec.domain}{r && r.output && r.output.confidence ? ` · ${r.output.confidence}` : ''}</div>
+                      <p style={{ fontSize: 13, margin: '0 0 6px' }}>{cosPreview(r)}</p>
+                      <details>
+                        <summary style={{ cursor: 'pointer', fontSize: 12, color: '#F05A28' }}>Expand full contribution</summary>
+                        <div style={{ marginTop: 8 }}><CosStructuredAgent output={r && r.output} /></div>
+                      </details>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+
+            {/* Zone 2C — provenance */}
+            <details style={{ marginTop: 12, border: '1px solid var(--color-border, #E8E2DC)', borderRadius: 6, padding: '10px 14px' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                Provenance{structured && Array.isArray(structured.sources) ? ` (${structured.sources.length})` : ''}
+              </summary>
+              <div style={{ marginTop: 10 }}>
+                {Object.keys(sourceGroups).length === 0 && (
+                  <p style={{ fontSize: 13, color: 'var(--color-muted)' }}>No document-level sources. This answer rests on aggregate context and interpretation.</p>
+                )}
+                {Object.entries(sourceGroups).map(([type, list]) => (
+                  <div key={type} style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', color: '#334155' }}>
+                      {COS_EVIDENCE_TYPE_LABEL[type] || type}
+                    </div>
+                    <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 13 }}>
+                      {list.map((s, i) => (
+                        <li key={i}>
+                          {s.claim || s.document_filename || s.record_id || 'source'}
+                          {' — '}<em>{s.confidence}{s.document_filename ? `, ${s.document_filename}` : (s.record_id ? `, ${s.record_id}` : '')}</em>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            {/* Zone 2E — telemetry footer */}
+            <footer className="ask-result-meta" style={{ marginTop: 12 }}>
+              {job.telemetry && job.telemetry.total_ms ? `${(job.telemetry.total_ms / 1000).toFixed(1)}s` : null}
+              {job.agents_used && job.agents_used.length ? ` · agents: ${job.agents_used.join(', ')}` : ''}
+              {totalToolCalls ? ` · ${totalToolCalls} tool calls` : ''}
+              {totalRounds ? ` · ${totalRounds} rounds` : ''}
+              {job.model_calls ? ` · ${job.model_calls} model calls` : ''}
+              {job.job_id ? ` · job ${job.job_id.slice(0, 8)}` : ''}
             </footer>
-          </article>
+          </div>
+        )}
+
+        {/* Zone 3 — session history */}
+        {history.length > 0 && (
+          <details style={{ marginTop: 20 }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Session history ({history.length})</summary>
+            <ul style={{ listStyle: 'none', padding: 0, margin: '10px 0 0' }}>
+              {history.map(entry => (
+                <li key={entry.id} style={{ borderBottom: '1px solid var(--color-border, #E8E2DC)', padding: '8px 0' }}>
+                  <button
+                    type="button"
+                    onClick={() => replayHistory(entry)}
+                    style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', fontSize: 13, color: '#231F20' }}
+                  >
+                    <strong>{entry.question}</strong>
+                    <span style={{ color: 'var(--color-muted)' }}>
+                      {' · '}{dateTimeStamp(entry.at)}
+                      {entry.job.telemetry && entry.job.telemetry.total_ms ? ` · ${(entry.job.telemetry.total_ms / 1000).toFixed(1)}s` : ''}
+                      {entry.job.agents_used && entry.job.agents_used.length ? ` · ${entry.job.agents_used.join(', ')}` : ''}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </section>
     </AdminShell>
@@ -6861,8 +6937,9 @@ function App() {
   if (path === '/admin/usage') return <AdminUsagePage />;
   if (path === '/admin/corpus-health') return <AdminCorpusHealthPage />;
   if (path === '/admin/system-health') return <AdminSystemHealthPage />;
-  if (path === '/admin/ask') return <AdminAskPage />;
-  if (path === '/admin/intelligence') return <AdminIntelligencePage />;
+  if (path === '/admin/chief-of-staff') return <AdminChiefOfStaffPage />;
+  if (path === '/admin/ask') return <AdminChiefOfStaffPage />;
+  if (path === '/admin/intelligence') return <AdminChiefOfStaffPage />;
   if (path === '/admin/tenants') return <AdminTenantsPage />;
   if (path === '/admin/support') return <AdminSupportPage />;
   if (path === '/login') return <LoginPage />;
