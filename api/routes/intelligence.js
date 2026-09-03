@@ -15,6 +15,7 @@ const { requireRoles } = require('../middleware/permissions');
 const { createIntelligenceJob, getIntelligenceJob } = require('../intelligence');
 const { getSignalById } = require('../memory/watchtower');
 const { runProphetAgent } = require('../intelligence/agents/prophet');
+const { recordOutcome, listOutcomes } = require('../memory/outcomes');
 
 const router = express.Router();
 
@@ -79,6 +80,70 @@ router.post('/prophet', GUARD, async (req, res) => {
     return res.status(dbDown ? 503 : 500).json({
       success: false,
       error: dbDown ? 'Watchtower is unavailable: signal store is offline.' : 'Could not produce a Prophet assessment.',
+    });
+  }
+});
+
+// C5: outcomes (the feedback loop). Distinct from /api/memory/outcomes (the
+// admin-console-wide, tenant-by-query view): these are scoped to a single
+// Intelligence Console job, and the tenant is resolved from that job, not
+// from a query param. Append-only: a revision is a new POST with
+// originalOutcomeId set, never an edit to the row it revises. Placed above
+// the /:jobId catch-all below so 'outcomes' is never read as a job id.
+router.post('/outcomes', GUARD, async (req, res) => {
+  const {
+    jobId, outcomeStatus, decisionTaken, outcomeDescription,
+    signalProvedReliable, notes, originalOutcomeId, recommendationSummary,
+  } = req.body || {};
+  if (!jobId || typeof jobId !== 'string' || !UUID_RE.test(jobId)) {
+    return res.status(400).json({ success: false, error: 'A valid jobId is required.' });
+  }
+
+  try {
+    const job = await getIntelligenceJob(jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found.' });
+
+    const outcome = await recordOutcome(job.tenant_id || 'zenex', {
+      job_id: jobId,
+      recommendation_summary: recommendationSummary,
+      decision_taken: decisionTaken,
+      outcome_status: outcomeStatus,
+      outcome_description: outcomeDescription,
+      signal_proved_reliable: signalProvedReliable,
+      recorded_by: (req.user && req.user.email) || null,
+      notes,
+      original_outcome_id: originalOutcomeId,
+    });
+    return res.status(201).json({ success: true, data: outcome });
+  } catch (err) {
+    const status = err.status || 500;
+    if (status >= 500) console.error('Outcome record failed:', err);
+    const dbDown = /Database is not configured/i.test(err.message || '');
+    return res.status(dbDown ? 503 : status).json({
+      success: false,
+      error: dbDown ? 'Intelligence Console is unavailable: outcome store is offline.' : (err.message || 'Could not record outcome.'),
+    });
+  }
+});
+
+router.get('/outcomes', GUARD, async (req, res) => {
+  const { jobId } = req.query;
+  if (!jobId || typeof jobId !== 'string' || !UUID_RE.test(jobId)) {
+    return res.status(400).json({ success: false, error: 'A valid jobId query parameter is required.' });
+  }
+
+  try {
+    const job = await getIntelligenceJob(jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found.' });
+
+    const outcomes = await listOutcomes(job.tenant_id || 'zenex', { jobId });
+    return res.json({ success: true, data: outcomes });
+  } catch (err) {
+    console.error('Outcome list failed:', err);
+    const dbDown = /Database is not configured/i.test(err.message || '');
+    return res.status(dbDown ? 503 : 500).json({
+      success: false,
+      error: dbDown ? 'Intelligence Console is unavailable: outcome store is offline.' : 'Could not list outcomes.',
     });
   }
 });
