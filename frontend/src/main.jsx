@@ -33,6 +33,7 @@ import {
   X,
 } from 'lucide-react';
 import { tenantConfig } from './config';
+import { shouldShowOutcomePanel } from './lib/outcomePanel';
 import './styles.css';
 
 const qualityDimensionFields = [
@@ -6216,6 +6217,190 @@ function CosStructuredAgent({ output }) {
   );
 }
 
+// C6: outcome capture. What was decided, and what happened, in response to
+// one Advisor answer. Recording is optional and never blocks anything else
+// in the cockpit. Append-only on the backend (POST /api/intelligence/outcomes,
+// GET /api/intelligence/outcomes?jobId=): a revision is a new submission with
+// originalOutcomeId set, never an edit, so the panel always shows only the
+// most recently recorded outcome for this job, with a "Record revision"
+// path rather than an "Edit" path.
+const COS_OUTCOME_STATUS_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'acted_on', label: 'Acted on' },
+  { value: 'dismissed', label: 'Dismissed' },
+  { value: 'succeeded', label: 'Succeeded' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'partial', label: 'Partial' },
+];
+
+function CosOutcomePanel({ jobId }) {
+  const [loading, setLoading] = useState(true);
+  const [outcomes, setOutcomes] = useState([]);
+  const [mode, setMode] = useState('view'); // view | form
+  const [originalOutcomeId, setOriginalOutcomeId] = useState(null);
+  const [outcomeStatus, setOutcomeStatus] = useState('pending');
+  const [decisionTaken, setDecisionTaken] = useState('');
+  const [notes, setNotes] = useState('');
+  const [signalProvedReliable, setSignalProvedReliable] = useState('unset'); // unset | true | false
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setMode('view');
+    setToast('');
+    setSubmitError('');
+    intelligenceRequest(`/outcomes?jobId=${jobId}`, {})
+      .then(res => {
+        if (cancelled) return;
+        const data = (res && (res.data || res)) || [];
+        setOutcomes(Array.isArray(data) ? data : []);
+      })
+      .catch(() => { if (!cancelled) setOutcomes([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [jobId]);
+
+  const latest = outcomes.length
+    ? [...outcomes].sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))[0]
+    : null;
+
+  function openForm(revisionOf) {
+    setOriginalOutcomeId(revisionOf ? revisionOf.id : null);
+    setOutcomeStatus(revisionOf ? revisionOf.outcome_status : 'pending');
+    setDecisionTaken(revisionOf ? (revisionOf.decision_taken || '') : '');
+    setNotes('');
+    setSignalProvedReliable('unset');
+    setSubmitError('');
+    setMode('form');
+  }
+
+  async function submitOutcome(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const body = {
+        jobId,
+        outcomeStatus,
+        decisionTaken: decisionTaken.trim() || null,
+        notes: notes.trim() || null,
+        signalProvedReliable: signalProvedReliable === 'unset' ? null : signalProvedReliable === 'true',
+      };
+      if (originalOutcomeId) body.originalOutcomeId = originalOutcomeId;
+      const res = await intelligenceRequest('/outcomes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const saved = res && (res.data || res);
+      setOutcomes(prev => (saved ? [saved, ...prev] : prev));
+      setMode('view');
+      setToast(originalOutcomeId ? 'Revision recorded.' : 'Outcome recorded.');
+    } catch (err) {
+      setSubmitError(err.message || 'Could not record this outcome.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <details style={{ marginTop: 12, border: '1px solid var(--color-border, #E8E2DC)', borderRadius: 6, padding: '10px 14px' }} open>
+      <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+        Outcome{outcomes.length > 1 ? ` (${outcomes.length} recorded)` : ''}
+      </summary>
+
+      {loading && <p style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 8 }}>Loading…</p>}
+
+      {!loading && toast && <div className="toast-message" style={{ marginTop: 10 }}>{toast}</div>}
+
+      {!loading && mode === 'view' && (
+        latest ? (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              <span style={COS_BADGE}>{latest.outcome_status.replace(/_/g, ' ')}</span>
+              {latest.signal_proved_reliable !== null && (
+                <span style={{ ...COS_BADGE, background: latest.signal_proved_reliable ? '#2D6A4F' : '#B45309' }}>
+                  signal {latest.signal_proved_reliable ? 'proved reliable' : 'did not prove reliable'}
+                </span>
+              )}
+              {latest.original_outcome_id && <span style={{ ...COS_BADGE, background: '#334155' }}>revision</span>}
+            </div>
+            {latest.decision_taken && <p style={{ fontSize: 13, margin: '0 0 6px' }}><strong>Decision:</strong> {latest.decision_taken}</p>}
+            {latest.notes && <p style={{ fontSize: 13, margin: '0 0 6px', color: 'var(--color-muted)' }}>{latest.notes}</p>}
+            <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: '0 0 10px' }}>
+              Recorded {dateTimeStamp(latest.recorded_at)}{latest.recorded_by ? ` by ${latest.recorded_by}` : ''}
+            </p>
+            <button type="button" className="secondary-action" onClick={() => openForm(latest)}>
+              <span>Record revision</span>
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            <p style={{ fontSize: 13, color: 'var(--color-muted)', margin: '0 0 10px' }}>No outcome recorded for this response yet.</p>
+            <button type="button" className="secondary-action" onClick={() => openForm(null)}>
+              <span>Record outcome</span>
+            </button>
+          </div>
+        )
+      )}
+
+      {!loading && mode === 'form' && (
+        <form onSubmit={submitOutcome} style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
+          <label style={{ fontSize: 13 }}>
+            Outcome status
+            <select value={outcomeStatus} onChange={e => setOutcomeStatus(e.target.value)} style={{ display: 'block', marginTop: 4, width: '100%' }}>
+              {COS_OUTCOME_STATUS_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <label style={{ fontSize: 13 }}>
+            Decision taken
+            <input
+              type="text"
+              value={decisionTaken}
+              onChange={e => setDecisionTaken(e.target.value)}
+              placeholder="What was decided or done"
+              style={{ display: 'block', marginTop: 4, width: '100%' }}
+            />
+          </label>
+          <label style={{ fontSize: 13 }}>
+            Notes
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={2}
+              style={{ display: 'block', marginTop: 4, width: '100%' }}
+            />
+          </label>
+          <fieldset style={{ border: 'none', padding: 0, margin: 0, fontSize: 13 }}>
+            <legend style={{ padding: 0, marginBottom: 4 }}>Did the underlying signal prove reliable?</legend>
+            <label style={{ marginRight: 12 }}>
+              <input type="radio" name={`signalProvedReliable-${jobId}`} checked={signalProvedReliable === 'unset'} onChange={() => setSignalProvedReliable('unset')} /> Not sure
+            </label>
+            <label style={{ marginRight: 12 }}>
+              <input type="radio" name={`signalProvedReliable-${jobId}`} checked={signalProvedReliable === 'true'} onChange={() => setSignalProvedReliable('true')} /> Yes
+            </label>
+            <label>
+              <input type="radio" name={`signalProvedReliable-${jobId}`} checked={signalProvedReliable === 'false'} onChange={() => setSignalProvedReliable('false')} /> No
+            </label>
+          </fieldset>
+          {submitError && <p className="form-error">{submitError}</p>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="secondary-action confirm" disabled={submitting}>
+              <span>{submitting ? 'Saving…' : (originalOutcomeId ? 'Save revision' : 'Save outcome')}</span>
+            </button>
+            <button type="button" className="secondary-action" onClick={() => setMode('view')} disabled={submitting}>
+              <span>Cancel</span>
+            </button>
+          </div>
+        </form>
+      )}
+    </details>
+  );
+}
+
 function AdminChiefOfStaffPage() {
   const examplePrompts = [
     'What should I prioritise today given the current Zenex situation?',
@@ -6475,6 +6660,9 @@ function AdminChiefOfStaffPage() {
                 ))}
               </div>
             </details>
+
+            {/* Zone 2D — outcome capture (C6) */}
+            {shouldShowOutcomePanel(phase, job) && <CosOutcomePanel jobId={job.job_id} />}
 
             {/* Zone 2E — telemetry footer */}
             <footer className="ask-result-meta" style={{ marginTop: 12 }}>
