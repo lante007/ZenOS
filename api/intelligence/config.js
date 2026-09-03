@@ -5,7 +5,7 @@
 // Intelligence Console. Agents never hard-code these. Change cost and
 // performance characteristics here, not inside individual agents.
 
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_MODEL = 'claude-sonnet-5';
 
 const AGENTS = {
   evidence_analyst: {
