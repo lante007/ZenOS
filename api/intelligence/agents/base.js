@@ -52,9 +52,10 @@ const SUBMIT_ANALYSIS_TOOL = {
             document_id: { type: 'string' },
             document_filename: { type: 'string' },
             evidence_type: { type: 'string', enum: ['extracted_finding', 'metadata', 'aggregate', 'external', 'none'] },
+            claim_type: { type: 'string', enum: ['fact', 'interpretation', 'inference', 'unknown'], description: 'What kind of claim this is, constrained by evidence_type: extracted_finding -> fact or inference; metadata -> fact or interpretation; aggregate -> fact; none -> unknown.' },
             confidence: { type: 'string', enum: ['HIGH', 'MODERATE', 'LOW', 'UNKNOWN'] },
           },
-          required: ['claim', 'evidence_type', 'confidence'],
+          required: ['claim', 'evidence_type', 'claim_type', 'confidence'],
         },
       },
       confidence: { type: 'string', enum: ['HIGH', 'MODERATE', 'LOW', 'UNKNOWN'], description: 'Overall confidence, reflecting evidence availability.' },
@@ -92,6 +93,23 @@ function summariseResult(result) {
   return 'ok';
 }
 
+// claim_type invariant: what an evidence_type is permitted to be labelled as.
+// Enforced here, not left to the model, because the JSON Schema on
+// submit_analysis cannot express a constraint conditional on another field.
+const CLAIM_TYPE_BY_EVIDENCE_TYPE = {
+  extracted_finding: ['fact', 'inference'],
+  metadata: ['fact', 'interpretation'],
+  aggregate: ['fact'],
+  none: ['unknown'],
+  external: ['fact', 'interpretation', 'inference', 'unknown'],
+};
+
+function normaliseClaimType(evidenceType, provided) {
+  const allowed = CLAIM_TYPE_BY_EVIDENCE_TYPE[evidenceType] || ['fact', 'interpretation', 'inference', 'unknown'];
+  if (allowed.includes(provided)) return provided;
+  return allowed[0];
+}
+
 function normaliseStructured(input, raw) {
   const arr = v => (Array.isArray(v) ? v.filter(x => x != null) : []);
   const out = {
@@ -101,14 +119,18 @@ function normaliseStructured(input, raw) {
     interpretation: arr(input.interpretation),
     risks: arr(input.risks),
     recommendations: arr(input.recommendations),
-    sources: arr(input.sources).map(s => ({
-      claim: s.claim || '',
-      record_id: s.record_id || null,
-      document_id: s.document_id || null,
-      document_filename: s.document_filename || null,
-      evidence_type: s.evidence_type || 'none',
-      confidence: normaliseConfidence(s.confidence),
-    })),
+    sources: arr(input.sources).map(s => {
+      const evidence_type = s.evidence_type || 'none';
+      return {
+        claim: s.claim || '',
+        record_id: s.record_id || null,
+        document_id: s.document_id || null,
+        document_filename: s.document_filename || null,
+        evidence_type,
+        claim_type: normaliseClaimType(evidence_type, s.claim_type),
+        confidence: normaliseConfidence(s.confidence),
+      };
+    }),
     confidence: normaliseConfidence(input.confidence),
   };
   if (raw) out._raw_text = raw;
