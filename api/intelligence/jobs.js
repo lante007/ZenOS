@@ -54,6 +54,14 @@ async function ensureSchema() {
       'model_calls INTEGER',
       'live_data JSONB',
       'tenant_id TEXT',
+      // Increment 3, C7: the exact institutional memory context (memory,
+      // decisions, signals) the Advisor was actually given for this job, so
+      // GET /trace/:jobId can reconstruct every hop without re-running
+      // buildMemoryContext (which could return different rows by the time
+      // someone reads the trace). NULL when MEMORY_CONTEXT_ENABLED was off
+      // for the job's tenant, or the lookup failed -- same fail-open shape
+      // as the memory context block itself.
+      'memory_context_used JSONB',
     ]) {
       await pool.query(`ALTER TABLE public.intelligence_jobs ADD COLUMN IF NOT EXISTS ${col}`);
     }
@@ -120,10 +128,12 @@ async function executeJob(job) {
     const pool = getPool();
     const liveData = pool ? await getLiveCorpusData(pool) : null;
 
+    let memoryContextUsed = null;
     const result = await runIntelligence(job.question, liveData, {
       user: job.user_email,
       role: job.user_role,
       tenantId: job.tenant_id || 'zenex',
+      onMemoryContext: ctx => { memoryContextUsed = ctx; },
     });
     if (timedOut) return;
 
@@ -137,6 +147,7 @@ async function executeJob(job) {
       model_calls: result.telemetry ? result.telemetry.model_calls : null,
       telemetry: result.telemetry,
       live_data: liveData,
+      memory_context_used: memoryContextUsed,
       error: result.status === 'failed' ? 'Synthesis agent failed' : null,
       completed_at: new Date().toISOString(),
     });
@@ -213,6 +224,7 @@ function shapeRow(row) {
     answer_structured: status === 'completed' ? row.answer_structured : null,
     agent_results: status === 'completed' ? (row.agent_results || null) : null,
     live_data: status === 'completed' ? row.live_data : null,
+    memory_context_used: status === 'completed' ? (row.memory_context_used || null) : null,
     telemetry: row.telemetry || null,
     model_calls: row.model_calls || null,
     error: status === 'failed' ? (row.error || 'Job did not complete') : null,

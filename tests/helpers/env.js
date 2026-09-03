@@ -20,4 +20,8 @@ function hasAws() {
   );
 }
 
-module.exports = { hasDatabase, hasAws };
+function hasAnthropic() {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
+module.exports = { hasDatabase, hasAws, hasAnthropic };

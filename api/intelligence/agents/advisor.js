@@ -150,6 +150,15 @@ async function buildPrompt(question, specialistResults, meta = {}) {
   if (memoryEnabled) {
     try {
       const ctx = await buildMemoryContext({ tenantId, query: question });
+      // Increment 3, C7: an optional, non-breaking tracing hook. A caller
+      // (the job runner) can pass meta.onMemoryContext to capture exactly
+      // which memory/decisions/signals were retrieved and actually injected
+      // into this prompt, for later persistence and GET /trace/:jobId
+      // reconstruction. No existing caller passes this, so behaviour and the
+      // prompt text itself are unchanged for every existing test and path.
+      if (typeof meta.onMemoryContext === 'function') {
+        try { meta.onMemoryContext(ctx); } catch { /* tracing must never affect the prompt */ }
+      }
       const block = formatMemoryContext(ctx);
       if (block) lines.push('', 'MEMORY CONTEXT (flag-gated)', '', block);
     } catch (err) {

@@ -202,6 +202,14 @@ async function getSignalById(id) {
   return res.rows[0] || null;
 }
 
+// A single observation by id. Used by the trace reconstruction (C7) to
+// resolve the S3 snapshot reference chain (this observation, and the one it
+// changed from, if any) behind a signal that fed into an Advisor answer.
+async function getObservationById(id) {
+  const res = await q('SELECT * FROM public.wt_observations WHERE id = $1', [id]);
+  return res.rows[0] || null;
+}
+
 async function listSignals({ limit, since, status } = {}) {
   const where = [];
   const params = [];
@@ -257,6 +265,6 @@ module.exports = {
   fingerprint,
   registerSource, updateSource, listSources, getDueSources,
   recordObservation, updateObservationSnapshot,
-  createSignal, getSignalById, listSignals, upsertTenantSignalRelevance, listTenantSignals,
+  createSignal, getSignalById, getObservationById, listSignals, upsertTenantSignalRelevance, listTenantSignals,
   SOURCE_TYPES,
 };

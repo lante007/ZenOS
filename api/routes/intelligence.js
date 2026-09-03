@@ -16,6 +16,7 @@ const { createIntelligenceJob, getIntelligenceJob } = require('../intelligence')
 const { getSignalById } = require('../memory/watchtower');
 const { runProphetAgent } = require('../intelligence/agents/prophet');
 const { recordOutcome, listOutcomes } = require('../memory/outcomes');
+const { buildJobTrace } = require('../memory/trace');
 
 const router = express.Router();
 
@@ -145,6 +146,27 @@ router.get('/outcomes', GUARD, async (req, res) => {
       success: false,
       error: dbDown ? 'Intelligence Console is unavailable: outcome store is offline.' : 'Could not list outcomes.',
     });
+  }
+});
+
+// C7: the full trace behind one job -- memory context actually used,
+// signal provenance (source + observation + S3 snapshot chain) for every
+// signal that context contained, and every outcome recorded against the
+// job -- reconstructed from the database and S3 alone. Placed above the
+// /:jobId catch-all below so 'trace' is never read as a job id.
+router.get('/trace/:jobId', GUARD, async (req, res) => {
+  const { jobId } = req.params;
+  if (!UUID_RE.test(jobId || '')) {
+    return res.status(400).json({ success: false, error: 'Invalid job id.' });
+  }
+
+  try {
+    const trace = await buildJobTrace(jobId);
+    if (!trace) return res.status(404).json({ success: false, error: 'Job not found.' });
+    return res.json({ success: true, data: trace });
+  } catch (err) {
+    console.error('Intelligence Console trace read failed:', err);
+    return res.status(500).json({ success: false, error: 'Could not build job trace.' });
   }
 });
 

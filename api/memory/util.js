@@ -46,4 +46,14 @@ function clampLimit(n, def = 25, max = 200) {
   return Math.min(Math.floor(v), max);
 }
 
-module.exports = { resolveTenant, q, clampLimit };
+// Test-only escape hatch: forces the next resolveTenant call to re-read
+// master.tenants instead of serving a cache that predates a disposable test
+// tenant's insert. No application code path calls this; it exists only so
+// a test that creates a tenant and immediately needs it to resolve is not
+// racing this cache's TTL (see tests/trace.test.js).
+function _invalidateTenantCacheForTests() {
+  tenantCache = null;
+  tenantCacheAt = 0;
+}
+
+module.exports = { resolveTenant, q, clampLimit, _invalidateTenantCacheForTests };
