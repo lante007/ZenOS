@@ -8,7 +8,7 @@
     "dev": "node server.js",
     "ingest": "node adei-ingest.js",
     "check": "node -c server.js && find api src -name '*.js' -maxdepth 4 -print | sort | xargs -n 1 node -c && node -c adei-ingest.js",
-    "test": "npm run check"
+    "test": "node tests/run.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.26.0",

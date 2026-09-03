@@ -13,7 +13,13 @@ const FALLBACK_TENANTS = {
     s3_web_bucket: 'auxeira-web-zenex',
     db_schema: 'zenex',
     organisation_type: 'FUNDER',
-    feature_flags: { federated_network: false, sroi_module: true, synthesis: true, portfolio_optimizer: true },
+    feature_flags: {
+      federated_network: false, sroi_module: true, synthesis: true, portfolio_optimizer: true,
+      // Increment 3, C1: gates buildMemoryContext() injection into the
+      // Advisor. Off by default; no behaviour change until C2 turns it on
+      // per tenant.
+      MEMORY_CONTEXT_ENABLED: false,
+    },
     is_active: true,
   },
   optima: {
@@ -26,7 +32,10 @@ const FALLBACK_TENANTS = {
     s3_web_bucket: 'auxeira-web-optima',
     db_schema: 'optima',
     organisation_type: 'FUNDER',
-    feature_flags: { federated_network: false, sroi_module: true, synthesis: true, portfolio_optimizer: true },
+    feature_flags: {
+      federated_network: false, sroi_module: true, synthesis: true, portfolio_optimizer: true,
+      MEMORY_CONTEXT_ENABLED: false,
+    },
     is_active: true,
   },
 };
@@ -101,4 +110,14 @@ async function listTenants() {
   return Object.values(FALLBACK_TENANTS).map(normalizeTenant);
 }
 
-module.exports = { getTenantBySlug, listTenants, FALLBACK_TENANTS };
+// Feature flags live on each tenant's feature_flags object (DB column when
+// the database is reachable, FALLBACK_TENANTS otherwise — see
+// getTenantBySlug). Unknown tenants and unknown flag names both resolve to
+// false so a typo'd flag name fails closed rather than throwing.
+async function getFeatureFlag(tenantId, flagName) {
+  const tenant = await getTenantBySlug(tenantId);
+  if (!tenant || !tenant.feature_flags) return false;
+  return tenant.feature_flags[flagName] === true;
+}
+
+module.exports = { getTenantBySlug, listTenants, getFeatureFlag, FALLBACK_TENANTS };
