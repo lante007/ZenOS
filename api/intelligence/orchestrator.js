@@ -48,7 +48,7 @@ async function runIntelligence(question, liveData, meta = {}) {
     }),
   );
 
-  const advisor = await runAdvisorAgent(question, settled);
+  const advisor = await runAdvisorAgent(question, settled, meta);
 
   const degraded = settled.some(r => r.status !== 'ok');
   const allSpecialistsFailed = settled.every(r => r.status !== 'ok');

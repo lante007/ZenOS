@@ -53,6 +53,7 @@ async function ensureSchema() {
       'agent_results JSONB',
       'model_calls INTEGER',
       'live_data JSONB',
+      'tenant_id TEXT',
     ]) {
       await pool.query(`ALTER TABLE public.intelligence_jobs ADD COLUMN IF NOT EXISTS ${col}`);
     }
@@ -122,6 +123,7 @@ async function executeJob(job) {
     const result = await runIntelligence(job.question, liveData, {
       user: job.user_email,
       role: job.user_role,
+      tenantId: job.tenant_id || 'zenex',
     });
     if (timedOut) return;
 
@@ -157,19 +159,20 @@ async function readRow(id) {
   return res.rows[0] || null;
 }
 
-async function createIntelligenceJob({ question, userEmail, userRole }) {
+async function createIntelligenceJob({ question, userEmail, userRole, tenantId }) {
   await ensureSchema();
   const job = {
     id: crypto.randomUUID(),
     question: String(question).trim(),
     user_email: userEmail || null,
     user_role: userRole || null,
+    tenant_id: tenantId || 'zenex',
   };
   const pool = getPool();
   await pool.query(
-    `INSERT INTO public.intelligence_jobs (id, status, question, user_email, user_role, created_at)
-     VALUES ($1, 'queued', $2, $3, $4, NOW())`,
-    [job.id, job.question, job.user_email, job.user_role],
+    `INSERT INTO public.intelligence_jobs (id, status, question, user_email, user_role, tenant_id, created_at)
+     VALUES ($1, 'queued', $2, $3, $4, $5, NOW())`,
+    [job.id, job.question, job.user_email, job.user_role, job.tenant_id],
   );
 
   executeJob(job).catch(err => {
@@ -190,6 +193,7 @@ function shapeRow(row) {
     job_id: row.id,
     status,
     degraded: Boolean(row.degraded),
+    tenant_id: row.tenant_id || 'zenex',
     question: row.question,
     created_at: row.created_at,
     started_at: row.started_at || null,

@@ -20,7 +20,7 @@ const GUARD = requireRoles('SUPER_ADMIN', 'AUXEIRA_FOUNDER');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 router.post(['/', '/ask'], GUARD, async (req, res) => {
-  const { question } = req.body || {};
+  const { question, tenantId } = req.body || {};
   if (!question || typeof question !== 'string' || question.trim().length === 0) {
     return res.status(400).json({ success: false, error: 'Question is required.' });
   }
@@ -30,6 +30,11 @@ router.post(['/', '/ask'], GUARD, async (req, res) => {
       question,
       userEmail: req.user && req.user.email,
       userRole: req.user && req.user.role,
+      // The admin console session itself isn't tied to a real tenant slug
+      // (req.user.tenant_id is the literal 'admin'), so the target tenant
+      // for institutional memory context is either explicitly supplied or
+      // defaults to 'zenex' — the only tenant this cockpit currently serves.
+      tenantId: typeof tenantId === 'string' && tenantId.trim() ? tenantId.trim() : 'zenex',
     });
     return res.status(202).json({
       success: true,

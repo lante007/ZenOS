@@ -10,6 +10,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { agentConfig } = require('../config');
 const { ADVISOR_CONTEXT } = require('../contexts/advisor');
 const { normaliseConfidence } = require('../confidence');
+const { getFeatureFlag } = require('../../services/tenants');
+const { buildMemoryContext, formatMemoryContext } = require('../../memory/context');
 
 const client = new Anthropic();
 
@@ -114,23 +116,57 @@ function toMarkdown(s) {
   return lines.join('\n');
 }
 
-async function runAdvisorAgent(question, specialistResults) {
+// Assembles the user-message content sent to the Advisor. Kept separate
+// from runAdvisorAgent (and exported) so its output can be asserted against
+// directly in tests without a live Anthropic call.
+//
+// Increment 3, C2: institutional memory context is additive and flag-gated
+// per tenant. When MEMORY_CONTEXT_ENABLED is false for the tenant (the
+// default set in C1), the block below never runs and this function's
+// output is byte-identical to the pre-C1/C2 prompt. A memory-context
+// lookup failure while the flag is on must never block or alter the rest
+// of the prompt: it is caught and the section is simply omitted.
+async function buildPrompt(question, specialistResults, meta = {}) {
+  const anyOk = specialistResults.some(r => r.status === 'ok' && r.output);
+
+  const lines = [
+    'ORIGINAL QUESTION', question, '',
+    'SPECIALIST AGENT OUTPUTS', '',
+    specialistResults.map(renderAgentBlock).join('\n\n---\n\n'),
+    '',
+    anyOk
+      ? 'Synthesise these into one response by calling submit_synthesis. Keep evidence and interpretation separate. Note explicitly where an agent failed.'
+      : 'Every specialist agent failed. Call submit_synthesis with overall_confidence UNKNOWN, state plainly that no specialist analysis is available, and recommend re-running the query.',
+  ];
+
+  const tenantId = meta.tenantId || 'zenex';
+  let memoryEnabled = false;
+  try {
+    memoryEnabled = await getFeatureFlag(tenantId, 'MEMORY_CONTEXT_ENABLED');
+  } catch {
+    memoryEnabled = false; // fail closed: a flag lookup error must never change agent behaviour
+  }
+
+  if (memoryEnabled) {
+    try {
+      const ctx = await buildMemoryContext({ tenantId, query: question });
+      const block = formatMemoryContext(ctx);
+      if (block) lines.push('', 'MEMORY CONTEXT (flag-gated)', '', block);
+    } catch (err) {
+      console.warn(`[advisor] memory context unavailable for tenant ${tenantId}: ${err.message}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+async function runAdvisorAgent(question, specialistResults, meta = {}) {
   const cfg = agentConfig('advisor');
   const startedAt = Date.now();
   const usage = { input_tokens: 0, output_tokens: 0 };
 
-  const anyOk = specialistResults.some(r => r.status === 'ok' && r.output);
-
   const work = (async () => {
-    const combined = [
-      'ORIGINAL QUESTION', question, '',
-      'SPECIALIST AGENT OUTPUTS', '',
-      specialistResults.map(renderAgentBlock).join('\n\n---\n\n'),
-      '',
-      anyOk
-        ? 'Synthesise these into one response by calling submit_synthesis. Keep evidence and interpretation separate. Note explicitly where an agent failed.'
-        : 'Every specialist agent failed. Call submit_synthesis with overall_confidence UNKNOWN, state plainly that no specialist analysis is available, and recommend re-running the query.',
-    ].join('\n');
+    const combined = await buildPrompt(question, specialistResults, meta);
 
     const resp = await client.messages.create({
       model: cfg.model,
@@ -187,4 +223,4 @@ async function runAdvisorAgent(question, specialistResults) {
   }
 }
 
-module.exports = { runAdvisorAgent };
+module.exports = { runAdvisorAgent, buildPrompt };
