@@ -36,6 +36,17 @@ const AGENTS = {
     allowed_tools: [],
     max_tool_rounds: 0,
   },
+  // C4: Prophet is a single forced-tool-call agent, the same shape as
+  // advisor, not a new multi-agent pipeline. It never retrieves; it only
+  // reasons over the one Watchtower signal it is given.
+  prophet: {
+    model: DEFAULT_MODEL,
+    max_tokens: 1200,
+    temperature: 0.2,
+    timeout_ms: 70000,
+    allowed_tools: [],
+    max_tool_rounds: 0,
+  },
 };
 
 const ORCHESTRATION = {

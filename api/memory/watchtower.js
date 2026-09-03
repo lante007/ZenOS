@@ -189,6 +189,19 @@ async function createSignal(sig) {
   return { signal: existing, created: false };
 }
 
+// A single signal by id, joined with its source, for callers (Prophet) that
+// need the full observed-fact context of one specific signal.
+async function getSignalById(id) {
+  const res = await q(`
+    SELECT sig.*, src.name AS source_name, src.url AS source_url,
+           src.source_type AS source_kind, src.credibility AS source_credibility
+    FROM public.wt_signals sig
+    JOIN public.wt_sources src ON src.id = sig.source_id
+    WHERE sig.id = $1
+  `, [id]);
+  return res.rows[0] || null;
+}
+
 async function listSignals({ limit, since, status } = {}) {
   const where = [];
   const params = [];
@@ -244,6 +257,6 @@ module.exports = {
   fingerprint,
   registerSource, updateSource, listSources, getDueSources,
   recordObservation, updateObservationSnapshot,
-  createSignal, listSignals, upsertTenantSignalRelevance, listTenantSignals,
+  createSignal, getSignalById, listSignals, upsertTenantSignalRelevance, listTenantSignals,
   SOURCE_TYPES,
 };

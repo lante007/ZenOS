@@ -13,6 +13,8 @@
 const express = require('express');
 const { requireRoles } = require('../middleware/permissions');
 const { createIntelligenceJob, getIntelligenceJob } = require('../intelligence');
+const { getSignalById } = require('../memory/watchtower');
+const { runProphetAgent } = require('../intelligence/agents/prophet');
 
 const router = express.Router();
 
@@ -46,6 +48,37 @@ router.post(['/', '/ask'], GUARD, async (req, res) => {
     return res.status(dbDown ? 503 : 500).json({
       success: false,
       error: dbDown ? 'Intelligence Console is unavailable: job store is offline.' : 'Could not start intelligence job.',
+    });
+  }
+});
+
+// C4: Prophet. Synchronous (a single forced tool call, not a job): takes
+// one existing Watchtower signal id and returns a structured forward
+// assessment. Never takes action; see api/intelligence/agents/prophet.js.
+router.post('/prophet', GUARD, async (req, res) => {
+  const { signalId } = req.body || {};
+  if (!signalId || typeof signalId !== 'string' || !UUID_RE.test(signalId)) {
+    return res.status(400).json({ success: false, error: 'A valid signalId is required.' });
+  }
+
+  try {
+    const signal = await getSignalById(signalId);
+    if (!signal) return res.status(404).json({ success: false, error: 'Signal not found.' });
+
+    const result = await runProphetAgent(signal);
+    if (result.status !== 'ok') {
+      return res.status(502).json({ success: false, error: result.error || 'Prophet could not produce an assessment.' });
+    }
+    return res.json({
+      success: true,
+      data: { signal_id: signal.id, assessment: result.output },
+    });
+  } catch (err) {
+    console.error('Prophet assessment failed:', err);
+    const dbDown = /Database is not configured/i.test(err.message || '');
+    return res.status(dbDown ? 503 : 500).json({
+      success: false,
+      error: dbDown ? 'Watchtower is unavailable: signal store is offline.' : 'Could not produce a Prophet assessment.',
     });
   }
 });
