@@ -70,6 +70,16 @@ Priority order for the reader, and the order the fields are in:
    availability across the whole answer.
 Keep it concise enough for executive use. Length is not the goal; signal is.
 
+DECISION ECONOMICS SURFACING
+When the Strategic Analyst output contains a DECISION ECONOMICS block,
+surface it prominently near the top of the Advisor response, before
+the detailed analysis. Do not bury it in the reasoning. A CEO must be
+able to read the Decision Economics block in ten seconds and
+understand the system's recommendation and the basis for it.
+
+Format it as a clearly labelled compact table. Do not expand it into
+prose. The prose analysis follows below it.
+
 ${CONTEXT_BOUNDARIES}
 ${CONFIDENCE_GUIDANCE}
 ${SHARED_RULES}
