@@ -6417,6 +6417,10 @@ function AdminChiefOfStaffPage() {
   const [history, setHistory] = useState([]);
   const [nowTick, setNowTick] = useState(0);
   const pollRef = useRef(null);
+  const [tenants, setTenants] = useState([]);
+  const [canViewAll, setCanViewAll] = useState(false);
+  const [tenantMode, setTenantMode] = useState('tenant');
+  const [selectedTenantId, setSelectedTenantId] = useState('');
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -6427,6 +6431,16 @@ function AdminChiefOfStaffPage() {
     const t = setInterval(() => setNowTick(n => n + 1), 1000);
     return () => clearInterval(t);
   }, [phase]);
+  useEffect(() => {
+    intelligenceRequest('/tenants', {}).then(res => {
+      const data = res && (res.data || res);
+      const list = data && Array.isArray(data.tenants) ? data.tenants : [];
+      setTenants(list);
+      setCanViewAll(Boolean(data && data.can_view_all));
+      setTenantMode('tenant');
+      if (list.length) setSelectedTenantId(list[0].tenant_id);
+    }).catch(() => { setTenants([]); setCanViewAll(false); });
+  }, []);
 
   async function pollOnce(jobId) {
     try {
@@ -6462,7 +6476,12 @@ function AdminChiefOfStaffPage() {
       const res = await intelligenceRequest('/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({
+          question: trimmed,
+          ...(tenantMode === 'all' && canViewAll
+            ? { tenantMode: 'all' }
+            : (selectedTenantId ? { tenantId: selectedTenantId } : {})),
+        }),
       });
       const data = res && (res.data || res);
       const jobId = data && data.job_id;
@@ -6521,6 +6540,34 @@ function AdminChiefOfStaffPage() {
         </header>
 
         {/* Zone 1 — input */}
+        {(tenants.length > 1 || canViewAll) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 13, color: 'var(--color-muted)' }}>
+              Tenant:{' '}
+              <select
+                value={tenantMode === 'all' ? '__all__' : selectedTenantId}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v === '__all__') { setTenantMode('all'); }
+                  else { setTenantMode('tenant'); setSelectedTenantId(v); }
+                }}
+                disabled={busy}
+                style={{ marginLeft: 4 }}
+              >
+                {tenants.map(t => <option key={t.tenant_id} value={t.tenant_id}>{t.name}</option>)}
+                {canViewAll && <option value="__all__">All tenants</option>}
+              </select>
+            </label>
+          </div>
+        )}
+        {tenantMode === 'all' && canViewAll && (
+          <div style={{
+            background: '#EFF6FF', border: '1px solid #1D4ED8', borderRadius: 6,
+            padding: '10px 14px', marginBottom: 12, color: '#1E3A8A', fontSize: 13,
+          }}>
+            Reasoning across all tenants in administrator mode.
+          </div>
+        )}
         <form className="ask-search-panel admin-ask-search" onSubmit={e => { e.preventDefault(); ask(); }}>
           <label className="ask-input">
             <Brain size={20} />

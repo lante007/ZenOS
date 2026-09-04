@@ -12,6 +12,7 @@ const { ADVISOR_CONTEXT } = require('../contexts/advisor');
 const { normaliseConfidence } = require('../confidence');
 const { getFeatureFlag } = require('../../services/tenants');
 const { buildMemoryContext, formatMemoryContext } = require('../../memory/context');
+const { formatAllTenantsContext } = require('../live-data');
 
 const client = new Anthropic();
 
@@ -126,6 +127,16 @@ function toMarkdown(s) {
 // output is byte-identical to the pre-C1/C2 prompt. A memory-context
 // lookup failure while the flag is on must never block or alter the rest
 // of the prompt: it is caught and the section is simply omitted.
+//
+// Multi-tenant Chief of Staff: when meta.tenantScope.mode === 'all', this
+// function takes a completely different branch -- the single-tenant
+// memory-context lookup above is skipped entirely (that institutional
+// memory belongs to one tenant and must never be blended into a
+// cross-tenant answer) and a CROSS-TENANT INTELLIGENCE SUMMARY block is
+// appended instead, built from meta.allTenantsData (already fetched and
+// authorisation-scoped by the caller; this function does no authorisation
+// of its own). For every existing caller (meta.tenantScope unset or mode
+// 'tenant'), this function's behaviour and output are unchanged.
 async function buildPrompt(question, specialistResults, meta = {}) {
   const anyOk = specialistResults.some(r => r.status === 'ok' && r.output);
 
@@ -139,30 +150,46 @@ async function buildPrompt(question, specialistResults, meta = {}) {
       : 'Every specialist agent failed. Call submit_synthesis with overall_confidence UNKNOWN, state plainly that no specialist analysis is available, and recommend re-running the query.',
   ];
 
-  const tenantId = meta.tenantId || 'zenex';
-  let memoryEnabled = false;
-  try {
-    memoryEnabled = await getFeatureFlag(tenantId, 'MEMORY_CONTEXT_ENABLED');
-  } catch {
-    memoryEnabled = false; // fail closed: a flag lookup error must never change agent behaviour
-  }
+  const crossTenantMode = Boolean(meta.tenantScope && meta.tenantScope.mode === 'all');
 
-  if (memoryEnabled) {
+  if (crossTenantMode) {
+    const block = formatAllTenantsContext(meta.allTenantsData || []);
+    lines.push(
+      '',
+      block,
+      '',
+      'CROSS-TENANT MODE: you are reasoning across multiple authorised tenants at once, in administrator mode. ' +
+      'State explicitly which tenant each fact, figure, or recommendation pertains to. Never combine, average, ' +
+      'or otherwise blend figures from different tenants into a single number, and never infer one tenant\'s ' +
+      'situation from another tenant\'s data. If the question concerns a single tenant, ground the answer only ' +
+      'in that tenant\'s summary line above.'
+    );
+  } else {
+    const tenantId = meta.tenantId || 'zenex';
+    let memoryEnabled = false;
     try {
-      const ctx = await buildMemoryContext({ tenantId, query: question });
-      // Increment 3, C7: an optional, non-breaking tracing hook. A caller
-      // (the job runner) can pass meta.onMemoryContext to capture exactly
-      // which memory/decisions/signals were retrieved and actually injected
-      // into this prompt, for later persistence and GET /trace/:jobId
-      // reconstruction. No existing caller passes this, so behaviour and the
-      // prompt text itself are unchanged for every existing test and path.
-      if (typeof meta.onMemoryContext === 'function') {
-        try { meta.onMemoryContext(ctx); } catch { /* tracing must never affect the prompt */ }
+      memoryEnabled = await getFeatureFlag(tenantId, 'MEMORY_CONTEXT_ENABLED');
+    } catch {
+      memoryEnabled = false; // fail closed: a flag lookup error must never change agent behaviour
+    }
+
+    if (memoryEnabled) {
+      try {
+        const ctx = await buildMemoryContext({ tenantId, query: question });
+        // Increment 3, C7: an optional, non-breaking tracing hook. A caller
+        // (the job runner) can pass meta.onMemoryContext to capture exactly
+        // which memory/decisions/signals were retrieved and actually injected
+        // into this prompt, for later persistence and GET /trace/:jobId
+        // reconstruction. No existing caller passes this, so behaviour and the
+        // prompt text itself are unchanged for every existing test and path.
+        if (typeof meta.onMemoryContext === 'function') {
+          try { meta.onMemoryContext(ctx); } catch { /* tracing must never affect the prompt */ }
+        }
+        const block = formatMemoryContext(ctx);
+        if (block) lines.push('', 'MEMORY CONTEXT (flag-gated)', '', block);
+      } catch (err) {
+        console.warn(`[advisor] memory context unavailable for tenant ${tenantId}: ${err.message}`);
       }
-      const block = formatMemoryContext(ctx);
-      if (block) lines.push('', 'MEMORY CONTEXT (flag-gated)', '', block);
-    } catch (err) {
-      console.warn(`[advisor] memory context unavailable for tenant ${tenantId}: ${err.message}`);
     }
   }
 

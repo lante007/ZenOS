@@ -17,28 +17,75 @@ const { getSignalById } = require('../memory/watchtower');
 const { runProphetAgent } = require('../intelligence/agents/prophet');
 const { recordOutcome, listOutcomes } = require('../memory/outcomes');
 const { buildJobTrace } = require('../memory/trace');
+const { getAuthorisedTenants, isAdminRole } = require('../services/tenants');
 
 const router = express.Router();
 
 const GUARD = requireRoles('SUPER_ADMIN', 'AUXEIRA_FOUNDER');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Resolves the tenant scope a request is allowed to run under. This is the
+// single point of authorisation for the whole Intelligence Console: it never
+// trusts a tenant ID or "all tenants" request from the browser on its own —
+// it only ever narrows what getAuthorisedTenants() already returned for the
+// authenticated user.
+//
+//   - Not authorised for anything -> null (caller responds 403).
+//   - Non-admin role              -> forced to mode 'tenant', their own
+//                                    tenant only, regardless of what the
+//                                    request body asks for.
+//   - Admin role, body asks for
+//     tenantMode: 'all'           -> mode 'all' over every authorised tenant.
+//   - Admin role, otherwise       -> mode 'tenant'; the requested tenantId if
+//                                    (and only if) it is in the authorised
+//                                    set, else 'zenex' if authorised (the
+//                                    unchanged V1/V1.1 default), else the
+//                                    first authorised tenant.
+async function resolveTenantScope(user, body) {
+  const authorised = await getAuthorisedTenants(user);
+  if (!authorised.length) return null;
+
+  const authorisedSlugs = new Set(authorised.map(t => t.slug));
+  const admin = isAdminRole(user && user.role);
+
+  if (!admin) {
+    const own = authorised[0];
+    return { mode: 'tenant', tenant_id: own.slug, tenant_ids: null, tenants: [own] };
+  }
+
+  const requestedMode = body && body.tenantMode;
+  if (requestedMode === 'all') {
+    return { mode: 'all', tenant_id: null, tenant_ids: authorised.map(t => t.slug), tenants: authorised };
+  }
+
+  const requestedId = body && typeof body.tenantId === 'string' && body.tenantId.trim()
+    ? body.tenantId.trim()
+    : null;
+  const targetSlug = requestedId && authorisedSlugs.has(requestedId)
+    ? requestedId
+    : (authorisedSlugs.has('zenex') ? 'zenex' : authorised[0].slug);
+  const targetTenant = authorised.find(t => t.slug === targetSlug) || authorised[0];
+  return { mode: 'tenant', tenant_id: targetTenant.slug, tenant_ids: null, tenants: [targetTenant] };
+}
+
 router.post(['/', '/ask'], GUARD, async (req, res) => {
-  const { question, tenantId } = req.body || {};
+  const { question } = req.body || {};
   if (!question || typeof question !== 'string' || question.trim().length === 0) {
     return res.status(400).json({ success: false, error: 'Question is required.' });
   }
 
   try {
+    const scope = await resolveTenantScope(req.user, req.body || {});
+    if (!scope) {
+      return res.status(403).json({ success: false, error: 'No authorised tenant for this account.' });
+    }
+
     const job = await createIntelligenceJob({
       question,
       userEmail: req.user && req.user.email,
       userRole: req.user && req.user.role,
-      // The admin console session itself isn't tied to a real tenant slug
-      // (req.user.tenant_id is the literal 'admin'), so the target tenant
-      // for institutional memory context is either explicitly supplied or
-      // defaults to 'zenex' — the only tenant this cockpit currently serves.
-      tenantId: typeof tenantId === 'string' && tenantId.trim() ? tenantId.trim() : 'zenex',
+      tenantId: scope.tenant_id || 'zenex',
+      tenantScope: scope,
     });
     return res.status(202).json({
       success: true,
@@ -170,6 +217,25 @@ router.get('/trace/:jobId', GUARD, async (req, res) => {
   }
 });
 
+// Lightweight tenant list for the Console's tenant selector. Names only
+// (no internal fields beyond slug/name), scoped by the same authorisation
+// used for /ask itself -- a tenant user only ever sees their own tenant.
+router.get('/tenants', GUARD, async (req, res) => {
+  try {
+    const authorised = await getAuthorisedTenants(req.user);
+    return res.json({
+      success: true,
+      data: {
+        tenants: authorised.map(t => ({ tenant_id: t.slug, name: t.name })),
+        can_view_all: isAdminRole(req.user && req.user.role) && authorised.length > 1,
+      },
+    });
+  } catch (err) {
+    console.error('Intelligence Console tenant list failed:', err);
+    return res.status(500).json({ success: false, error: 'Could not list authorised tenants.' });
+  }
+});
+
 router.get(['/:jobId', '/ask/:jobId'], GUARD, async (req, res) => {
   const { jobId } = req.params;
   if (!UUID_RE.test(jobId || '')) {
@@ -186,4 +252,7 @@ router.get(['/:jobId', '/ask/:jobId'], GUARD, async (req, res) => {
   }
 });
 
+// Exported for tests only (tests/tenant-scope.test.js) -- the router
+// itself is still the module's primary export and mount shape.
+router.resolveTenantScope = resolveTenantScope;
 module.exports = router;

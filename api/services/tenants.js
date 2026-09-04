@@ -120,4 +120,47 @@ async function getFeatureFlag(tenantId, flagName) {
   return tenant.feature_flags[flagName] === true;
 }
 
-module.exports = { getTenantBySlug, listTenants, getFeatureFlag, FALLBACK_TENANTS };
+// Admin-console roles with platform-wide reach. There is no per-admin
+// tenant-delegation table in this system: this mirrors the existing
+// precedent already established by api/routes/admin-ask.js and the
+// /admin/corpus-health route, both of which loop over every active tenant
+// for any founder/super-admin caller.
+const ADMIN_ROLES = new Set(['AUXEIRA_FOUNDER', 'SUPER_ADMIN']);
+
+function isAdminRole(role) {
+  return !!role && ADMIN_ROLES.has(role);
+}
+
+// Authorised tenant scope for a given authenticated user. This is the sole
+// place that decides which tenants a request is allowed to touch — callers
+// must use this instead of trusting anything supplied by the browser.
+//
+// - AUXEIRA_FOUNDER / SUPER_ADMIN: authorised for every active tenant in the
+//   registry (platform-wide admin model, matching existing precedent).
+// - Every other role: authorised for exactly one tenant — their own, taken
+//   from `user.tenant_id` as already set by the auth middleware from the
+//   verified session, never from the request body/query.
+//
+// Returns an array of normalised tenant objects ({ slug, name, ... }), never
+// bare tenant ID strings, so callers always have a name to show without a
+// second lookup and can never accidentally forge an entry.
+async function getAuthorisedTenants(user) {
+  const role = user && user.role;
+  if (isAdminRole(role)) {
+    const all = await listTenants();
+    return all.filter(t => t.is_active !== false);
+  }
+  const ownSlug = user && user.tenant_id;
+  if (!ownSlug || ownSlug === 'admin') return [];
+  const own = await getTenantBySlug(ownSlug);
+  return own ? [own] : [];
+}
+
+module.exports = {
+  getTenantBySlug,
+  listTenants,
+  getFeatureFlag,
+  getAuthorisedTenants,
+  isAdminRole,
+  FALLBACK_TENANTS,
+};

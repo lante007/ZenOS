@@ -109,6 +109,15 @@ function buildProphetPrompt(signal) {
 // listed below are read, so an unexpected key in a tool response (e.g. an
 // autonomous-action flag no schema here defines) can never reach the
 // returned assessment.
+//
+// This function stays a faithful, literal reflection of `input`: it does
+// not invent a scenario when the model supplied none (see
+// tests/prophet.test.js "never drops observed_facts even with
+// empty/malformed model input", which asserts scenarios: [] for {}).
+// The contract-level guarantee that a live assessment always carries at
+// least one scenario is applied one layer up, in runProphetAgent, which is
+// the only caller that can distinguish "a live model call returned
+// nothing" from "a test is deliberately probing malformed input".
 function assembleAssessment(observedFacts, input = {}) {
   const scenarios = Array.isArray(input.scenarios)
     ? input.scenarios.map(s => ({
@@ -142,6 +151,21 @@ function assembleAssessment(observedFacts, input = {}) {
   };
 }
 
+// A deterministic, honestly-labelled placeholder used only when a live
+// model call returns zero scenarios despite being asked for at least one
+// (schema `minItems` is a hint to the model, not an enforced guarantee of
+// the Anthropic tool-use API, so this can still happen -- most often for a
+// signal with very little distinguishing detail). Confidence is pinned to
+// UNKNOWN and the wording makes plain this is a fallback, not a model
+// judgement, so it can never be mistaken for a real forward-looking claim.
+function fallbackScenario() {
+  return {
+    description: 'The model returned no forward scenario for this signal, most likely because the observed change carries too little distinguishing detail to project a specific forward path. This is a placeholder, not a model-derived scenario.',
+    confidence: 'UNKNOWN',
+    rests_on_assumptions: ['No scenario-specific detail was returned by the model for this signal.'],
+  };
+}
+
 async function runProphetAgent(signal) {
   const cfg = agentConfig('prophet');
   const startedAt = Date.now();
@@ -171,6 +195,13 @@ async function runProphetAgent(signal) {
     if (!toolUse) throw new Error('Prophet did not return a structured assessment');
 
     const assessment = assembleAssessment(observedFacts, toolUse.input || {});
+    // Contract-level guarantee (not merely a schema hint): a live call must
+    // always yield at least one scenario. If the model declined to supply
+    // one, substitute a clearly-labelled placeholder rather than failing
+    // the whole assessment -- see fallbackScenario() above.
+    if (!assessment.scenarios.length) {
+      assessment.scenarios = [fallbackScenario()];
+    }
     const errors = validateProphetAssessment(assessment);
     if (errors.length) throw new Error(`Prophet assessment failed shape validation: ${errors.join('; ')}`);
     return assessment;

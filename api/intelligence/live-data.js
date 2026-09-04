@@ -18,8 +18,9 @@ const {
   describeFieldFor,
 } = require('../services/workspace-fields');
 
-// The sole operating tenant. The Intelligence Console is entirely
-// Zenex-facing, so the live block targets the Zenex corpus.
+// The default operating tenant for single-tenant callers (unchanged from
+// V1/V1.1). Multi-tenant aggregation (getAllTenantsCorpusData, below) takes
+// an explicit, caller-authorised tenant list instead of relying on these.
 const PRIMARY_TENANT = 'zenex';
 const PRIMARY_SCHEMA = 'zenex';
 
@@ -62,8 +63,10 @@ async function computeCompleteness(pool, schema, tenantId) {
   };
 }
 
-async function chiefOfStaffLiveData(pool) {
-  assertSchema(PRIMARY_SCHEMA);
+// tenantId/schema default to the primary Zenex tenant so every existing
+// caller (getLiveCorpusData with no extra args) is byte-for-byte unchanged.
+async function chiefOfStaffLiveData(pool, schema = PRIMARY_SCHEMA, tenantId = PRIMARY_TENANT) {
+  assertSchema(schema);
 
   const coreResult = await pool.query(`
     SELECT
@@ -71,9 +74,9 @@ async function chiefOfStaffLiveData(pool) {
       ROUND(AVG(eqs_composite) FILTER (WHERE record_status = 'ACTIVE' AND eqs_composite IS NOT NULL), 2) AS avg_eqs,
       MAX(classified_at) FILTER (WHERE record_status = 'ACTIVE') AS last_ingestion,
       COUNT(*) FILTER (WHERE record_status = 'PENDING_REVIEW')::int AS pending_review
-    FROM ${PRIMARY_SCHEMA}.intelligence_records
+    FROM ${schema}.intelligence_records
     WHERE tenant_id = $1
-  `, [PRIMARY_TENANT]);
+  `, [tenantId]);
   const core = coreResult.rows[0] || {};
 
   // Financial Capital: identical query to stats.js GET /cascade.
@@ -86,23 +89,23 @@ async function chiefOfStaffLiveData(pool) {
           SELECT
             COALESCE(programme_family_id, id::text) as group_key,
             MAX(total_cost_rand) as grant_per_group
-          FROM ${PRIMARY_SCHEMA}.intelligence_records
+          FROM ${schema}.intelligence_records
           WHERE tenant_id = $1
             AND record_status = 'ACTIVE'
             AND total_cost_rand IS NOT NULL
           GROUP BY group_key
         ) subq
       ), 0)::bigint AS total_rand
-    FROM ${PRIMARY_SCHEMA}.intelligence_records
+    FROM ${schema}.intelligence_records
     WHERE tenant_id = $1
       AND record_status = 'ACTIVE'
-  `, [PRIMARY_TENANT]);
+  `, [tenantId]);
   const fc = fcResult.rows[0] || {};
   const fcAuditedCount = Number(fc.audited_count || 0);
   const fcValue = fcAuditedCount > 0 ? Number(fc.total_rand || 0) : null;
 
-  const completeness = await computeCompleteness(pool, PRIMARY_SCHEMA, PRIMARY_TENANT);
-  const { eroi, decisionCapital } = await computeEvidenceCapitalAndEroi(pool, PRIMARY_SCHEMA, PRIMARY_TENANT);
+  const completeness = await computeCompleteness(pool, schema, tenantId);
+  const { eroi, decisionCapital } = await computeEvidenceCapitalAndEroi(pool, schema, tenantId);
 
   const decisionCapitalStatus = decisionCapital.confirmed_instances > 0
     ? `${decisionCapital.label} across ${decisionCapital.confirmed_instances} confirmed instance${decisionCapital.confirmed_instances === 1 ? '' : 's'}`
@@ -122,8 +125,8 @@ async function chiefOfStaffLiveData(pool) {
   };
 }
 
-async function evidenceAnalystLiveData(pool) {
-  assertSchema(PRIMARY_SCHEMA);
+async function evidenceAnalystLiveData(pool, schema = PRIMARY_SCHEMA, tenantId = PRIMARY_TENANT) {
+  assertSchema(schema);
 
   const pathwayResult = await pool.query(`
     SELECT
@@ -136,9 +139,9 @@ async function evidenceAnalystLiveData(pool) {
       ROUND(AVG(eqs_composite) FILTER (WHERE record_status = 'ACTIVE' AND eqs_scoring_pathway = 'PROCESS' AND eqs_composite IS NOT NULL), 2) AS process_avg_eqs,
       ROUND(AVG(eqs_composite) FILTER (WHERE record_status = 'ACTIVE' AND eqs_scoring_pathway = 'RESEARCH' AND eqs_composite IS NOT NULL), 2) AS research_avg_eqs,
       COUNT(*) FILTER (WHERE record_status = 'ACTIVE' AND half_life_rating = 'AGING')::int AS aging_count
-    FROM ${PRIMARY_SCHEMA}.intelligence_records
+    FROM ${schema}.intelligence_records
     WHERE tenant_id = $1
-  `, [PRIMARY_TENANT]);
+  `, [tenantId]);
   const p = pathwayResult.rows[0] || {};
 
   // Programmes present in the corpus with no evaluation record on file, where
@@ -146,14 +149,14 @@ async function evidenceAnalystLiveData(pool) {
   // pathway records are studies, not evaluations).
   const noEvalResult = await pool.query(`
     SELECT COALESCE(canonical_programme_name, programme_name) AS programme
-    FROM ${PRIMARY_SCHEMA}.intelligence_records
+    FROM ${schema}.intelligence_records
     WHERE tenant_id = $1
       AND record_status = 'ACTIVE'
       AND programme_name IS NOT NULL
     GROUP BY COALESCE(canonical_programme_name, programme_name)
     HAVING NOT bool_or(eqs_scoring_pathway IN ('IMPACT', 'PROCESS'))
     ORDER BY programme
-  `, [PRIMARY_TENANT]);
+  `, [tenantId]);
   const programmesWithoutEvaluation = noEvalResult.rows.map(r => r.programme);
 
   return {
@@ -180,6 +183,10 @@ async function evidenceAnalystLiveData(pool) {
 // breakdown. Dates are explicit and never inferred downstream: the current
 // date, the moment the snapshot was taken, and the last ingestion are three
 // separate fields.
+//
+// Unchanged signature/behaviour: still single-tenant, still defaults to the
+// Zenex operating corpus. Multi-tenant aggregation lives in
+// getAllTenantsCorpusData, below, and is additive only.
 async function getLiveCorpusData(pool) {
   const now = new Date();
   const [cos, ea] = await Promise.all([
@@ -240,9 +247,180 @@ function formatLiveContext(d) {
   ].join('\n');
 }
 
+// --- Multi-tenant aggregation (Chief of Staff cross-tenant mode) ----------
+//
+// Reuses chiefOfStaffLiveData/evidenceAnalystLiveData above (now parametrised
+// by schema/tenantId) instead of duplicating any corpus query. Never queries
+// a tenant that isn't in `authorisedTenants` — the caller (routes/
+// intelligence.js) is responsible for deriving that list from the tenant
+// registry for an authorised admin role; this function performs no
+// authorisation of its own and trusts the array it is given verbatim, in
+// both directions: it will not silently expand it, and it will not query
+// anything beyond it.
+//
+// authorisedTenants: [{ slug, name }, ...] — slug doubles as schema name and
+// tenant_id, matching the convention already used by PRIMARY_TENANT/
+// PRIMARY_SCHEMA and by admin-ask.js's existing per-tenant loop.
+//
+// Each tenant entry is best-effort: a tenant whose schema doesn't exist yet
+// (e.g. not yet provisioned) fails soft with an `error` field instead of
+// aborting the whole aggregation, mirroring the established pattern in
+// api/routes/admin-ask.js and the /admin/corpus-health route.
+async function tenantAlertsSummary(pool, schema, tenantId) {
+  const res = await pool.query(`
+    SELECT id, alert_type, title, priority, created_at
+    FROM ${schema}.alerts
+    WHERE tenant_id = $1
+      AND is_read = false
+      AND (expires_at IS NULL OR expires_at > NOW())
+    ORDER BY CASE priority WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END, created_at DESC
+    LIMIT 10
+  `, [tenantId]);
+  return {
+    count: res.rowCount,
+    items: res.rows.map(r => ({
+      alert_type: r.alert_type,
+      title: r.title,
+      priority: r.priority,
+    })),
+  };
+}
+
+async function tenantPipelineStatus(pool, schema, tenantId) {
+  const res = await pool.query(`
+    SELECT COUNT(*)::int AS pending
+    FROM ${schema}.queue_items
+    WHERE tenant_id = $1
+      AND resolved_at IS NULL
+  `, [tenantId]);
+  const pending = Number(res.rows[0]?.pending || 0);
+  return pending > 0 ? `${pending} item${pending === 1 ? '' : 's'} pending review` : 'clear';
+}
+
+async function tenantDocumentAndProgrammeCounts(pool, schema, tenantId) {
+  const res = await pool.query(`
+    SELECT
+      (SELECT COUNT(*)::int FROM ${schema}.documents WHERE tenant_id = $1) AS document_count,
+      (SELECT COUNT(DISTINCT COALESCE(canonical_programme_name, programme_name))::int
+         FROM ${schema}.intelligence_records
+         WHERE tenant_id = $1 AND record_status = 'ACTIVE' AND programme_name IS NOT NULL) AS programme_count,
+      (SELECT COUNT(*)::int
+         FROM ${schema}.intelligence_records
+         WHERE tenant_id = $1 AND record_status = 'ACTIVE'
+           AND eqs_scoring_pathway IN ('IMPACT', 'PROCESS')) AS evaluation_count
+  `, [tenantId]);
+  const row = res.rows[0] || {};
+  return {
+    document_count: Number(row.document_count || 0),
+    programme_count: Number(row.programme_count || 0),
+    evaluation_count: Number(row.evaluation_count || 0),
+  };
+}
+
+function corpusHealthLabel(avgEqs, completenessPct) {
+  if (avgEqs == null) return 'no-data';
+  if (avgEqs >= 3.5 && completenessPct >= 70) return 'healthy';
+  if (avgEqs >= 2.5 && completenessPct >= 40) return 'attention';
+  return 'critical';
+}
+
+async function tenantSignalCount(tenantSlug) {
+  try {
+    const { listTenantSignals } = require('../memory/watchtower');
+    const signals = await listTenantSignals(tenantSlug, { limit: 25 });
+    return Array.isArray(signals) ? signals.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function getAllTenantsCorpusData(pool, authorisedTenants) {
+  const list = Array.isArray(authorisedTenants) ? authorisedTenants : [];
+  const entries = [];
+
+  for (const t of list) {
+    const slug = typeof t === 'string' ? t : t.slug;
+    const name = typeof t === 'string' ? t : (t.name || t.slug);
+    if (!slug) continue;
+
+    try {
+      assertSchema(slug);
+      const schema = slug;
+      const tenantId = slug;
+
+      const [cos, ea, counts, pipelineStatus, alerts, signalCount] = await Promise.all([
+        chiefOfStaffLiveData(pool, schema, tenantId),
+        evidenceAnalystLiveData(pool, schema, tenantId),
+        tenantDocumentAndProgrammeCounts(pool, schema, tenantId),
+        tenantPipelineStatus(pool, schema, tenantId),
+        tenantAlertsSummary(pool, schema, tenantId),
+        tenantSignalCount(slug),
+      ]);
+
+      entries.push({
+        tenant_id: slug,
+        tenant_name: name,
+        corpus_health: corpusHealthLabel(cos.average_eqs, cos.data_completeness_pct),
+        document_count: counts.document_count,
+        evaluation_count: counts.evaluation_count,
+        programme_count: counts.programme_count,
+        completeness: cos.data_completeness_pct,
+        evidence_quality: cos.average_eqs,
+        last_ingestion: cos.last_ingestion,
+        pipeline_status: pipelineStatus,
+        intelligence_signals: signalCount,
+        relevant_alerts: alerts.count,
+        _pathway_counts: ea.pathway_counts,
+      });
+    } catch (err) {
+      entries.push({
+        tenant_id: slug,
+        tenant_name: name,
+        error: err.message || 'Tenant corpus not accessible',
+      });
+    }
+  }
+
+  return entries;
+}
+
+// Structured text block for the Advisor prompt in cross-tenant ("all") mode.
+// One line per authorised tenant; tenants that failed are called out
+// explicitly rather than silently omitted, so the Advisor never assumes
+// zero activity means healthy activity.
+function formatAllTenantsContext(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return 'CROSS-TENANT INTELLIGENCE SUMMARY\nNo authorised tenants available for this request.';
+  }
+  const lines = [
+    'CROSS-TENANT INTELLIGENCE SUMMARY (aggregate database state per authorised tenant, not document-level evidence)',
+    `Tenants in scope: ${entries.length}`,
+    '',
+  ];
+  for (const e of entries) {
+    if (e.error) {
+      lines.push(`- ${e.tenant_name} (${e.tenant_id}): UNAVAILABLE — ${e.error}`);
+      continue;
+    }
+    lines.push(
+      `- ${e.tenant_name} (${e.tenant_id}): health=${e.corpus_health}, documents=${e.document_count}, evaluations=${e.evaluation_count}, programmes=${e.programme_count}, ` +
+      `completeness=${e.completeness}%, evidence_quality=${e.evidence_quality != null ? e.evidence_quality : 'N/A'}, ` +
+      `last_ingestion=${e.last_ingestion || 'none on record'}, pipeline=${e.pipeline_status}, ` +
+      `recent_signals=${e.intelligence_signals}, open_alerts=${e.relevant_alerts}`
+    );
+  }
+  lines.push(
+    '',
+    'Each tenant\'s figures are isolated aggregates from that tenant\'s own corpus only. Do not blend counts, averages, or evidence across tenants. When reasoning about more than one tenant, name each tenant explicitly.'
+  );
+  return lines.join('\n');
+}
+
 module.exports = {
   getLiveCorpusData,
   formatLiveContext,
   chiefOfStaffLiveData,
   evidenceAnalystLiveData,
+  getAllTenantsCorpusData,
+  formatAllTenantsContext,
 };

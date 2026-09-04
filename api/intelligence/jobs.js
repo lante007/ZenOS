@@ -14,7 +14,7 @@
 
 const crypto = require('crypto');
 const { getPool } = require('../services/db');
-const { getLiveCorpusData } = require('./live-data');
+const { getLiveCorpusData, getAllTenantsCorpusData } = require('./live-data');
 const { runIntelligence } = require('./orchestrator');
 const { ORCHESTRATION } = require('./config');
 
@@ -62,6 +62,12 @@ async function ensureSchema() {
       // for the job's tenant, or the lookup failed -- same fail-open shape
       // as the memory context block itself.
       'memory_context_used JSONB',
+      // Multi-tenant Chief of Staff: the tenant scope actually authorised
+      // and used for this job -- { mode: 'tenant'|'all', tenant_id,
+      // tenant_ids, tenants }. Server-derived only (see routes/
+      // intelligence.js resolveTenantScope); never trust a value read back
+      // from here for a new authorisation decision, it is audit trail only.
+      'tenant_scope JSONB',
     ]) {
       await pool.query(`ALTER TABLE public.intelligence_jobs ADD COLUMN IF NOT EXISTS ${col}`);
     }
@@ -94,6 +100,7 @@ function logJob(row) {
     degraded: Boolean(row.degraded),
     user: row.user_email,
     role: row.user_role,
+    tenant_scope: row.tenant_scope ? { mode: row.tenant_scope.mode, tenant_id: row.tenant_scope.tenant_id, tenant_ids: row.tenant_scope.tenant_ids } : null,
     question_chars: (row.question || '').length,
     agents: (row.agents || []).map(a => ({ agent: a.agent, status: a.status, ms: a.execution_ms, rounds: a.rounds, tools: (a.tools_used || []).map(t => t.tool) })),
     model_calls: row.model_calls,
@@ -126,13 +133,36 @@ async function executeJob(job) {
     await update(job.id, { status: 'running', started_at: new Date().toISOString() });
 
     const pool = getPool();
+    // Unchanged from V1/V1.1: the specialist agents (evidence_analyst,
+    // strategic_analyst) always analyse the Zenex operating corpus, exactly
+    // as before tenant scoping existed. Tenant scope only changes what the
+    // Advisor is told about institutional memory (single-tenant mode) or
+    // shown as a cross-tenant summary (all-tenants mode) -- never which
+    // corpus the specialists query.
     const liveData = pool ? await getLiveCorpusData(pool) : null;
+
+    const scope = job.tenant_scope || { mode: 'tenant', tenant_id: job.tenant_id || 'zenex', tenant_ids: null, tenants: null };
+
+    let allTenantsData = null;
+    if (scope.mode === 'all' && pool) {
+      try {
+        const tenantsForAggregation = Array.isArray(scope.tenants) && scope.tenants.length
+          ? scope.tenants
+          : (Array.isArray(scope.tenant_ids) ? scope.tenant_ids : []);
+        allTenantsData = await getAllTenantsCorpusData(pool, tenantsForAggregation);
+      } catch (err) {
+        console.warn('[jobs] cross-tenant aggregation failed:', err.message);
+        allTenantsData = [];
+      }
+    }
 
     let memoryContextUsed = null;
     const result = await runIntelligence(job.question, liveData, {
       user: job.user_email,
       role: job.user_role,
-      tenantId: job.tenant_id || 'zenex',
+      tenantId: scope.tenant_id || job.tenant_id || 'zenex',
+      tenantScope: scope,
+      allTenantsData,
       onMemoryContext: ctx => { memoryContextUsed = ctx; },
     });
     if (timedOut) return;
@@ -170,20 +200,24 @@ async function readRow(id) {
   return res.rows[0] || null;
 }
 
-async function createIntelligenceJob({ question, userEmail, userRole, tenantId }) {
+async function createIntelligenceJob({ question, userEmail, userRole, tenantId, tenantScope }) {
   await ensureSchema();
+  const scope = tenantScope && tenantScope.mode
+    ? tenantScope
+    : { mode: 'tenant', tenant_id: tenantId || 'zenex', tenant_ids: null, tenants: null };
   const job = {
     id: crypto.randomUUID(),
     question: String(question).trim(),
     user_email: userEmail || null,
     user_role: userRole || null,
-    tenant_id: tenantId || 'zenex',
+    tenant_id: scope.tenant_id || tenantId || 'zenex',
+    tenant_scope: scope,
   };
   const pool = getPool();
   await pool.query(
-    `INSERT INTO public.intelligence_jobs (id, status, question, user_email, user_role, tenant_id, created_at)
-     VALUES ($1, 'queued', $2, $3, $4, $5, NOW())`,
-    [job.id, job.question, job.user_email, job.user_role, job.tenant_id],
+    `INSERT INTO public.intelligence_jobs (id, status, question, user_email, user_role, tenant_id, tenant_scope, created_at)
+     VALUES ($1, 'queued', $2, $3, $4, $5, $6, NOW())`,
+    [job.id, job.question, job.user_email, job.user_role, job.tenant_id, JSON.stringify(scope)],
   );
 
   executeJob(job).catch(err => {
@@ -205,6 +239,7 @@ function shapeRow(row) {
     status,
     degraded: Boolean(row.degraded),
     tenant_id: row.tenant_id || 'zenex',
+    tenant_scope: row.tenant_scope || null,
     question: row.question,
     created_at: row.created_at,
     started_at: row.started_at || null,
