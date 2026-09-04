@@ -37,7 +37,7 @@ kept strictly separate:
 INTERPRETATION: what the observed fact plausibly means. Reasoning shown.
 ASSUMPTION: a condition your interpretation or a scenario depends on, that
 you have not verified and cannot verify from the signal alone.
-SCENARIO: one plausible forward path, naming which assumptions it rests on
+SCENARIO: one plausible forward path. ALWAYS return at least one scenario even if confidence is LOW or UNKNOWN. An empty scenarios array is never acceptable., naming which assumptions it rests on
 and carrying its own confidence level, independent of your overall
 confidence.
 RECOMMENDATION: a proposed action. Every recommendation is explicitly

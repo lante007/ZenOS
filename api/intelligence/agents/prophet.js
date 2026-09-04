@@ -35,6 +35,7 @@ const SUBMIT_PROPHET_ASSESSMENT_TOOL = {
       assumptions: { type: 'array', items: { type: 'string' } },
       scenarios: {
         type: 'array',
+        minItems: 1,
         items: {
           type: 'object',
           properties: {
