@@ -159,7 +159,6 @@ async function runSpecialistAgent({ role, question, systemPrompt, userContext })
       const resp = await client.messages.create({
         model: cfg.model,
         max_tokens: 1024,
-        temperature: cfg.temperature,
         system: gatherSystem,
         tools: toolSpecs,
         messages,
@@ -192,7 +191,6 @@ async function runSpecialistAgent({ role, question, systemPrompt, userContext })
     const finalResp = await client.messages.create({
       model: cfg.model,
       max_tokens: cfg.max_tokens,
-      temperature: cfg.temperature,
       system: `${systemPrompt}\n${STRUCTURED_OUTPUT_RULES}`,
       tools: [SUBMIT_ANALYSIS_TOOL],
       tool_choice: { type: 'tool', name: 'submit_analysis' },

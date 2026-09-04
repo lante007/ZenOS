@@ -158,7 +158,6 @@ async function runProphetAgent(signal) {
     const resp = await client.messages.create({
       model: cfg.model,
       max_tokens: cfg.max_tokens,
-      temperature: cfg.temperature,
       system: PROPHET_CONTEXT,
       tools: [SUBMIT_PROPHET_ASSESSMENT_TOOL],
       tool_choice: { type: 'tool', name: 'submit_prophet_assessment' },

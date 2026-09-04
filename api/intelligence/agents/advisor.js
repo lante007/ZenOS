@@ -180,7 +180,6 @@ async function runAdvisorAgent(question, specialistResults, meta = {}) {
     const resp = await client.messages.create({
       model: cfg.model,
       max_tokens: cfg.max_tokens,
-      temperature: cfg.temperature,
       system: ADVISOR_CONTEXT,
       tools: [SUBMIT_SYNTHESIS_TOOL],
       tool_choice: { type: 'tool', name: 'submit_synthesis' },
