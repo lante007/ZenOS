@@ -42,3 +42,4 @@ When calling admin endpoints via SSM/localhost:
 - Pass header: x-evidenceos-tenant: admin
 - slugFromHost() defaults 127.0.0.1 to zenex tenant
 - Admin-pool tokens will 403 without this header
+\n## EC2 Role — Frontend Deployment Policies\nEC2 role (EvidenceOSEC2Role) requires two inline policies for frontend deployment:\n- FrontendDeployS3Write: scoped to s3://auxeira-web-zenex\n- FrontendDeployCloudFrontInvalidate: scoped to E20OUWEKR52Y3E\nThese were added manually. If the role is recreated, re-add them.
