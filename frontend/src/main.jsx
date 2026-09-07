@@ -5652,6 +5652,54 @@ async function intelligenceRequest(path, options = {}) {
   return payload || {};
 }
 
+async function memoryRequest(path, options = {}) {
+  const token = browserIdToken || sessionStorage.getItem(ID_TOKEN_STORAGE_KEY) || browserAccessToken || sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  const response = await fetch(`/api/memory${path}`, {
+    ...options,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error('API routing error: received HTML instead of JSON. Check CloudFront configuration.');
+  }
+
+  if (response.status === 401) {
+    browserIdToken = '';
+    browserAccessToken = '';
+    sessionStorage.removeItem(ID_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    window.location.href = '/admin/login?reason=expired';
+    return undefined;
+  }
+
+  const rawText = await response.text();
+  let payload = null;
+  if (rawText) {
+    const looksLikeHtml = /^\s*<!doctype html/i.test(rawText) || /^\s*<html/i.test(rawText);
+    if (looksLikeHtml) {
+      throw new Error('The console received the frontend page instead of the API response. API routing is not reaching /api/memory.');
+    }
+    try {
+      payload = JSON.parse(rawText);
+    } catch (err) {
+      if (!response.ok) {
+        throw new Error(rawText.slice(0, 300) || response.statusText || 'Memory API request failed');
+      }
+      throw new Error('The console returned a non-JSON response. Please try again.');
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || response.statusText || 'Memory API request failed');
+  }
+
+  return payload || {};
+}
+
 function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -6401,6 +6449,178 @@ function CosOutcomePanel({ jobId }) {
   );
 }
 
+// Grok intelligence directive: two additive, flag-gated cockpit panels.
+// EXTERNAL INTELLIGENCE and INNOVATION HYPOTHESIS are visually and
+// textually distinct from each other and from corpus evidence -- neither
+// is ever labelled or coloured in a way that could be confused with a
+// verified Zenex finding. Each panel renders nothing at all (not an
+// empty state) when its tenant's feature flag is off.
+
+const COS_EXTERNAL_BADGE = { ...COS_BADGE, background: '#0F766E' }; // teal: external signal
+const COS_INNOVATION_BADGE = { ...COS_BADGE, background: '#7C3AED' }; // violet: speculative, not evidence
+
+function CosExternalIntelligencePanel({ tenantId, tenantMode }) {
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState([]);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState('');
+  const [fetchError, setFetchError] = useState('');
+
+  const scopeQuery = tenantMode === 'all' ? '' : (tenantId ? `?tenant=${encodeURIComponent(tenantId)}` : '');
+
+  function load() {
+    setLoading(true);
+    setFetchError('');
+    memoryRequest(`/scouts/external${scopeQuery}`, {})
+      .then(res => {
+        const data = (res && (res.data || res)) || [];
+        setItems(Array.isArray(data) ? data.filter(r => r.qa_status === 'VERIFIED' || r.qa_status === 'QUALIFIED') : []);
+      })
+      .catch(err => { setItems([]); setFetchError(err.message || 'Could not load external intelligence.'); })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (tenantMode === 'all') { setLoading(false); setItems([]); return; }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, tenantMode]);
+
+  async function runScout() {
+    if (running) return;
+    setRunning(true);
+    setRunError('');
+    try {
+      await memoryRequest(`/scouts/external/run${scopeQuery}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      load();
+    } catch (err) {
+      setRunError(err.message || 'External intelligence run failed.');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (tenantMode === 'all') return null;
+
+  return (
+    <details style={{ marginTop: 12, border: '1px solid #0F766E', borderRadius: 6, padding: '10px 14px' }}>
+      <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14, color: '#0F766E' }}>
+        External intelligence — SIGNAL, not corpus evidence{items.length ? ` (${items.length})` : ''}
+      </summary>
+
+      <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: '8px 0 10px' }}>
+        Web-sourced claims, Claude-reviewed. Always SIGNAL type. Never corpus evidence, regardless of QA status.
+      </p>
+
+      <button type="button" className="secondary-action" onClick={runScout} disabled={running} style={{ marginBottom: 10 }}>
+        <span>{running ? 'Running…' : 'Run external intelligence scout'}</span>
+      </button>
+      {runError && <p className="form-error">{runError}</p>}
+
+      {loading && <p style={{ fontSize: 13, color: 'var(--color-muted)' }}>Loading…</p>}
+      {!loading && fetchError && <p className="form-error">{fetchError}</p>}
+      {!loading && !fetchError && items.length === 0 && (
+        <p style={{ fontSize: 13, color: 'var(--color-muted)' }}>No cleared external intelligence yet.</p>
+      )}
+      {!loading && items.map(item => (
+        <div key={item.id} style={{ borderTop: '1px solid var(--color-border, #E8E2DC)', padding: '8px 0' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+            <span style={COS_EXTERNAL_BADGE}>SIGNAL — {item.qa_status}</span>
+            <span style={{ ...COS_BADGE, background: '#334155' }}>{item.category}</span>
+          </div>
+          <p style={{ fontSize: 13, margin: '0 0 4px' }}>{item.claim}</p>
+          <a href={item.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>{item.source_url}</a>
+        </div>
+      ))}
+    </details>
+  );
+}
+
+function CosInnovationPanel({ tenantId, tenantMode }) {
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState([]);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState('');
+  const [fetchError, setFetchError] = useState('');
+
+  const scopeQuery = tenantMode === 'all' ? '' : (tenantId ? `?tenant=${encodeURIComponent(tenantId)}` : '');
+
+  function load() {
+    setLoading(true);
+    setFetchError('');
+    memoryRequest(`/scouts/innovation${scopeQuery}`, {})
+      .then(res => {
+        const data = (res && (res.data || res)) || [];
+        setItems(Array.isArray(data) ? data.filter(r => r.qa_status === 'SPECULATIVE') : []);
+      })
+      .catch(err => { setItems([]); setFetchError(err.message || 'Could not load innovation candidates.'); })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (tenantMode === 'all') { setLoading(false); setItems([]); return; }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, tenantMode]);
+
+  async function runScout() {
+    if (running) return;
+    setRunning(true);
+    setRunError('');
+    try {
+      await memoryRequest(`/scouts/innovation/run${scopeQuery}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      load();
+    } catch (err) {
+      setRunError(err.message || 'Innovation scout run failed.');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (tenantMode === 'all') return null;
+
+  return (
+    <details style={{ marginTop: 12, border: '1px solid #7C3AED', borderRadius: 6, padding: '10px 14px' }}>
+      <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14, color: '#7C3AED' }}>
+        Innovation hypotheses — SPECULATIVE, NOT evidence{items.length ? ` (${items.length})` : ''}
+      </summary>
+
+      <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: '8px 0 10px' }}>
+        Grok-generated ideas, Claude-reviewed for coherence only. Never verified, never evidence. Ceiling is always SPECULATIVE.
+      </p>
+
+      <button type="button" className="secondary-action" onClick={runScout} disabled={running} style={{ marginBottom: 10 }}>
+        <span>{running ? 'Running…' : 'Run innovation scout'}</span>
+      </button>
+      {runError && <p className="form-error">{runError}</p>}
+
+      {loading && <p style={{ fontSize: 13, color: 'var(--color-muted)' }}>Loading…</p>}
+      {!loading && fetchError && <p className="form-error">{fetchError}</p>}
+      {!loading && !fetchError && items.length === 0 && (
+        <p style={{ fontSize: 13, color: 'var(--color-muted)' }}>No speculative candidates yet.</p>
+      )}
+      {!loading && items.map(item => (
+        <div key={item.id} style={{ borderTop: '1px solid var(--color-border, #E8E2DC)', padding: '8px 0' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+            <span style={COS_INNOVATION_BADGE}>SPECULATIVE — NOT EVIDENCE</span>
+            {item.decision_status && <span style={{ ...COS_BADGE, background: '#334155' }}>{item.decision_status}</span>}
+          </div>
+          <p style={{ fontSize: 13, margin: '0 0 4px' }}>{item.idea}</p>
+          <p style={{ fontSize: 12, color: 'var(--color-muted)', margin: 0 }}>{item.rationale}</p>
+        </div>
+      ))}
+    </details>
+  );
+}
+
 function AdminChiefOfStaffPage() {
   const examplePrompts = [
     'What should I prioritise today given the current Zenex situation?',
@@ -6421,6 +6641,7 @@ function AdminChiefOfStaffPage() {
   const [canViewAll, setCanViewAll] = useState(false);
   const [tenantMode, setTenantMode] = useState('tenant');
   const [selectedTenantId, setSelectedTenantId] = useState('');
+  const [tenantFlags, setTenantFlags] = useState({});
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -6438,9 +6659,17 @@ function AdminChiefOfStaffPage() {
       setTenants(list);
       setCanViewAll(Boolean(data && data.can_view_all));
       setTenantMode('tenant');
-      if (list.length) setSelectedTenantId(list[0].tenant_id);
+      if (list.length) {
+        setSelectedTenantId(list[0].tenant_id);
+        setTenantFlags(list[0].feature_flags || {});
+      }
     }).catch(() => { setTenants([]); setCanViewAll(false); });
   }, []);
+
+  useEffect(() => {
+    const t = tenants.find(x => x.tenant_id === selectedTenantId);
+    setTenantFlags((t && t.feature_flags) || {});
+  }, [selectedTenantId, tenants]);
 
   async function pollOnce(jobId) {
     try {
@@ -6710,6 +6939,17 @@ function AdminChiefOfStaffPage() {
 
             {/* Zone 2D — outcome capture (C6) */}
             {shouldShowOutcomePanel(phase, job) && <CosOutcomePanel jobId={job.job_id} />}
+
+            {/* Zone 2D2 — Grok intelligence scouts. Each panel renders
+                nothing at all when its tenant's flag is off; tenant context
+                comes from the same selector state as the rest of the page,
+                never re-derived. */}
+            {tenantFlags.EXTERNAL_INTELLIGENCE_ENABLED === true && (
+              <CosExternalIntelligencePanel tenantId={selectedTenantId} tenantMode={tenantMode} />
+            )}
+            {tenantFlags.INNOVATION_SCOUT_ENABLED === true && (
+              <CosInnovationPanel tenantId={selectedTenantId} tenantMode={tenantMode} />
+            )}
 
             {/* Zone 2E — telemetry footer */}
             <footer className="ask-result-meta" style={{ marginTop: 12 }}>

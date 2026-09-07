@@ -30,6 +30,24 @@ confidence. Strategic interpretation (memory) is MODERATE. The
 overall should reflect the mix, not collapse to UNKNOWN.
 Trigger condition: next intelligence quality improvement sprint.
 
+### Row-level security on tenant-scoped tables (external_intelligence, innovation_candidates)
+Tenant isolation for the Grok intelligence directive tables (migration 026)
+is enforced entirely at the application layer: every read/write goes
+through resolveTenant() (api/memory/util.js) plus an explicit
+`WHERE tenant_id = $1` in every query (api/intelligence/scouts/store.js).
+No Postgres row-level security (RLS) policy was added.
+Decision: deliberate, not an oversight. The application already controls
+all database access through a single connection pool -- no client or
+service connects to Postgres directly -- so RLS would add complexity
+without adding meaningful protection under the current architecture.
+Trigger condition: the architecture moves to direct client database
+access, or to multiple services/processes each holding their own
+database credentials (i.e. the single-connection-pool assumption above
+no longer holds). Revisit RLS for these tables (and, at that point,
+likely wt_sources/wt_signals/memories/decisions/intelligence_outcomes
+too) at that time.
+Do not implement until trigger condition is met.
+
 ### Admin tenant header for local SSM access
 When calling admin endpoints via SSM or localhost, pass:
 x-evidenceos-tenant: admin

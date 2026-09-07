@@ -47,6 +47,19 @@ const AGENTS = {
     allowed_tools: [],
     max_tool_rounds: 0,
   },
+  // Grok intelligence directive: the QA gate is also a single forced-tool-
+  // call agent (see api/intelligence/qa-gate.js). It never retrieves and
+  // never calls Grok itself -- it only reviews items the scouts already
+  // generated. Temperature 0: QA judgement should be as deterministic as
+  // possible for the same input.
+  qa_gate: {
+    model: DEFAULT_MODEL,
+    max_tokens: 2000,
+    temperature: 0,
+    timeout_ms: 60000,
+    allowed_tools: [],
+    max_tool_rounds: 0,
+  },
 };
 
 const ORCHESTRATION = {

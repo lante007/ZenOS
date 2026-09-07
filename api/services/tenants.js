@@ -19,6 +19,14 @@ const FALLBACK_TENANTS = {
       // Advisor. Off by default; no behaviour change until C2 turns it on
       // per tenant.
       MEMORY_CONTEXT_ENABLED: false,
+      // Grok intelligence directive: gates (a) whether an admin can trigger
+      // a scout run for this tenant (api/intelligence/scouts/index.js) and
+      // (b) whether the Advisor injects already-persisted, QA'd context
+      // from that scout (api/intelligence/agents/advisor.js#buildPrompt).
+      // Off by default; no behaviour change until explicitly turned on per
+      // tenant. Fails closed on any lookup error (see getFeatureFlag below).
+      EXTERNAL_INTELLIGENCE_ENABLED: false,
+      INNOVATION_SCOUT_ENABLED: false,
     },
     is_active: true,
   },
@@ -35,6 +43,8 @@ const FALLBACK_TENANTS = {
     feature_flags: {
       federated_network: false, sroi_module: true, synthesis: true, portfolio_optimizer: true,
       MEMORY_CONTEXT_ENABLED: false,
+      EXTERNAL_INTELLIGENCE_ENABLED: false,
+      INNOVATION_SCOUT_ENABLED: false,
     },
     is_active: true,
   },

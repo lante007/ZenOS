@@ -217,16 +217,18 @@ router.get('/trace/:jobId', GUARD, async (req, res) => {
   }
 });
 
-// Lightweight tenant list for the Console's tenant selector. Names only
-// (no internal fields beyond slug/name), scoped by the same authorisation
-// used for /ask itself -- a tenant user only ever sees their own tenant.
+// Lightweight tenant list for the Console's tenant selector. Includes each
+// tenant's feature_flags (existing server-side values, not recomputed here)
+// so the UI can conditionally render flag-gated panels without guessing
+// from data presence. Scoped by the same authorisation used for /ask
+// itself -- a tenant user only ever sees their own tenant.
 router.get('/tenants', GUARD, async (req, res) => {
   try {
     const authorised = await getAuthorisedTenants(req.user);
     return res.json({
       success: true,
       data: {
-        tenants: authorised.map(t => ({ tenant_id: t.slug, name: t.name })),
+        tenants: authorised.map(t => ({ tenant_id: t.slug, name: t.name, feature_flags: t.feature_flags || {} })),
         can_view_all: isAdminRole(req.user && req.user.role) && authorised.length > 1,
       },
     });

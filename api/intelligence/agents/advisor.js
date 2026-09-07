@@ -13,6 +13,12 @@ const { normaliseConfidence } = require('../confidence');
 const { getFeatureFlag } = require('../../services/tenants');
 const { buildMemoryContext, formatMemoryContext } = require('../../memory/context');
 const { formatAllTenantsContext } = require('../live-data');
+const {
+  buildExternalIntelligenceContext,
+  formatExternalIntelligenceContext,
+  buildInnovationContext,
+  formatInnovationContext,
+} = require('../scouts/context');
 
 const client = new Anthropic();
 
@@ -128,6 +134,15 @@ function toMarkdown(s) {
 // lookup failure while the flag is on must never block or alter the rest
 // of the prompt: it is caught and the section is simply omitted.
 //
+// Grok intelligence directive: EXTERNAL_INTELLIGENCE_ENABLED and
+// INNOVATION_SCOUT_ENABLED follow the exact same shape as
+// MEMORY_CONTEXT_ENABLED immediately above -- fail closed on a flag lookup
+// error, fail soft (warn and omit) on a context-build error, byte-identical
+// prompt when off (the default). The Advisor reads ONLY already-persisted,
+// QA-reviewed rows here; it never triggers a live Grok call or a live QA
+// gate call per question -- scouts run on demand via the admin route
+// (api/routes/memory.js), not inline with an Advisor question.
+//
 // Multi-tenant Chief of Staff: when meta.tenantScope.mode === 'all', this
 // function takes a completely different branch -- the single-tenant
 // memory-context lookup above is skipped entirely (that institutional
@@ -135,8 +150,11 @@ function toMarkdown(s) {
 // cross-tenant answer) and a CROSS-TENANT INTELLIGENCE SUMMARY block is
 // appended instead, built from meta.allTenantsData (already fetched and
 // authorisation-scoped by the caller; this function does no authorisation
-// of its own). For every existing caller (meta.tenantScope unset or mode
-// 'tenant'), this function's behaviour and output are unchanged.
+// of its own). External intelligence and innovation context are skipped
+// under the same cross-tenant branch, for the same reason -- both belong to
+// one tenant and must never be blended into a cross-tenant answer. For
+// every existing caller (meta.tenantScope unset or mode 'tenant'), this
+// function's behaviour and output are unchanged.
 async function buildPrompt(question, specialistResults, meta = {}) {
   const anyOk = specialistResults.some(r => r.status === 'ok' && r.output);
 
@@ -189,6 +207,38 @@ async function buildPrompt(question, specialistResults, meta = {}) {
         if (block) lines.push('', 'MEMORY CONTEXT (flag-gated)', '', block);
       } catch (err) {
         console.warn(`[advisor] memory context unavailable for tenant ${tenantId}: ${err.message}`);
+      }
+    }
+
+    let externalIntelEnabled = false;
+    try {
+      externalIntelEnabled = await getFeatureFlag(tenantId, 'EXTERNAL_INTELLIGENCE_ENABLED');
+    } catch {
+      externalIntelEnabled = false; // fail closed
+    }
+    if (externalIntelEnabled) {
+      try {
+        const ctx = await buildExternalIntelligenceContext({ tenantId });
+        const block = formatExternalIntelligenceContext(ctx);
+        if (block) lines.push('', block);
+      } catch (err) {
+        console.warn(`[advisor] external intelligence context unavailable for tenant ${tenantId}: ${err.message}`);
+      }
+    }
+
+    let innovationEnabled = false;
+    try {
+      innovationEnabled = await getFeatureFlag(tenantId, 'INNOVATION_SCOUT_ENABLED');
+    } catch {
+      innovationEnabled = false; // fail closed
+    }
+    if (innovationEnabled) {
+      try {
+        const ctx = await buildInnovationContext({ tenantId });
+        const block = formatInnovationContext(ctx);
+        if (block) lines.push('', block);
+      } catch (err) {
+        console.warn(`[advisor] innovation context unavailable for tenant ${tenantId}: ${err.message}`);
       }
     }
   }

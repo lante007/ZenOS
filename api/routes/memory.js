@@ -10,10 +10,19 @@
 // The admin console acts on behalf of a tenant: the target tenant comes from
 // ?tenant= or the x-evidenceos-target-tenant header, defaulting to zenex.
 // Every service call validates it against master.tenants.
+//
+// Grok intelligence directive: the /scouts/* routes below are the only
+// admin-triggered entry point for a scout run. A run requires the tenant's
+// EXTERNAL_INTELLIGENCE_ENABLED / INNOVATION_SCOUT_ENABLED flag (checked
+// inside runAndPersistExternalIntelligence/runAndPersistInnovation,
+// fail-closed); this route does not duplicate that check, it only forwards
+// the guard-checked target tenant.
 
 const express = require('express');
 const { requireRoles } = require('../middleware/permissions');
 const M = require('../memory');
+const scoutsStore = require('../intelligence/scouts/store');
+const { runAndPersistExternalIntelligence, runAndPersistInnovation } = require('../intelligence/scouts');
 
 const router = express.Router();
 const GUARD = requireRoles('SUPER_ADMIN', 'AUXEIRA_FOUNDER');
@@ -155,6 +164,72 @@ router.post('/links', GUARD, async (req, res) => {
 });
 router.get('/graph/:type/:id/neighbours', GUARD, async (req, res) => {
   try { ok(res, await M.graph.neighbours(targetTenant(req), req.params.type, req.params.id, { limit: req.query.limit })); } catch (e) { fail(res, e); }
+});
+
+// ── scouts: external intelligence ────────────────────
+// Full-audit read (every qa_status, including REJECTED/NEEDS_REVIEW) --
+// this is the admin cockpit's QA visibility view, distinct from the
+// Advisor's surfaceable-only read in api/intelligence/scouts/context.js.
+router.get('/scouts/external', GUARD, async (req, res) => {
+  try {
+    ok(res, await scoutsStore.listExternalIntelligence({
+      tenantId: targetTenant(req),
+      limit: req.query.limit,
+      statuses: req.query.status ? String(req.query.status).split(',') : null,
+    }));
+  } catch (e) { fail(res, e); }
+});
+router.post('/scouts/external/run', GUARD, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await runAndPersistExternalIntelligence({
+      tenantId: targetTenant(req),
+      query: body.query,
+      category: body.category,
+      limit: body.limit,
+    });
+    ok(res, result, result.ok ? 201 : 200);
+  } catch (e) { fail(res, e); }
+});
+
+// ── scouts: innovation ───────────────────────────────
+router.get('/scouts/innovation', GUARD, async (req, res) => {
+  try {
+    ok(res, await scoutsStore.listInnovationCandidates({
+      tenantId: targetTenant(req),
+      limit: req.query.limit,
+      statuses: req.query.status ? String(req.query.status).split(',') : null,
+    }));
+  } catch (e) { fail(res, e); }
+});
+router.post('/scouts/innovation/run', GUARD, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await runAndPersistInnovation({
+      tenantId: targetTenant(req),
+      context: body.context,
+      constraints: body.constraints,
+      limit: body.limit,
+    });
+    ok(res, result, result.ok ? 201 : 200);
+  } catch (e) { fail(res, e); }
+});
+// Human decision on a speculative candidate. The ONLY mutable fields on
+// innovation_candidates beyond superseded_by -- qa_status/qa_notes/
+// provenance_chain remain immutable (DB trigger), enforced independently of
+// this route.
+router.patch('/scouts/innovation/:id/decision', GUARD, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const row = await scoutsStore.setInnovationDecisionStatus({
+      tenantId: targetTenant(req),
+      id: req.params.id,
+      decisionStatus: body.decision_status,
+      decisionNotes: body.decision_notes,
+      decisionBy: (req.user && req.user.email) || body.decision_by,
+    });
+    ok(res, row);
+  } catch (e) { fail(res, e); }
 });
 
 module.exports = router;
