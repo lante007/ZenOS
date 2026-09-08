@@ -37,5 +37,21 @@ module.exports = {
       kill_timeout: 35000, // allow the graceful shutdown drain (WATCHTOWER_SHUTDOWN_GRACE_MS)
       env: { NODE_ENV: 'production' },
     },
+    {
+      name: 'decision-events-worker',
+      script: 'api/intelligence/decision-events/worker.js',
+      cwd: '/home/ec2-user/ZenOS',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      // Back off on crash-loop rather than hammer a failing dependency.
+      max_restarts: 10,
+      restart_delay: 5000,
+      exp_backoff_restart_delay: 2000,
+      max_memory_restart: '200M',
+      kill_timeout: 35000, // allow the graceful shutdown drain (DECISION_EVENTS_SHUTDOWN_GRACE_MS)
+      env: { NODE_ENV: 'production' },
+    },
   ],
 };
+
