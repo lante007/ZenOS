@@ -27,6 +27,12 @@ const FALLBACK_TENANTS = {
       // tenant. Fails closed on any lookup error (see getFeatureFlag below).
       EXTERNAL_INTELLIGENCE_ENABLED: false,
       INNOVATION_SCOUT_ENABLED: false,
+      // Phase 4: gates whether the decision-events-worker tick may
+      // automatically claim and run a Decision Assessment for a brand-new
+      // decision_event (status='new', assessment_id IS NULL). Off by
+      // default; manual assessment via POST /api/decision-events/:id/assess
+      // is unaffected by this flag. Fails closed (see getFeatureFlag).
+      AUTO_ASSESS_ENABLED: false,
     },
     is_active: true,
   },
@@ -45,6 +51,12 @@ const FALLBACK_TENANTS = {
       MEMORY_CONTEXT_ENABLED: false,
       EXTERNAL_INTELLIGENCE_ENABLED: false,
       INNOVATION_SCOUT_ENABLED: false,
+      // Phase 4: gates whether the decision-events-worker tick may
+      // automatically claim and run a Decision Assessment for a brand-new
+      // decision_event (status='new', assessment_id IS NULL). Off by
+      // default; manual assessment via POST /api/decision-events/:id/assess
+      // is unaffected by this flag. Fails closed (see getFeatureFlag).
+      AUTO_ASSESS_ENABLED: false,
     },
     is_active: true,
   },

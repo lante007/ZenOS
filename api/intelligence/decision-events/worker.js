@@ -11,12 +11,20 @@
 // orchestrator.js and logs the result -- it contains no detection or
 // persistence logic of its own. See orchestrator.js for the full design
 // rationale and explicit scope boundaries.
+//
+// Phase 4 addition (additive only -- the block above is unchanged): after
+// the existing detection tick, this same tick also calls
+// runAutoAssessTick() from decision-assessment/auto-assess.js, in its own
+// separate try/catch so a failure in one never affects the other, sharing
+// the single `finally { ticking = false; }` below. No new pm2 process, no
+// new interval/timer -- it rides this worker's existing cadence exactly.
 
 require('dotenv').config();
 
 const { ensureV11Schema } = require('../../memory/schema');
 const { runOnce } = require('./orchestrator');
 const cfg = require('./orchestrator-config');
+const { runAutoAssessTick } = require('../decision-assessment/auto-assess');
 
 const log = (evt, fields = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), component: 'decision-events', evt, ...fields }));
 
@@ -51,6 +59,28 @@ async function tick() {
     // A bug in a tick must not kill the loop. runOnce() already catches
     // everything it knows about; this is the last-resort backstop.
     log('tick_error', { tick: ticks, error: err.message, stack: (err.stack || '').split('\n').slice(0, 3).join(' | ') });
+  }
+
+  try {
+    const assessStartedAt = Date.now();
+    const assessStats = await runAutoAssessTick();
+    log('auto_assess_tick_complete', {
+      tick: ticks,
+      tenants_checked: assessStats.tenants_checked,
+      tenants_enabled: assessStats.tenants_enabled,
+      candidates_found: assessStats.candidates_found,
+      claimed: assessStats.claimed,
+      skipped_conflict: assessStats.skipped_conflict,
+      error_count: assessStats.errors.length,
+      duration_ms: Date.now() - assessStartedAt,
+    });
+    for (const e of assessStats.errors) {
+      log('auto_assess_tick_error_detail', { tick: ticks, ...e });
+    }
+  } catch (err) {
+    // Same backstop as above, isolated so an auto-assess bug never affects
+    // the existing detection tick's own error handling or its stats.
+    log('auto_assess_tick_error', { tick: ticks, error: err.message, stack: (err.stack || '').split('\n').slice(0, 3).join(' | ') });
   } finally {
     ticking = false;
   }
