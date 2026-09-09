@@ -35,3 +35,4 @@ load-processed-records.js
 test_isasa_extract.js
 tmp_b8_*
 web.bak.*/
+*.bak*
