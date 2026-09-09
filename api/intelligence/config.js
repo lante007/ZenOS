@@ -47,6 +47,43 @@ const AGENTS = {
     allowed_tools: [],
     max_tool_rounds: 0,
   },
+  // Decision Assessment (Phase 3, Contract 3): two more single-forced-tool-
+  // call agents, same shape as prophet -- never retrieve, never trigger
+  // Grok. Deliberately separate role keys from evidence_analyst /
+  // strategic_analyst above so a QUESTION-mode budget change can never
+  // silently affect Decision Assessment, and vice versa.
+  evidence_analyst_decision: {
+    model: DEFAULT_MODEL,
+    max_tokens: 900,
+    temperature: 0,
+    timeout_ms: 70000,
+    allowed_tools: [],
+    max_tool_rounds: 0,
+  },
+  strategic_analyst_decision: {
+    model: DEFAULT_MODEL,
+    max_tokens: 900,
+    temperature: 0,
+    timeout_ms: 70000,
+    allowed_tools: [],
+    max_tool_rounds: 0,
+  },
+  // Decision Assessment Advisor (Phase 3, Contract 3, agent 3 of 3): a
+  // separate synthesis role key from `advisor` above (the QUESTION-mode
+  // Advisor) so a QUESTION-mode budget change can never silently affect
+  // Decision Assessment, and vice versa. Same max_tokens/temperature as
+  // `advisor` (a synthesis step over already-structured input benefits
+  // from the same generous token budget and light temperature), approved
+  // as a new, independent config entry rather than a reuse of the
+  // `advisor` key.
+  advisor_decision: {
+    model: DEFAULT_MODEL,
+    max_tokens: 1600,
+    temperature: 0.2,
+    timeout_ms: 70000,
+    allowed_tools: [],
+    max_tool_rounds: 0,
+  },
   // Grok intelligence directive: the QA gate is also a single forced-tool-
   // call agent (see api/intelligence/qa-gate.js). It never retrieves and
   // never calls Grok itself -- it only reviews items the scouts already
@@ -80,3 +117,5 @@ function agentConfig(role) {
 }
 
 module.exports = { DEFAULT_MODEL, AGENTS, ORCHESTRATION, agentConfig };
+
+
