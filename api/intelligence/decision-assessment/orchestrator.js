@@ -19,7 +19,20 @@
 // This module NEVER alters decision_events.status vocabulary (Phase 4
 // hard invariant #12 -- migration 027 is untouched) and never writes
 // decision_events.priority or decision_assessments.priority (Phase 4
-// design, "no priority" -- reserved for a future Phase 5 layer).
+// design, "no priority" -- reserved for a future Phase 5 layer, and
+// still true post-Phase-5: those two placeholder columns remain
+// permanently unused -- see migration 029's header).
+//
+// Phase 5 addendum (additive only, this module's own logic below is
+// otherwise unchanged from Phase 4): runAssessmentPipeline now also
+// triggers Decision Prioritisation -- computeAndPersistPriority() from
+// api/intelligence/decision-prioritisation/orchestrator.js -- as a
+// fire-and-forget post-assessed step, called only after
+// completeAssessment() has itself committed AND actually performed the
+// transition (not a lost race -- see completeAssessment's return value
+// below). Its failure is caught and logged here; it can never roll back
+// or otherwise affect the assessment, which is already committed by the
+// time it runs.
 //
 // ELIGIBILITY MATRIX (Phase 4 design addendum, verbatim):
 //   decision_events.status | assessment_id       | auto-eligible | manual-eligible
@@ -53,6 +66,7 @@ const { buildDecisionAssessmentContext } = require('./context');
 const { runEvidenceAnalystDecisionAgent } = require('./evidence-analyst');
 const { runStrategicAnalystDecisionAgent } = require('./strategic-analyst');
 const { runAdvisorDecisionAgent } = require('./advisor');
+const { computeAndPersistPriority } = require('../decision-prioritisation/orchestrator');
 
 const STALE_MS = Number(process.env.DECISION_ASSESSMENT_STALE_MS || 10 * 60 * 1000);
 
@@ -189,8 +203,17 @@ async function failAssessment(pool, assessmentId, decisionEventId, reason) {
   });
 }
 
+// Returns true if THIS call actually performed the pending->assessed
+// transition, false if it lost a race (row already left 'assessing' by
+// some other path -- e.g. a concurrent stale-recovery flip) and wrote
+// nothing. Phase 5 addendum: this boolean return is new (Phase 4 left it
+// implicit/undefined); every existing call site already ignored the
+// return value, so this is purely additive and changes no existing
+// behaviour -- it exists solely so runAssessmentPipeline's new
+// post-assessed priority hook can tell a genuine transition apart from a
+// lost race without a second query.
 async function completeAssessment(pool, assessmentId, decisionEventId, fields) {
-  await withTransaction(pool, async (client) => {
+  return withTransaction(pool, async (client) => {
     const res = await client.query(
       `UPDATE public.decision_assessments
           SET status = 'assessed',
@@ -212,13 +235,14 @@ async function completeAssessment(pool, assessmentId, decisionEventId, fields) {
         JSON.stringify(fields.partialContextReasons || []),
       ],
     );
-    if (!res.rows.length) return;
+    if (!res.rows.length) return false;
     await client.query(
       `UPDATE public.decision_events
           SET status = 'assessed', updated_at = now()
         WHERE id = $1 AND assessment_id = $2 AND status = 'under_assessment'`,
       [decisionEventId, assessmentId],
     );
+    return true;
   });
 }
 
@@ -237,10 +261,11 @@ async function runAssessmentPipeline(assessmentId, options = {}) {
     runEvidenceAnalystDecisionAgent,
     runStrategicAnalystDecisionAgent,
     runAdvisorDecisionAgent,
+    computeAndPersistPriority,
   }, options.deps || {});
 
   const rows = (await pool.query(
-    `SELECT da.id, da.decision_event_id, da.tenant_id, da.status,
+    `SELECT da.id, da.decision_event_id, da.tenant_id, da.status, da.assessment_version,
             de.id AS event_id, de.tenant_id AS event_tenant_id, de.trigger_pathway,
             de.trigger_explanation, de.trigger_data, de.inputs, de.status AS event_status
        FROM public.decision_assessments da
@@ -290,7 +315,7 @@ async function runAssessmentPipeline(assessmentId, options = {}) {
       return;
     }
 
-    await completeAssessment(pool, assessmentId, decisionEventId, {
+    const transitioned = await completeAssessment(pool, assessmentId, decisionEventId, {
       evidenceOutput: evidenceResult.output,
       strategicOutput: strategicResult.output,
       advisorOutput: advisorResult.output,
@@ -300,6 +325,37 @@ async function runAssessmentPipeline(assessmentId, options = {}) {
       partialContext: context.partialContext,
       partialContextReasons: context.partialContextReasons,
     });
+
+    // Phase 5 addendum: post-assessed Decision Prioritisation hook.
+    // Additive only -- runs after completeAssessment's transaction has
+    // already committed, only when THIS call genuinely performed the
+    // transition (never on a lost race -- see completeAssessment's
+    // return value above, so a concurrent completion never double-fires
+    // this). Fire-and-forget with its own try/catch: a failure here is
+    // logged with full identifying context and never rethrown, so it can
+    // never fail or roll back the already-committed assessment. A retry
+    // can be triggered manually or by the next worker tick (Phase 5
+    // spec) -- no retry loop exists in this increment.
+    if (transitioned) {
+      deps.computeAndPersistPriority(pool, {
+        tenantId: row.event_tenant_id,
+        decisionEventId,
+        assessmentId,
+        assessmentVersion: row.assessment_version,
+        strategicOutput: strategicResult.output,
+        advisorOutput: advisorResult.output,
+        partialContext: context.partialContext,
+        triggerPathway: row.trigger_pathway,
+        triggerData: row.trigger_data,
+      }).catch((err) => {
+        console.error('decision prioritisation failed (assessment remains assessed):', {
+          tenant_id: row.event_tenant_id,
+          decision_event_id: decisionEventId,
+          assessment_id: assessmentId,
+          message: err.message,
+        });
+      });
+    }
   } catch (err) {
     await failAssessment(pool, assessmentId, decisionEventId, `Unhandled error: ${err.message}`).catch(() => {});
   }

@@ -33,6 +33,7 @@ const workspaceRoutes = require('./api/routes/workspace');
 const briefRoutes = require('./api/routes/brief');
 const meRoutes = require('./api/routes/me');
 const decisionEventsRoutes = require('./api/routes/decision-events');
+const prioritiesRoutes = require('./api/routes/priorities');
 const db = require('./api/services/db');
 const localStore = require('./api/services/local-store');
 
@@ -110,6 +111,7 @@ app.use('/api/memory', authenticate(), memoryRoutes);
 
 app.use('/api', authenticate(), assertNoBoardAccess);
 app.use('/api/decision-events', decisionEventsRoutes);
+app.use('/api/decision-events', prioritiesRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/records', recordsRoutes);
 app.use('/api/classify', classifyRoutes);
