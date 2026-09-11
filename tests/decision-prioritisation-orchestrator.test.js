@@ -92,7 +92,11 @@ function makeFakeDb(initialEvents = []) {
       const [decisionEventId, tenantId] = params;
       const rows = [...priorityRecords.values()]
         .filter((r) => r.decision_event_id === decisionEventId && r.tenant_id === tenantId)
-        .sort((a, b) => b.assigned_at - a.assigned_at)
+        .sort((a, b) => {
+        const ta = b.assigned_at instanceof Date ? b.assigned_at.getTime() : new Date(b.assigned_at).getTime();
+        const tb = a.assigned_at instanceof Date ? a.assigned_at.getTime() : new Date(a.assigned_at).getTime();
+        return ta - tb || b.id.localeCompare(a.id);
+      })
         .map((r) => ({ ...r }));
       return { rows };
     }
