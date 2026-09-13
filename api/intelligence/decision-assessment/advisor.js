@@ -420,15 +420,15 @@ async function runAdvisorDecisionAgent(context, evidenceResult, strategicResult)
   const work = (async () => {
     const prompt = buildAdvisorDecisionPrompt(context, facts, evidenceOutput, strategicOutput);
 
-    const resp = await client.messages.create({
+    const params = {
       model: cfg.model,
       max_tokens: cfg.max_tokens,
-      temperature: cfg.temperature,
       system: ADVISOR_DECISION_CONTEXT,
       tools: [SUBMIT_DECISION_ASSESSMENT_TOOL],
       tool_choice: { type: 'tool', name: 'submit_decision_assessment' },
       messages: [{ role: 'user', content: prompt }],
-    });
+    };
+    const resp = await client.messages.create(params);
     usage.input_tokens += resp.usage?.input_tokens || 0;
     usage.output_tokens += resp.usage?.output_tokens || 0;
 
@@ -439,7 +439,29 @@ async function runAdvisorDecisionAgent(context, evidenceResult, strategicResult)
     // touches it -- see file header. A missing required field fails here;
     // an explicit 'UNKNOWN' the model actually returned does not.
     const raw = toolUse.input || {};
-    const errors = validateDecisionAssessment(raw, {
+    // Fail closed on raw input for fields whose absence is a genuine
+    // quality failure -- these are never defaulted. Secondary fields
+    // (deviation_note, evidence_still_needed, overall_confidence) are
+    // safely defaulted by assembleDecisionAssessment and validated only
+    // after assembly.
+    if (!raw.situation || typeof raw.situation !== 'string') {
+      throw new Error('Decision assessment failed shape/provenance/confidence validation: situation required');
+    }
+    if (!Array.isArray(raw.what_the_evidence_establishes)) {
+      throw new Error('Decision assessment failed shape/provenance/confidence validation: what_the_evidence_establishes[] required');
+    }
+    if (!Array.isArray(raw.what_we_do_not_know)) {
+      throw new Error('Decision assessment failed shape/provenance/confidence validation: what_we_do_not_know[] required');
+    }
+    if (!raw.strategic_assessment || typeof raw.strategic_assessment !== 'string') {
+      throw new Error('Decision assessment failed shape/provenance/confidence validation: strategic_assessment required');
+    }
+    if (!raw.recommended_action || typeof raw.recommended_action !== 'string') {
+      throw new Error('Decision assessment failed shape/provenance/confidence validation: recommended_action required');
+    }
+
+    const assessment = assembleDecisionAssessment(raw);
+    const errors = validateDecisionAssessment(assessment, {
       provenanceIndex,
       evidenceConfidence: evidenceOutput.evidence_confidence,
       strategicConfidence: strategicOutput.strategic_confidence,
@@ -448,7 +470,7 @@ async function runAdvisorDecisionAgent(context, evidenceResult, strategicResult)
       allowedNumbers,
     });
     if (errors.length) throw new Error(`Decision assessment failed shape/provenance/confidence validation: ${errors.join('; ')}`);
-    return assembleDecisionAssessment(raw);
+    return assessment;
   })();
 
   try {

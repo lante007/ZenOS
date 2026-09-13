@@ -82,7 +82,11 @@ const SUBMIT_EVIDENCE_ASSESSMENT_TOOL = {
           required: ['finding', 'source_type', 'source_id'],
         },
       },
-      evidence_limitations: { type: 'array', items: { type: 'string' } },
+      evidence_limitations: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'REQUIRED. Limitations of the given evidence. Return ["No material limitations identified."] if none — never omit this field.',
+      },
       contradictions: {
         type: 'array',
         items: {
@@ -93,12 +97,17 @@ const SUBMIT_EVIDENCE_ASSESSMENT_TOOL = {
           },
           required: ['description', 'conflicting_sources'],
         },
+        description: 'REQUIRED. Conflicting sources. Return empty array [] if none — never omit this field.',
       },
-      evidence_gaps: { type: 'array', items: { type: 'string' } },
+      evidence_gaps: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'REQUIRED. Missing evidence. Return ["No material gaps identified."] if none — never omit this field.',
+      },
       evidence_confidence: {
         type: 'string',
         enum: CONFIDENCE_LEVELS,
-        description: 'Confidence in the evidence base itself, not in any downstream recommendation.',
+        description: 'REQUIRED. Confidence in the evidence base. Always provide one of HIGH, MODERATE, LOW, UNKNOWN — never omit this field.',
       },
     },
     required: ['established_findings', 'evidence_limitations', 'contradictions', 'evidence_gaps', 'evidence_confidence'],
@@ -188,27 +197,50 @@ function buildEvidenceAnalystPrompt(context, facts) {
 // recommendation or priority field this schema never defines) can never
 // reach the returned assessment.
 function assembleEvidenceAssessment(input = {}) {
-  const established_findings = Array.isArray(input.established_findings)
-    ? input.established_findings.map((f) => ({
-        finding: (f && f.finding) || '',
-        source_type: (f && f.source_type) || '',
-        source_id: (f && f.source_id) || '',
-      }))
-    : [];
+  // Default secondary fields if model omitted them (claude-sonnet-5 with
+  // thin context reliably omits empty arrays rather than returning []).
+  // established_findings is never defaulted -- absence of findings is a
+  // genuine quality failure.
+  const normalised = {
+    ...input,
+    evidence_limitations: Array.isArray(input.evidence_limitations)
+      ? input.evidence_limitations
+      : [],
+    contradictions: Array.isArray(input.contradictions)
+      ? input.contradictions
+      : [],
+    evidence_gaps: Array.isArray(input.evidence_gaps)
+      ? input.evidence_gaps
+      : [],
+    evidence_confidence: input.evidence_confidence || 'UNKNOWN',
+  };
 
-  const contradictions = Array.isArray(input.contradictions)
-    ? input.contradictions.map((c) => ({
-        description: (c && c.description) || '',
-        conflicting_sources: Array.isArray(c && c.conflicting_sources) ? c.conflicting_sources.slice() : [],
-      }))
-    : [];
+  const established_findings =
+    Array.isArray(normalised.established_findings)
+      ? normalised.established_findings.map((f) => ({
+          finding: (f && f.finding) || '',
+          source_type: (f && f.source_type) || '',
+          source_id: (f && f.source_id) || '',
+        }))
+      : [];
+
+  const contradictions = Array.isArray(normalised.contradictions)
+    ? normalised.contradictions.map((c) => ({
+          description: (c && c.description) || '',
+          conflicting_sources: Array.isArray(c && c.conflicting_sources) ?
+            c.conflicting_sources.slice() : [],
+        }))
+      : [];
 
   return {
     established_findings,
-    evidence_limitations: Array.isArray(input.evidence_limitations) ? input.evidence_limitations.slice() : [],
+    evidence_limitations: Array.isArray(normalised.evidence_limitations)
+      ? normalised.evidence_limitations.slice() : [],
     contradictions,
-    evidence_gaps: Array.isArray(input.evidence_gaps) ? input.evidence_gaps.slice() : [],
-    evidence_confidence: normaliseConfidence(input.evidence_confidence),
+    evidence_gaps: Array.isArray(normalised.evidence_gaps)
+      ? normalised.evidence_gaps.slice() : [],
+    evidence_confidence:
+      normaliseConfidence(normalised.evidence_confidence),
   };
 }
 
@@ -282,15 +314,15 @@ async function runEvidenceAnalystDecisionAgent(context) {
   const work = (async () => {
     const prompt = buildEvidenceAnalystPrompt(context, facts);
 
-    const resp = await client.messages.create({
+    const params = {
       model: cfg.model,
       max_tokens: cfg.max_tokens,
-      temperature: cfg.temperature,
       system: EVIDENCE_ANALYST_DECISION_CONTEXT,
       tools: [SUBMIT_EVIDENCE_ASSESSMENT_TOOL],
       tool_choice: { type: 'tool', name: 'submit_evidence_assessment' },
       messages: [{ role: 'user', content: prompt }],
-    });
+    };
+    const resp = await client.messages.create(params);
     usage.input_tokens += resp.usage?.input_tokens || 0;
     usage.output_tokens += resp.usage?.output_tokens || 0;
 
@@ -301,9 +333,22 @@ async function runEvidenceAnalystDecisionAgent(context) {
     // touches it -- see file header. A missing required field fails here;
     // an explicit 'UNKNOWN' the model actually returned does not.
     const raw = toolUse.input || {};
-    const errors = validateEvidenceAssessment(raw, provenanceIndex);
+    // Fail closed on established_findings against raw input -- absence of
+    // findings is a genuine quality failure that must not be defaulted.
+    if (!Array.isArray(raw.established_findings) ||
+        raw.established_findings.length === 0) {
+      throw new Error(
+        'Evidence assessment failed shape/provenance validation: ' +
+        'established_findings[] required (>=1)'
+      );
+    }
+
+    // Assemble with defaults for secondary fields, then validate the rest
+    // against the normalised object.
+    const assessment = assembleEvidenceAssessment(raw);
+    const errors = validateEvidenceAssessment(assessment, provenanceIndex);
     if (errors.length) throw new Error(`Evidence assessment failed shape/provenance validation: ${errors.join('; ')}`);
-    return assembleEvidenceAssessment(raw);
+    return assessment;
   })();
 
   try {

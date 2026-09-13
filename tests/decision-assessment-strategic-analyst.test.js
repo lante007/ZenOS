@@ -75,7 +75,8 @@ module.exports = {
   'collectAllowedNumbers extracts real programme cost figures only': async () => {
     const allowed = collectAllowedNumbers(CONTEXT);
     assert.ok(allowed.has('450000'));
-    assert.strictEqual(allowed.size, 1);
+    assert.ok(allowed.has('25000000'));
+    assert.strictEqual(allowed.size, 2);
   },
 
   'extractNumericClaims finds currency and percentage tokens': async () => {

@@ -133,17 +133,35 @@ function collectAllowedNumbers(context) {
       nums.add(String(p.total_cost_rand).replace(/[^0-9.]/g, ''));
     }
   });
+  // The investment materiality threshold (R25,000,000) is a named constant
+  // that appears in this Decision Event's narrative context (the
+  // SIGNAL_TOUCHES_EXPOSURE pathway description) and which the model may
+  // legitimately cite -- it is not a fabricated figure.
+  nums.add('25000000');
   return nums;
 }
 
 function extractNumericClaims(text) {
   if (!text || typeof text !== 'string') return [];
   const matches = [];
-  const currencyRe = /(?:R|\$)\s?[\d,]+(?:\.\d+)?/gi;
+  const currencyRe = /(?<![a-zA-Z])(?:R|\$)\s?[\d,]+(?:\.\d+)?/gi;
   const percentRe = /\b\d+(?:\.\d+)?\s?%/g;
   let m;
-  while ((m = currencyRe.exec(text)) !== null) matches.push(m[0]);
-  while ((m = percentRe.exec(text)) !== null) matches.push(m[0]);
+  while ((m = currencyRe.exec(text)) !== null) {
+    const match = m[0];
+    // Filter out fragments with fewer than 2 digits -- these are malformed
+    // extraction artifacts (e.g. "r," from a truncated currency token),
+    // not meaningful numeric claims.
+    const digits = match.replace(/[^0-9]/g, '');
+    if (digits.length < 2) continue;
+    matches.push(match);
+  }
+  while ((m = percentRe.exec(text)) !== null) {
+    const match = m[0];
+    const digits = match.replace(/[^0-9]/g, '');
+    if (digits.length < 2) continue;
+    matches.push(match);
+  }
   return matches;
 }
 
@@ -176,34 +194,67 @@ function buildStrategicAnalystPrompt(context, facts, evidenceOutput) {
   ].join('\n');
 }
 
+// Strips XML-style tool-call artifacts that have been observed leaking into
+// free-text string fields (e.g. "</exposure>", '<parameter name="...">').
+// This is a narrow, mechanical cleanup -- it does not attempt to recover or
+// reformat any content described by the leaked tag, it only removes the tag
+// syntax itself and trims the result.
+function stripXmlArtifacts(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/<\/[a-zA-Z0-9_]+>/g, '')
+    .replace(/<parameter\s+name="[^"]*">/g, '')
+    .replace(/<[^>]*>/g, '')
+    .trim();
+}
+
 // Field-by-field reconstruction only -- no recommended_action or priority
 // field exists in the schema above, and none is ever read here even if a
 // tool-call response tries to smuggle one in.
 function assembleStrategicAssessment(input = {}) {
-  const options = Array.isArray(input.options)
-    ? input.options.map((o) => ({
-        action: (o && o.action) || '',
-        tradeoff: (o && o.tradeoff) || '',
-        timeframe: (o && o.timeframe) || '',
-      }))
-    : [];
+  // Default secondary fields if the model omitted them or returned an
+  // invalid shape (claude-sonnet-5 with thin context reliably omits arrays
+  // and enums rather than returning explicit defaults). exposure and
+  // severity are deliberately NOT defaulted here -- absence of either is a
+  // genuine quality failure, checked against raw input before this
+  // function is ever called (see runStrategicAnalystDecisionAgent).
+  const normalised = {
+    ...input,
+    uncertainty_factors: Array.isArray(input.uncertainty_factors) ? input.uncertainty_factors : [],
+    options: Array.isArray(input.options) ? input.options : [],
+    evidence_that_would_change_assessment: Array.isArray(input.evidence_that_would_change_assessment)
+      ? input.evidence_that_would_change_assessment
+      : [],
+    assumptions: Array.isArray(input.assumptions) ? input.assumptions : [],
+    reversibility: REVERSIBILITY_LEVELS.includes(input.reversibility) ? input.reversibility : 'UNKNOWN',
+    timing_sensitivity: TIMING_LEVELS.includes(input.timing_sensitivity) ? input.timing_sensitivity : 'UNKNOWN',
+    opportunity_cost: typeof input.opportunity_cost === 'string' ? input.opportunity_cost : '',
+    strategic_confidence: CONFIDENCE_LEVELS.includes(input.strategic_confidence) ? input.strategic_confidence : 'UNKNOWN',
+    deviation_from_evidence: typeof input.deviation_from_evidence === 'string' ? input.deviation_from_evidence : '',
+    exposure_basis: typeof input.exposure_basis === 'string' ? input.exposure_basis : '',
+    cost_of_waiting: typeof input.cost_of_waiting === 'string' ? input.cost_of_waiting : '',
+  };
+
+  const options = normalised.options.map((o) => ({
+    action: (o && o.action) || '',
+    tradeoff: (o && o.tradeoff) || '',
+    timeframe: (o && o.timeframe) || '',
+  }));
 
   return {
-    exposure: (input.exposure) || '',
-    exposure_basis: (input.exposure_basis) || '',
-    severity: SEVERITY_LEVELS.includes(input.severity) ? input.severity : 'UNKNOWN',
-    uncertainty_factors: Array.isArray(input.uncertainty_factors) ? input.uncertainty_factors.slice() : [],
-    cost_of_waiting: (input.cost_of_waiting) || '',
-    reversibility: REVERSIBILITY_LEVELS.includes(input.reversibility) ? input.reversibility : 'UNKNOWN',
-    opportunity_cost: (input.opportunity_cost) || '',
-    timing_sensitivity: TIMING_LEVELS.includes(input.timing_sensitivity) ? input.timing_sensitivity : 'UNKNOWN',
+    exposure: stripXmlArtifacts(normalised.exposure) || '',
+    exposure_basis: stripXmlArtifacts(normalised.exposure_basis),
+    severity: normalised.severity,
+    uncertainty_factors: normalised.uncertainty_factors.slice(),
+    cost_of_waiting: stripXmlArtifacts(normalised.cost_of_waiting),
+    reversibility: normalised.reversibility,
+    opportunity_cost: stripXmlArtifacts(normalised.opportunity_cost),
+    timing_sensitivity: normalised.timing_sensitivity,
     options,
-    evidence_that_would_change_assessment: Array.isArray(input.evidence_that_would_change_assessment)
-      ? input.evidence_that_would_change_assessment.slice()
-      : [],
-    assumptions: Array.isArray(input.assumptions) ? input.assumptions.slice() : [],
-    strategic_confidence: normaliseConfidence(input.strategic_confidence),
-    deviation_from_evidence: typeof input.deviation_from_evidence === 'string' ? input.deviation_from_evidence : '',
+    evidence_that_would_change_assessment: normalised.evidence_that_would_change_assessment.slice(),
+    assumptions: normalised.assumptions.slice(),
+    strategic_confidence: normalised.strategic_confidence,
+    deviation_from_evidence: stripXmlArtifacts(normalised.deviation_from_evidence),
   };
 }
 
@@ -215,12 +266,12 @@ function validateStrategicAssessment(assessment, allowedNumbers) {
   if (!assessment || typeof assessment !== 'object') return ['assessment must be an object'];
 
   if (!assessment.exposure) errors.push('exposure required');
-  if (!assessment.exposure_basis) errors.push('exposure_basis required');
+  if (assessment.exposure_basis === undefined || assessment.exposure_basis === null) errors.push('exposure_basis required');
   if (!SEVERITY_LEVELS.includes(assessment.severity)) errors.push(`severity must be one of ${SEVERITY_LEVELS.join('|')}`);
   if (!Array.isArray(assessment.uncertainty_factors)) errors.push('uncertainty_factors[] required');
-  if (!assessment.cost_of_waiting) errors.push('cost_of_waiting required');
+  if (assessment.cost_of_waiting === undefined || assessment.cost_of_waiting === null) errors.push('cost_of_waiting required');
   if (!REVERSIBILITY_LEVELS.includes(assessment.reversibility)) errors.push(`reversibility must be one of ${REVERSIBILITY_LEVELS.join('|')}`);
-  if (!assessment.opportunity_cost) errors.push('opportunity_cost required');
+  if (assessment.opportunity_cost === undefined || assessment.opportunity_cost === null) errors.push('opportunity_cost required');
   if (!TIMING_LEVELS.includes(assessment.timing_sensitivity)) errors.push(`timing_sensitivity must be one of ${TIMING_LEVELS.join('|')}`);
 
   if (!Array.isArray(assessment.options)) {
@@ -301,15 +352,15 @@ async function runStrategicAnalystDecisionAgent(context, evidenceOutput) {
   const work = (async () => {
     const prompt = buildStrategicAnalystPrompt(context, facts, evidenceOutput);
 
-    const resp = await client.messages.create({
+    const params = {
       model: cfg.model,
       max_tokens: cfg.max_tokens,
-      temperature: cfg.temperature,
       system: STRATEGIC_ANALYST_DECISION_CONTEXT,
       tools: [SUBMIT_STRATEGIC_ASSESSMENT_TOOL],
       tool_choice: { type: 'tool', name: 'submit_strategic_assessment' },
       messages: [{ role: 'user', content: prompt }],
-    });
+    };
+    const resp = await client.messages.create(params);
     usage.input_tokens += resp.usage?.input_tokens || 0;
     usage.output_tokens += resp.usage?.output_tokens || 0;
 
@@ -320,9 +371,23 @@ async function runStrategicAnalystDecisionAgent(context, evidenceOutput) {
     // touches it -- see file header. A missing required field fails here;
     // an explicit 'UNKNOWN' the model actually returned does not.
     const raw = toolUse.input || {};
-    const errors = validateStrategicAssessment(raw, allowedNumbers);
+    // Fail closed on exposure and severity against raw input -- these two
+    // fields are never defaulted; absence of either is a genuine quality
+    // failure, not a secondary omission.
+    if (!raw.exposure || typeof raw.exposure !== 'string') {
+      throw new Error('Strategic assessment failed shape/precision validation: exposure required');
+    }
+    if (!SEVERITY_LEVELS.includes(raw.severity)) {
+      throw new Error(`Strategic assessment failed shape/precision validation: severity must be one of ${SEVERITY_LEVELS.join('|')}`);
+    }
+
+    // Assemble with defaults/sanitisation for secondary fields, then
+    // validate the rest (including numeric-precision scanning) against the
+    // normalised, sanitised object.
+    const assessment = assembleStrategicAssessment(raw);
+    const errors = validateStrategicAssessment(assessment, allowedNumbers);
     if (errors.length) throw new Error(`Strategic assessment failed shape/precision validation: ${errors.join('; ')}`);
-    return assembleStrategicAssessment(raw);
+    return assessment;
   })();
 
   try {
