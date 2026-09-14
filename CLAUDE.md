@@ -1,5 +1,12 @@
 ## Known Architectural Debt
 
+### Download button error handling (first hardened example)
+No Cognito refresh-token flow exists; sessions expire silently after
+approximately 60 minutes. Any authenticated component performing an
+action after expiry must explicitly handle the resulting undefined
+API response. Most components do not yet do this — this download
+button fix is the first hardened example.
+
 ### Multi-tenant Chief of Staff aggregation
 The Chief of Staff currently resolves to a single tenant from request
 context. Multi-tenant aggregation is required before the second paying

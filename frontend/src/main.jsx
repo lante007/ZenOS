@@ -659,9 +659,13 @@ function DownloadPdfButton({ record, variant = 'ghost', label = 'Download PDF' }
     setState('loading');
     try {
       const data = await apiRequest(`/api/records/${record.id || record.adei_record_id}/download`);
+      if (!data || !data.url) {
+        throw new Error('Download unavailable — please try again');
+      }
       window.open(data.url, '_blank');
       setState('idle');
-    } catch {
+    } catch (err) {
+      console.error('Download failed:', err);
       setState('error');
       window.setTimeout(() => setState('idle'), 3000);
     }

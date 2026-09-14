@@ -2359,9 +2359,9 @@ button.estate-stat-tile {
 }
 
 .download-pdf-button-ghost {
-  border: 1px solid #DDE3EA;
+  border: 1px solid #00B4D8;
   background: transparent;
-  color: #444444;
+  color: #00B4D8;
   font-size: 12px;
   padding: 4px 10px;
   border-radius: 4px;
