@@ -114,7 +114,7 @@ const PASS1_SCHEMA = `{
   "year": "integer: year evaluation was completed",
   "baseline_year": "integer or null",
   "endline_year": "integer or null",
-  "provinces": ["array of province names"],
+  "provinces": ["array of values from this exact list only: Eastern Cape | Free State | Gauteng | KwaZulu-Natal | Limpopo | Mpumalanga | Northern Cape | North West | Western Cape. If the document is genuinely nationally-scoped (covers the whole country, not tied to specific provinces), list all nine of the above explicitly. Never output the word National or any value outside this list."],
   "districts": ["array of district names or empty array"],
   "grades": ["array e.g. Grade 1, Grade 2"],
   "subject_area": "Mathematics | Literacy | Language | Science | Multi-subject | null",

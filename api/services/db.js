@@ -1,6 +1,7 @@
 'use strict';
 
 const { Pool } = require('pg');
+const { expandNationalScope } = require('./geography');
 
 let pool;
 
@@ -408,7 +409,7 @@ async function createRecord(tenant, record, document = {}) {
       ['programme_name', truncate(record.programme_name, 200)],
       ['phase', truncate(record.phase, 100)],
       ['year', record.year],
-      ['provinces', record.provinces || []],
+      ['provinces', expandNationalScope(record.provinces) || []],
       ['sample_size_learners', record.sample_size_learners || null],
       ['sample_size_schools', record.sample_size_schools || null],
       ['has_control_group', record.has_control_group],
