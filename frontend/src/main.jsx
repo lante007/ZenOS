@@ -2021,7 +2021,7 @@ function DashboardPage() {
                     type="button"
                     onClick={() => setShowAllGaps(v => !v)}
                   >
-                    {showAllGaps ? 'Show fewer' : `Show all ${gaps.length} gaps`}
+                    {showAllGaps ? 'Show fewer' : `Show all ${totalGapsIdentified} gaps`}
                   </button>
                 )}
               </>
