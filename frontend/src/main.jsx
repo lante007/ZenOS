@@ -1552,7 +1552,8 @@ function DashboardPage() {
     return 'IDENTIFIED';
   }
 
-  const visibleGaps = gaps.slice(0, 3);
+  const [showAllGaps, setShowAllGaps] = useState(false);
+  const visibleGaps = showAllGaps ? gaps : gaps.slice(0, 3);
 
   const cascadeCards = [
     {
@@ -2010,9 +2011,20 @@ function DashboardPage() {
               )}
             </div>
             {!gapsLoading && gaps.length > 0 && (
-              <p className="gap-priority-counter">
-                Showing {visibleGaps.length} of {totalGapsIdentified} priority evidence gaps
-              </p>
+              <>
+                <p className="gap-priority-counter">
+                  Showing {visibleGaps.length} of {totalGapsIdentified} priority evidence gaps
+                </p>
+                {gaps.length > 3 && (
+                  <button
+                    className="gap-expand-button"
+                    type="button"
+                    onClick={() => setShowAllGaps(v => !v)}
+                  >
+                    {showAllGaps ? 'Show fewer' : `Show all ${gaps.length} gaps`}
+                  </button>
+                )}
+              </>
             )}
             {user.role === 'CEO_EXEC' && canAccess('ceo_brief') && (
               <article className="ceo-brief-prominent-card">

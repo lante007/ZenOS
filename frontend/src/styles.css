@@ -2019,6 +2019,17 @@ button.estate-stat-tile {
   text-align: center;
 }
 
+.gap-expand-button {
+  background: none;
+  border: 1px solid #EF7218;
+  color: #EF7218;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
 .ceo-brief-prominent-card {
   display: flex;
   align-items: center;
