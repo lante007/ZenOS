@@ -3540,6 +3540,59 @@ function TorGeneratorPage() {
   );
 }
 
+const GAP_TRIGGER_LABELS = {
+  INSUFFICIENT_COVERAGE: 'Fewer than 2 records found for this topic',
+  CURRENCY_RISK: 'Most recent evidence is more than 3 years old',
+  CONTRADICTION_DETECTED: 'Contradictions detected across records',
+  INFERENCE_RISK: 'This response requires inference beyond what records directly state',
+};
+
+const ROLE_FRAMING_LABELS = {
+  CEO_EXEC: 'CEO view',
+  ORGANISATION_LEAD: 'Organisation view',
+  EVIDENCE_ANALYST: 'Analyst view',
+  COMMUNICATIONS: 'Communications view',
+};
+
+function GapAlertBanner({ triggers }) {
+  const list = Array.isArray(triggers) ? triggers.filter(Boolean) : [];
+  if (list.length === 0) return null;
+  return (
+    <article className="ask-gap-alert">
+      <strong>⚠ Evidence gaps flagged</strong>
+      <ul>
+        {list.map(trigger => (
+          <li key={trigger}>{GAP_TRIGGER_LABELS[trigger] || trigger}</li>
+        ))}
+      </ul>
+    </article>
+  );
+}
+
+function AskEvidenceItem({ item }) {
+  const qualifications = Array.isArray(item?.qualifications) ? item.qualifications.filter(Boolean) : [];
+  const supportingRecords = Array.isArray(item?.supporting_records) ? item.supporting_records.filter(Boolean) : [];
+  return (
+    <article className="ask-evidence-item">
+      <div className="ask-evidence-item-head">
+        <p className="ask-evidence-claim">{item?.claim}</p>
+        <span className={`confidence-badge ${String(item?.confidence || '').toLowerCase()}`}>{item?.confidence}</span>
+      </div>
+      {item?.evidence_basis && <p className="ask-evidence-basis">{item.evidence_basis}</p>}
+      {qualifications.length > 0 && (
+        <ul className="ask-qualifications">
+          {qualifications.map((q, idx) => <li key={idx}>{q}</li>)}
+        </ul>
+      )}
+      {supportingRecords.length > 0 && (
+        <div className="ask-mini-chips">
+          {supportingRecords.map(id => <span className="ask-mini-chip" key={id}>{id}</span>)}
+        </div>
+      )}
+    </article>
+  );
+}
+
 function AskZenexPage() {
   const { records } = useLiveRecords();
   const user = currentUser();
@@ -3669,18 +3722,136 @@ function AskZenexPage() {
 
         {result && (
           <section className="ask-results">
+            <GapAlertBanner triggers={result.gap_triggers_fired} />
+
             <div className="ask-result-meta">
-              <span className={`confidence-badge ${String(result.confidence || 'LOW').toLowerCase()}`}>{result.confidence}</span>
+              <div className="ask-result-meta-badges">
+                <span className={`confidence-badge ${String(result.confidence || 'LOW').toLowerCase()}`}>{result.confidence}</span>
+                {result.role_framing && (
+                  <span className="ask-role-framing">{ROLE_FRAMING_LABELS[result.role_framing] || result.role_framing}</span>
+                )}
+              </div>
               <span>Searched {result.records_searched || searchRecordCount} records · {dateTimeStamp(result.generated_at)}</span>
             </div>
 
-            <article className="ask-answer-card">
-              <h2>Answer</h2>
-              <div
-                className="ask-answer-body"
-                dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(result.answer) }}
-              />
-            </article>
+            {result.bottom_line ? (
+              <>
+                <article className="ask-answer-card ask-section">
+                  <h2 className="ask-section-title">Bottom Line</h2>
+                  <p className="ask-bottom-line-text">{result.bottom_line}</p>
+                </article>
+
+                {Array.isArray(result.what_the_evidence_shows) && result.what_the_evidence_shows.length > 0 && (
+                  <section className="ask-answer-card ask-section">
+                    <h2 className="ask-section-title">What the Evidence Shows</h2>
+                    {result.what_the_evidence_shows.map((item, idx) => (
+                      <AskEvidenceItem item={item} key={idx} />
+                    ))}
+                  </section>
+                )}
+
+                {hasContradiction && (
+                  <article className="ask-contradiction-box">
+                    <strong>⚠ Contradictory evidence found</strong>
+                    <p>{sanitiseAnswer(result.contradictions)}</p>
+                  </article>
+                )}
+
+                {Array.isArray(result.evidence_limitations) && result.evidence_limitations.length > 0 && (
+                  <section className="ask-answer-card ask-section">
+                    <h2 className="ask-section-title">Limitations</h2>
+                    <ul className="ask-limitations-list">
+                      {result.evidence_limitations.map((lim, idx) => (
+                        <li key={idx}>
+                          <span>{lim.issue}</span>
+                          <span className={`severity-badge ${String(lim.severity || '').toLowerCase()}`}>{lim.severity}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {Array.isArray(result.what_we_do_not_know) && result.what_we_do_not_know.length > 0 && (
+                  <section className="ask-answer-card ask-section">
+                    <h2 className="ask-section-title">What We Do Not Know</h2>
+                    <ul className="ask-plain-list">
+                      {result.what_we_do_not_know.map((line, idx) => <li key={idx}>{line}</li>)}
+                    </ul>
+                  </section>
+                )}
+
+                {(result.decision_boundary?.supported?.length > 0 || result.decision_boundary?.not_yet_supported?.length > 0) && (
+                  <section className="ask-answer-card ask-section">
+                    <h2 className="ask-section-title">Decision Boundary</h2>
+                    <div className="ask-decision-boundary">
+                      <div>
+                        <h3>What is supported</h3>
+                        <ul className="ask-plain-list">
+                          {(result.decision_boundary.supported || []).map((line, idx) => <li key={idx}>{line}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <h3>What is not yet supported</h3>
+                        <ul className="ask-plain-list">
+                          {(result.decision_boundary.not_yet_supported || []).map((line, idx) => <li key={idx}>{line}</li>)}
+                        </ul>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {result.why_this_matters_for_zenex && (
+                  <section className="ask-answer-card ask-section">
+                    <h2 className="ask-section-title">Why This Matters for Zenex</h2>
+                    <p>{result.why_this_matters_for_zenex}</p>
+                  </section>
+                )}
+
+                {result.recommended_action && (
+                  <article className="ask-recommendation-box">
+                    <strong>Recommended Action</strong>
+                    <p>{sanitiseAnswer(result.recommended_action)}</p>
+                  </article>
+                )}
+
+                {Array.isArray(result.sources) && result.sources.length > 0 && (
+                  <section className="ask-answer-card ask-section">
+                    <h2 className="ask-section-title">Sources</h2>
+                    <ul className="ask-sources-list">
+                      {result.sources.map((src, idx) => (
+                        <li key={idx} className="ask-source-item">
+                          <span className="ask-source-id">{src.record_id}</span>
+                          <span className="ask-source-programme">{src.title_or_programme}</span>
+                          <span className="ask-source-meta">{[src.year, src.tier, src.pathway].filter(Boolean).join(' | ')}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </>
+            ) : (
+              <>
+                <article className="ask-answer-card">
+                  <h2>Answer</h2>
+                  <div
+                    className="ask-answer-body"
+                    dangerouslySetInnerHTML={{ __html: safeRenderMarkdown(result.answer) }}
+                  />
+                </article>
+
+                {hasContradiction && (
+                  <article className="ask-contradiction-box">
+                    <strong>⚠ Contradictory evidence found</strong>
+                    <p>{sanitiseAnswer(result.contradictions)}</p>
+                  </article>
+                )}
+
+                <article className="ask-recommendation-box">
+                  <strong>Recommended action</strong>
+                  <p>{sanitiseAnswer(result.recommended_action)}</p>
+                </article>
+              </>
+            )}
 
             {(supportingRecords.length > 0 || result.supporting_record_ids?.length > 0) && (
               <section className="ask-supporting-records">
@@ -3703,18 +3874,6 @@ function AskZenexPage() {
                 )}
               </section>
             )}
-
-            {hasContradiction && (
-              <article className="ask-contradiction-box">
-                <strong>⚠ Contradictory evidence found</strong>
-                <p>{sanitiseAnswer(result.contradictions)}</p>
-              </article>
-            )}
-
-            <article className="ask-recommendation-box">
-              <strong>Recommended action</strong>
-              <p>{sanitiseAnswer(result.recommended_action)}</p>
-            </article>
           </section>
         )}
 
