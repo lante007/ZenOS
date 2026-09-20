@@ -184,12 +184,12 @@ async function validateAndRepair(client, rawText, originalQuestion) {
   try {
     const repair = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4000,
+      max_tokens: 8000,
       temperature: 0,
       system: 'You are a JSON repair tool. Return only valid, complete JSON. No markdown. No explanation.',
       messages: [{
         role: 'user',
-        content: `The following text was supposed to be a JSON object but is malformed or incomplete. Repair it and return valid, complete JSON only:\n\n${rawText.slice(0, 8000)}`
+        content: `The following text was supposed to be a JSON object but is malformed or incomplete. Repair it and return valid, complete JSON only:\n\n${rawText.slice(0, 16000)}`
       }]
     });
     const repairText = repair.content?.[0]?.text || '';
@@ -272,7 +272,7 @@ router.post(
 
       const message = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 8000,
         temperature: 0.2,
         system,
         messages: [{
