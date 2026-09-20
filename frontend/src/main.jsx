@@ -3569,16 +3569,30 @@ function GapAlertBanner({ triggers }) {
   );
 }
 
+function EvidenceRoleBadge({ role }) {
+  if (!role) return null;
+  return <span className={`evidence-role-badge ${String(role).toLowerCase()}`}>{role}</span>;
+}
+
 function AskEvidenceItem({ item }) {
   const qualifications = Array.isArray(item?.qualifications) ? item.qualifications.filter(Boolean) : [];
   const supportingRecords = Array.isArray(item?.supporting_records) ? item.supporting_records.filter(Boolean) : [];
+  const metaLine = [item?.outcome, item?.timepoint].filter(Boolean).join(' · ');
   return (
     <article className="ask-evidence-item">
       <div className="ask-evidence-item-head">
         <p className="ask-evidence-claim">{item?.claim}</p>
         <span className={`confidence-badge ${String(item?.confidence || '').toLowerCase()}`}>{item?.confidence}</span>
       </div>
+      {(item?.evidence_role || item?.causal_design) && (
+        <div className="ask-evidence-item-tags">
+          <EvidenceRoleBadge role={item?.evidence_role} />
+          {item?.causal_design && <span className="ask-causal-design">{item.causal_design}</span>}
+        </div>
+      )}
       {item?.evidence_basis && <p className="ask-evidence-basis">{item.evidence_basis}</p>}
+      {item?.population_context && <p className="ask-population-context">{item.population_context}</p>}
+      {metaLine && <p className="ask-evidence-meta-line">{metaLine}</p>}
       {qualifications.length > 0 && (
         <ul className="ask-qualifications">
           {qualifications.map((q, idx) => <li key={idx}>{q}</li>)}
@@ -3734,6 +3748,23 @@ function AskZenexPage() {
               <span>Searched {result.records_searched || searchRecordCount} records · {dateTimeStamp(result.generated_at)}</span>
             </div>
 
+            {(() => {
+              const eb = result.evidence_boundary;
+              if (!eb) return null;
+              const searched = result.records_searched || searchRecordCount;
+              const retrieved = eb.records_retrieved_as_relevant;
+              const used = eb.records_used_in_synthesis;
+              const showRetrieved = retrieved != null && retrieved !== searched;
+              const showUsed = used != null && used !== searched;
+              if (!showRetrieved && !showUsed) return null;
+              return (
+                <div className="ask-evidence-boundary-detail">
+                  {showRetrieved && <span>{retrieved} retrieved as relevant</span>}
+                  {showUsed && <span>{used} used in synthesis</span>}
+                </div>
+              );
+            })()}
+
             {result.bottom_line ? (
               <>
                 <article className="ask-answer-card ask-section">
@@ -3763,8 +3794,11 @@ function AskZenexPage() {
                     <ul className="ask-limitations-list">
                       {result.evidence_limitations.map((lim, idx) => (
                         <li key={idx}>
-                          <span>{lim.issue}</span>
-                          <span className={`severity-badge ${String(lim.severity || '').toLowerCase()}`}>{lim.severity}</span>
+                          <div className="ask-limitation-row">
+                            <span>{lim.issue}</span>
+                            <span className={`severity-badge ${String(lim.severity || '').toLowerCase()}`}>{lim.severity}</span>
+                          </div>
+                          {lim.decision_relevance && <p className="ask-decision-relevance">{lim.decision_relevance}</p>}
                         </li>
                       ))}
                     </ul>
@@ -3823,6 +3857,8 @@ function AskZenexPage() {
                           <span className="ask-source-id">{src.record_id}</span>
                           <span className="ask-source-programme">{src.title_or_programme}</span>
                           <span className="ask-source-meta">{[src.year, src.tier, src.pathway].filter(Boolean).join(' | ')}</span>
+                          {src.eqs != null && <span className="eqs-badge">{Number(src.eqs).toFixed(1)}</span>}
+                          <EvidenceRoleBadge role={src.role_in_answer} />
                         </li>
                       ))}
                     </ul>

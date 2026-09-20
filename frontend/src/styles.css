@@ -5509,6 +5509,83 @@ button.estate-stat-tile {
   font-family: monospace;
 }
 
+.ask-evidence-item-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.evidence-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.evidence-role-badge.supporting {
+  background: rgba(0, 180, 216, 0.14);
+  color: #00B4D8;
+}
+
+.evidence-role-badge.qualifying {
+  background: rgba(245, 182, 66, 0.14);
+  color: #F5B642;
+}
+
+.evidence-role-badge.challenging {
+  background: rgba(255, 107, 107, 0.14);
+  color: #FFB4A2;
+}
+
+.ask-causal-design {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ask-population-context {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(245, 242, 238, 0.72);
+  line-height: 1.6;
+}
+
+.ask-evidence-meta-line {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.ask-evidence-boundary-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.eqs-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(239, 114, 24, 0.34);
+  background: rgba(239, 114, 24, 0.08);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .confidence-badge.insufficient {
   background: rgba(245, 242, 238, 0.1);
   color: rgba(245, 242, 238, 0.64);
@@ -5546,10 +5623,6 @@ button.estate-stat-tile {
 }
 
 .ask-limitations-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   padding: 8px 0;
   border-top: 1px solid var(--color-border);
   font-size: 13px;
@@ -5558,6 +5631,21 @@ button.estate-stat-tile {
 
 .ask-limitations-list li:first-child {
   border-top: none;
+}
+
+.ask-limitation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ask-decision-relevance {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--color-muted);
+  line-height: 1.6;
 }
 
 .ask-plain-list {
