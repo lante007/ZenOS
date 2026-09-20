@@ -31,24 +31,75 @@ function buildCorpusSummary(records) {
   }));
 }
 
+function getRoleContext(role) {
+  switch (role) {
+    case 'CEO_EXEC':
+      return 'Focus on strategic implication, portfolio choices, risk and what the evidence legitimately supports deciding. Lead with the institutional implication before the research detail.';
+    case 'ORGANISATION_LEAD':
+      return 'Emphasise methodological strength, limitations, programme continuity, evidence quality and gaps. Surface what the evidence implies for commissioning and portfolio decisions.';
+    case 'EVIDENCE_ANALYST':
+      return 'Prioritise evidence quality, study design, effect sizes, heterogeneity, methodological limitations and research gaps. Be precise about causal language.';
+    case 'COMMUNICATIONS':
+      return 'Prioritise clear provenance-backed claims and messaging-ready language. Flag what can and cannot credibly be said publicly. Apply strict causal language discipline.';
+    default:
+      return 'Provide a balanced evidence summary suitable for an informed professional audience.';
+  }
+}
+
 function parseSynthesis(text, recordsSearched) {
+  let parsed;
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      parsed = JSON.parse(jsonMatch[0]);
+    }
+  } catch (e) {
+    parsed = null;
+  }
+
+  if (parsed && parsed.bottom_line) {
+    const recordIds = [];
+    if (parsed.sources) {
+      parsed.sources.forEach(s => { if (s.record_id) recordIds.push(s.record_id); });
+    }
+    return {
+      answer: parsed.bottom_line + (parsed.why_this_matters_for_zenex ? '\n\n' + parsed.why_this_matters_for_zenex : ''),
+      bottom_line: parsed.bottom_line,
+      what_the_evidence_shows: parsed.what_the_evidence_shows || [],
+      evidence_limitations: parsed.evidence_limitations || [],
+      heterogeneity_or_contradictions: parsed.heterogeneity_or_contradictions || {},
+      what_we_do_not_know: parsed.what_we_do_not_know || [],
+      decision_boundary: parsed.decision_boundary || {},
+      why_this_matters_for_zenex: parsed.why_this_matters_for_zenex || null,
+      recommended_action: parsed.recommended_action || null,
+      confidence_summary: parsed.confidence_summary || null,
+      gap_triggers_fired: parsed.gap_triggers_fired || [],
+      role_framing: parsed.role_framing || null,
+      evidence_boundary: parsed.evidence_boundary || {},
+      confidence: (parsed.what_the_evidence_shows?.[0]?.confidence) || 'LOW',
+      records_searched: recordsSearched,
+      supporting_record_ids: recordIds,
+      contradictions: parsed.heterogeneity_or_contradictions?.contradictions?.join('; ') || null,
+      generated_at: new Date().toISOString(),
+    };
+  }
+
   const recordIds = [...new Set((text.match(/\bADEI-[A-Z0-9-]+\b/g) || []))];
   const confidenceMatch = text.match(/\b(HIGH|MODERATE|LOW)\b/i);
-  const contradictionMatch = text.match(/(?:contradictory evidence|contradictions?)[:\s-]+([^\n]+)/i);
   const actionMatch = text.match(/recommended action[:\s-]+([^\n]+)/i);
-
   return {
     answer: text,
+    bottom_line: null,
     confidence: confidenceMatch ? confidenceMatch[1].toUpperCase() : 'LOW',
     records_searched: recordsSearched,
     supporting_record_ids: recordIds,
-    contradictions: contradictionMatch ? contradictionMatch[1].trim() : null,
-    recommended_action: actionMatch ? actionMatch[1].trim() : 'Review the cited records and commission additional evidence where the corpus is insufficient.',
+    contradictions: null,
+    recommended_action: actionMatch ? actionMatch[1].trim() : null,
     generated_at: new Date().toISOString(),
   };
 }
 
-router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'), async (req, res, next) => {
+router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC', 'COMMUNICATIONS'), async (req, res, next) => {
   const startTime = Date.now();
   try {
     const question = String(req.body.question || '').trim();
@@ -57,18 +108,93 @@ router.post('/', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC
 
     const records = process.env.DATABASE_URL ? await db.listRecords(req.tenant, {}) : [];
     const corpusSummary = buildCorpusSummary(records);
+    const roleContext = getRoleContext(req.user?.role);
     const organisationType = req.tenant.organisation_type || 'FUNDER';
     const attributionContext = orgTypeContext(req.tenant);
 
-    const system = `You are the evidence intelligence engine for ${req.tenant.name}, a ${organisationType} in South Africa's education sector. You have access to ${corpusSummary.length} classified evaluation records from the ADEI corpus.
+    const system = `You are EvidenceOS, ${req.tenant.name}'s institutional evidence intelligence layer.
+Your sole job is to answer from the classified Zenex evidence estate with maximum epistemic discipline.
 
-Answer the question using ONLY the evidence in these records. For each finding cited, include the record ID in brackets. Rate your overall confidence as HIGH, MODERATE, or LOW. Flag any contradictory evidence explicitly. If the corpus does not contain sufficient evidence to answer confidently, say so clearly.
+CORE RULES:
+- Speak only from the current Zenex evidence estate. Always make the boundary explicit.
+- Never invent findings. If evidence is thin or absent, say so clearly.
+- Distinguish causal evidence (Tier 1) from implementation, process or research evidence.
+- Separate contradictions (incompatible claims about the same proposition) from heterogeneity (effects that differ by design, geography, subgroup, language, fidelity or context).
+- Keep mechanism language conservative. An observed association does not prove causation.
+- Never upgrade confidence merely because multiple records repeat the same finding. Assess independence, study design, sample overlap and methodological quality.
+- Role framing may change emphasis, vocabulary and decision framing, but must never change the underlying claims, confidence ratings, source selection or evidentiary boundaries.
+- Write in UK English, senior consultant register. No contractions. No em dashes.
 
-Write in UK English, senior consultant register. No contractions. No em dashes.
+ROLE CONTEXT (${req.user?.role || 'ORGANISATION_LEAD'}):
+${roleContext}
 
-When no contradictions exist between the classified records, set the contradictions field to null exactly. Do not write any text. Return null.
+Attribution rule: This organisation is a ${organisationType}. ${attributionContext}
 
-Attribution rule: This organisation is a ${organisationType}. ${attributionContext}`;
+OUTPUT: Return a single valid JSON object with exactly this structure:
+{
+  "evidence_boundary": {
+    "scope": "current Zenex evidence estate",
+    "relevant_record_count": 0,
+    "external_evidence_used": false,
+    "search_completeness": "known | partial | unknown"
+  },
+  "bottom_line": "2 to 4 sentence executive answer. Lead with what is established and how strongly.",
+  "what_the_evidence_shows": [
+    {
+      "claim": "",
+      "confidence": "HIGH | MODERATE | LOW | INSUFFICIENT",
+      "evidence_basis": "",
+      "qualifications": [],
+      "supporting_records": []
+    }
+  ],
+  "evidence_limitations": [
+    {
+      "issue": "",
+      "affected_claims": [],
+      "severity": "HIGH | MODERATE | LOW"
+    }
+  ],
+  "heterogeneity_or_contradictions": {
+    "contradictions": [],
+    "heterogeneity": [
+      {
+        "dimension": "",
+        "finding": "",
+        "implication": ""
+      }
+    ]
+  },
+  "what_we_do_not_know": [],
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": [],
+    "evidence_needed_to_decide": []
+  },
+  "why_this_matters_for_zenex": "2 to 5 sentences linking findings to Zenex Strategy 2030 priorities.",
+  "recommended_action": null,
+  "confidence_summary": "Short explanation of overall confidence referencing tier mix, design strength and independence.",
+  "sources": [
+    {
+      "record_id": "",
+      "title_or_programme": "",
+      "year": "",
+      "tier": "",
+      "pathway": "Impact | Process | Research"
+    }
+  ],
+  "gap_triggers_fired": [],
+  "role_framing": "${req.user?.role || 'ORGANISATION_LEAD'}"
+}
+
+GAP TRIGGER RULES:
+- If fewer than 2 relevant records retrieved: add "INSUFFICIENT_COVERAGE" to gap_triggers_fired.
+- If most recent key evidence is more than 3 years old and the topic is fast-moving: add "CURRENCY_RISK" to gap_triggers_fired.
+- If two or more records reach opposing conclusions: add "CONTRADICTION_DETECTED" to gap_triggers_fired.
+- If the only answer requires inference beyond what records directly state: add "INFERENCE_RISK" to gap_triggers_fired.
+- If the query implies a commissioning or portfolio decision: populate decision_boundary and recommended_action or explicitly state evidence is insufficient.
+- Never end with a generic statement. Make recommended_action specific or set it to null.
+- Do not demand new research solely because evidence is older than 3 years if the proposition is stable.`;
 
     const user = `${question}
 
@@ -78,7 +204,7 @@ ${JSON.stringify(corpusSummary, null, 2)}`;
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 3000,
       temperature: 0.2,
       system,
       messages: [{ role: 'user', content: user }],
@@ -87,7 +213,6 @@ ${JSON.stringify(corpusSummary, null, 2)}`;
     const text = message.content?.[0]?.text || '';
     const parsed = parseSynthesis(text, corpusSummary.length);
 
-    // Non-blocking query log - never let logging delay or fail the response.
     (async () => {
       try {
         await db.getPool().query(
