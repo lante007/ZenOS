@@ -271,7 +271,7 @@ router.post(
       const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
       const message = await client.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-5',
         max_tokens: 16000,
         temperature: 0.2,
         system,
