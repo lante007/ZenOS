@@ -290,7 +290,11 @@ function parseSynthesis(parsed, rawText, recordsSearched, method) {
     return {
       // v2 structured fields
       answer: parsed.bottom_line + (parsed.why_this_matters_for_zenex ? '\n\n' + parsed.why_this_matters_for_zenex : ''),
+      role_output: parsed.role_output || null,
       bottom_line: parsed.bottom_line,
+      evidence_status_line: parsed.evidence_status_line || null,
+      key_evidence: parsed.key_evidence || [],
+      next_evidence_step: parsed.next_evidence_step || null,
       what_the_evidence_shows: parsed.what_the_evidence_shows || [],
       evidence_limitations: parsed.evidence_limitations || [],
       heterogeneity_or_contradictions: parsed.heterogeneity_or_contradictions || {},
