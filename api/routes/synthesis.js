@@ -81,7 +81,9 @@ const SCHEMA = `{
     "records_retrieved_as_relevant": 0,
     "records_used_in_synthesis": 0,
     "records_excluded": 0,
-    "exclusion_reasons": [],
+    "exclusion_reasons": [
+      "N records: reason category"
+    ],
     "external_evidence_used": false,
     "search_completeness": "known | partial | unknown"
   },
@@ -186,7 +188,7 @@ RULE 9 — ACTION BOUNDARY:
 Recommended action must be evidence-linked but must not impose a portfolio restriction, funding condition or sequencing requirement that the evidence does not directly support. Distinguish the evidence-supported next step from any broader strategic inference.
 
 RULE 10 — EXCLUSION REPORTING:
-If relevant records are retrieved but not used in synthesis, report the count in records_excluded and the principal reason in exclusion_reasons. Do not imply that all retrieved evidence contributed equally to the conclusion.
+Set records_retrieved_as_relevant to the count of records that appeared relevant to the query. Set records_used_in_synthesis to the count you actually drew on to make claims. Set records_excluded to the difference. In exclusion_reasons, give one concise phrase per reason category — for example: '11 records: wrong phase (Senior/FET)', '3 records: process evaluations only, no outcome data', '2 records: pre-2015, methodological quality insufficient for this question'. Do not list excluded records individually. A summary by reason category is sufficient. Never write records_excluded: 0 unless you genuinely used every retrieved record. Never imply all retrieved evidence contributed equally to the conclusion.
 
 GAP TRIGGER RULES:
 - Fewer than 2 relevant records retrieved → add "INSUFFICIENT_COVERAGE" to gap_triggers_fired.
