@@ -100,18 +100,53 @@ RULES FOR CEO OUTPUT:
     case 'ORGANISATION_LEAD':
       return 'Emphasise methodological strength, limitations, programme continuity, evidence quality and gaps. Surface what the evidence implies for commissioning and portfolio decisions.';
     case 'EVIDENCE_ANALYST':
-      return 'Prioritise evidence quality, study design, effect sizes, independence, heterogeneity, methodological limitations and research gaps. Be precise about causal language and confidence gradations.';
+      return `You are answering for an Evidence Analyst or Programme Manager conducting technical evidence review.
+
+Generate the full Organisation Lead schema (all fields: what_the_evidence_shows with full claim-level detail, evidence_limitations, heterogeneity_or_contradictions, decision_boundary, sources, confidence_summary, evidence_boundary), but with this emphasis:
+
+- Maximise methodological detail in evidence_basis, causal_design, and population_context for every claim.
+- Be maximally precise about independence (Rule 4) and heterogeneity (Rule 3) since this is the audience most equipped to evaluate these distinctions.
+- decision_boundary should emphasise what further evaluation design would resolve each open question, not just what evidence is needed generically.
+- role_framing: "EVIDENCE_ANALYST"`;
     case 'COMMUNICATIONS':
-      return 'Prioritise clear, provenance-backed claims and messaging-ready language. Flag what can and cannot credibly be said publicly. Apply strict causal language discipline throughout.';
+      return `You are answering for a Communications and Knowledge Manager who publishes findings externally on Zenex's behalf.
+
+Generate a compact COMMUNICATIONS-specific output shape. Do not generate the full Organisation Lead schema.
+
+The COMMUNICATIONS output must contain exactly these fields and no others:
+
+{
+  "role_output": "COMMUNICATIONS",
+  "claim": "One sentence. The single most defensible, publication-ready finding from the evidence. Plain language, no jargon.",
+  "confidence_label": "supported by strong evidence | supported by emerging evidence | not yet supported by evidence",
+  "provenance": "One line: programme name(s), year(s), tier, evaluation type.",
+  "safe_wording": "The exact sentence or short paragraph that can be used publicly (newsletter, website, annual report). Written in plain, accessible language. Must not overstate the evidence.",
+  "caveats": [
+    "What must be qualified or stated alongside the claim if used publicly. Maximum 3."
+  ],
+  "what_cannot_be_said": [
+    "Specific overclaims to avoid. E.g. do not claim this is proven nationally, do not claim it is the cause of X. Maximum 3."
+  ],
+  "gap_triggers_fired": [],
+  "role_framing": "COMMUNICATIONS"
+}
+
+RULES FOR COMMUNICATIONS OUTPUT:
+- claim: maximum one sentence. Must be the single strongest, most defensible finding, not a summary of everything.
+- safe_wording must be ready to paste into a newsletter or public document without further editing.
+- caveats and what_cannot_be_said are the protective guardrails. Apply Rules 1 to 13 (scope, causality, heterogeneity, independence) to determine what must be qualified or avoided.
+- Do not include evidence_shows, sources, limitations, decision_boundary, or evidence_boundary. These are Organisation Lead fields.
+- Do not add any field not listed in this schema. No Executive Summary, no additional sections.
+- gap_triggers_fired: include in the JSON but do not surface prominently in the visible output.`;
     default:
       return 'Provide a balanced evidence summary suitable for an informed professional audience.';
   }
 }
 
 // ─── schema ──────────────────────────────────────────────────
-// NOTE: CEO_EXEC role generates a compact CEO schema (see getRoleContext
-// CEO case). The full schema below applies to ORGANISATION_LEAD,
-// EVIDENCE_ANALYST, and COMMUNICATIONS only.
+// NOTE: CEO_EXEC and COMMUNICATIONS roles generate compact schemas of their
+// own (see getRoleContext CEO_EXEC and COMMUNICATIONS cases). The full
+// schema below applies to ORGANISATION_LEAD and EVIDENCE_ANALYST only.
 const SCHEMA = `{
   "evidence_boundary": {
     "scope": "current Zenex evidence estate",
@@ -283,7 +318,7 @@ async function validateAndRepair(client, rawText, originalQuestion) {
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.bottom_line) return { parsed, method: 'direct' };
+      if (parsed.bottom_line || parsed.claim) return { parsed, method: 'direct' };
     } catch (_) {}
   }
 
@@ -303,7 +338,7 @@ async function validateAndRepair(client, rawText, originalQuestion) {
     const repairMatch = repairText.match(/\{[\s\S]*\}/);
     if (repairMatch) {
       const parsed = JSON.parse(repairMatch[0]);
-      if (parsed.bottom_line) return { parsed, method: 'repaired' };
+      if (parsed.bottom_line || parsed.claim) return { parsed, method: 'repaired' };
     }
   } catch (_) {}
 
@@ -312,16 +347,16 @@ async function validateAndRepair(client, rawText, originalQuestion) {
 
 // ─── parse response ───────────────────────────────────────────
 function parseSynthesis(parsed, rawText, recordsSearched, method) {
-  if (parsed && parsed.bottom_line) {
+  if (parsed && (parsed.bottom_line || parsed.claim)) {
     const recordIds = (parsed.sources || [])
       .map(s => s.record_id)
       .filter(Boolean);
 
     return {
       // v2 structured fields
-      answer: parsed.bottom_line + (parsed.why_this_matters_for_zenex ? '\n\n' + parsed.why_this_matters_for_zenex : ''),
+      answer: (parsed.bottom_line || parsed.claim || '') + (parsed.why_this_matters_for_zenex ? '\n\n' + parsed.why_this_matters_for_zenex : ''),
       role_output: parsed.role_output || null,
-      bottom_line: parsed.bottom_line,
+      bottom_line: parsed.bottom_line || null,
       evidence_status_line: parsed.evidence_status_line || null,
       key_evidence: parsed.key_evidence || [],
       next_evidence_step: parsed.next_evidence_step || null,
@@ -337,6 +372,13 @@ function parseSynthesis(parsed, rawText, recordsSearched, method) {
       role_framing: parsed.role_framing || null,
       evidence_boundary: parsed.evidence_boundary || {},
       sources: parsed.sources || [],
+      // COMMUNICATIONS compact fields
+      claim: parsed.claim || null,
+      confidence_label: parsed.confidence_label || null,
+      provenance: parsed.provenance || null,
+      safe_wording: parsed.safe_wording || null,
+      caveats: parsed.caveats || [],
+      what_cannot_be_said: parsed.what_cannot_be_said || [],
       // v1 compat fields
       confidence: (parsed.what_the_evidence_shows?.[0]?.confidence) || 'LOW',
       records_searched: recordsSearched,

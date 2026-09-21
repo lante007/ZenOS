@@ -3708,6 +3708,76 @@ function CEOAskResult({ result }) {
   );
 }
 
+const CONFIDENCE_LABEL_VARIANTS = {
+  'supported by strong evidence': 'strong',
+  'supported by emerging evidence': 'emerging',
+  'not yet supported by evidence': 'none',
+};
+
+function CommsAskResult({ result }) {
+  const confidenceLabel = String(result?.confidence_label || '');
+  const confidenceVariant = CONFIDENCE_LABEL_VARIANTS[confidenceLabel.toLowerCase()] || 'none';
+  const caveats = Array.isArray(result?.caveats) ? result.caveats.filter(Boolean).map(sanitiseDashes) : [];
+  const whatCannotBeSaid = Array.isArray(result?.what_cannot_be_said) ? result.what_cannot_be_said.filter(Boolean).map(sanitiseDashes) : [];
+  const [copied, setCopied] = useState(false);
+
+  const copySafeWording = async () => {
+    try {
+      await navigator.clipboard?.writeText(sanitiseDashes(result?.safe_wording || ''));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_) {}
+  };
+
+  return (
+    <section className="ask-results comms-ask-result">
+      {confidenceLabel && (
+        <span className={`confidence-label-badge ${confidenceVariant}`}>{confidenceLabel.toUpperCase()}</span>
+      )}
+
+      {result?.claim && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Claim</h2>
+          <p className="comms-claim">{sanitiseDashes(result.claim)}</p>
+          {result?.provenance && (
+            <p className="comms-provenance">Source: {sanitiseDashes(result.provenance)}</p>
+          )}
+        </article>
+      )}
+
+      {result?.safe_wording && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Safe Wording</h2>
+          <blockquote className="comms-safe-wording-box">
+            {sanitiseDashes(result.safe_wording)}
+          </blockquote>
+          <button type="button" className="secondary-action" onClick={copySafeWording}>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </article>
+      )}
+
+      {caveats.length > 0 && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Caveats to Include</h2>
+          <ul className="ask-plain-list comms-caveats-list">
+            {caveats.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </article>
+      )}
+
+      {whatCannotBeSaid.length > 0 && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Do Not Claim</h2>
+          <ul className="ask-plain-list comms-do-not-claim-list">
+            {whatCannotBeSaid.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </article>
+      )}
+    </section>
+  );
+}
+
 function AskZenexPage() {
   const { records } = useLiveRecords();
   const user = currentUser();
@@ -3901,9 +3971,13 @@ function AskZenexPage() {
           <CEOAskResult result={result} />
         )}
 
-        {result && result.role_output !== 'CEO' && (
+        {result && result.role_output === 'COMMUNICATIONS' && (
+          <CommsAskResult result={result} />
+        )}
+
+        {result && !['CEO', 'COMMUNICATIONS'].includes(result.role_output) && (
           <section className="ask-results">
-            {result.role_output !== 'CEO' &&
+            {!['CEO', 'COMMUNICATIONS'].includes(result.role_output) &&
               result.gap_triggers_fired?.length > 0 && (
                 <GapAlertBanner triggers={result.gap_triggers_fired} />
               )}
