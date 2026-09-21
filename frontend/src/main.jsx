@@ -3607,6 +3607,94 @@ function AskEvidenceItem({ item }) {
   );
 }
 
+function CEOAskResult({ result }) {
+  const decisionConfidence = String(result?.decision_boundary?.decision_confidence || '').toLowerCase();
+  const supported = Array.isArray(result?.decision_boundary?.supported) ? result.decision_boundary.supported.filter(Boolean) : [];
+  const notYetSupported = Array.isArray(result?.decision_boundary?.not_yet_supported) ? result.decision_boundary.not_yet_supported.filter(Boolean) : [];
+  const evidenceNeeded = Array.isArray(result?.decision_boundary?.evidence_needed_to_decide) ? result.decision_boundary.evidence_needed_to_decide.filter(Boolean) : [];
+  const keyEvidence = Array.isArray(result?.key_evidence) ? result.key_evidence.slice(0, 3) : [];
+  const whatWeDoNotKnow = Array.isArray(result?.what_we_do_not_know) ? result.what_we_do_not_know.filter(Boolean) : [];
+
+  return (
+    <section className="ask-results ceo-ask-result">
+      {result?.evidence_status_line && (
+        <p className="evidence-status-line">{result.evidence_status_line}</p>
+      )}
+
+      {result?.bottom_line && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Bottom Line</h2>
+          <p className="ask-bottom-line-text">{result.bottom_line}</p>
+        </article>
+      )}
+
+      <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+        <div className="decision-boundary-head">
+          <h2 className="ask-section-title">Decision Boundary</h2>
+          {result?.decision_boundary?.decision_confidence && (
+            <span className={`decision-confidence-badge ${decisionConfidence}`}>
+              {result.decision_boundary.decision_confidence}
+            </span>
+          )}
+        </div>
+        <div className="ask-decision-boundary">
+          <div>
+            <h3>What this supports</h3>
+            <ul className="ask-plain-list decision-supported">
+              {supported.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h3>What it does not yet support</h3>
+            <ul className="ask-plain-list decision-not-supported">
+              {notYetSupported.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h3>Evidence needed to decide</h3>
+            <ul className="ask-plain-list decision-evidence-needed">
+              {evidenceNeeded.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {keyEvidence.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Key Evidence</h2>
+          {keyEvidence.map((item, idx) => (
+            <div className="key-evidence-item" key={idx}>
+              <div className="ask-evidence-item-head">
+                <p className="ask-evidence-claim">{item?.claim}</p>
+                <span className={`confidence-badge ${String(item?.confidence || '').toLowerCase()}`}>{item?.confidence}</span>
+              </div>
+              {item?.record_reference && <p className="ask-source-meta">{item.record_reference}</p>}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {whatWeDoNotKnow.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">What We Do Not Know Yet</h2>
+          <ul className="ask-plain-list">
+            {whatWeDoNotKnow.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {result?.next_evidence_step && (
+        <article className="next-evidence-step-box">
+          <strong>Next Evidence Step</strong>
+          <p>{result.next_evidence_step}</p>
+        </article>
+      )}
+
+      <a className="view-library-link" href="/records">View supporting records in the Evidence Library →</a>
+    </section>
+  );
+}
+
 function AskZenexPage() {
   const { records } = useLiveRecords();
   const user = currentUser();
@@ -3796,7 +3884,11 @@ function AskZenexPage() {
           <article className="error-banner">Unable to search the corpus right now. Please try again in a moment.</article>
         )}
 
-        {result && (
+        {result && result.role_output === 'CEO' && (
+          <CEOAskResult result={result} />
+        )}
+
+        {result && result.role_output !== 'CEO' && (
           <section className="ask-results">
             <GapAlertBanner triggers={result.gap_triggers_fired} />
 

@@ -61,7 +61,38 @@ function buildCorpusSummary(records) {
 function getRoleContext(role) {
   switch (role) {
     case 'CEO_EXEC':
-      return 'Lead with strategic implication and portfolio choice. Frame findings in terms of what Zenex can reasonably decide, invest in, or hold. Suppress methodological detail unless it changes the decision.';
+      return `CEO_EXEC does not receive the standard schema below. Return ONLY this compact JSON contract instead:
+
+{
+  "role_output": "CEO",
+  "evidence_status_line": "One short line stating how much evidence underlies this answer and how current it is, e.g. '14 records, 2019-2023, moderate coverage.'",
+  "bottom_line": "2-4 sentence executive answer. Lead with what is established and how strongly. Never open with a hedge.",
+  "decision_boundary": {
+    "decision_confidence": "HIGH | MODERATE | LOW | PREMATURE",
+    "supported": [],
+    "not_yet_supported": [],
+    "evidence_needed_to_decide": []
+  },
+  "key_evidence": [
+    {
+      "claim": "",
+      "confidence": "HIGH | MODERATE | LOW",
+      "record_reference": ""
+    }
+  ],
+  "what_we_do_not_know": [],
+  "next_evidence_step": "One specific, evidence-linked next step to strengthen the evidence base before acting, or null if none is warranted.",
+  "gap_triggers_fired": [],
+  "role_framing": "CEO_EXEC"
+}
+
+RULES FOR CEO OUTPUT:
+- key_evidence must contain at most 3 claims — the 3 that most directly bear on the decision. Do not include every finding.
+- decision_boundary is the centrepiece of the output. decision_confidence is a judgement about whether the evidence base as a whole is sufficient to act on, and is distinct from the per-claim confidence values inside key_evidence — a HIGH-confidence individual finding can still sit inside a PREMATURE decision_confidence if the overall evidence base is too thin or too narrow to justify a decision.
+- next_evidence_step replaces recommended_action for this role. It must name a specific evidence-gathering step, not a programmatic or funding action. Set to null only if the evidence base is already sufficient to decide.
+- Do NOT include sources, evidence_limitations, heterogeneity_or_contradictions, confidence_summary, or evidence_boundary in CEO output. Suppress all methodological detail that does not change the decision.
+- Suppress mechanism and study-design detail entirely. Frame every statement in terms of what Zenex can reasonably decide, invest in, or hold.
+- Apply RULE 1 through RULE 10 above when forming these judgements — they still govern the underlying reasoning even though the output shape differs from the standard schema.`;
     case 'ORGANISATION_LEAD':
       return 'Emphasise methodological strength, limitations, programme continuity, evidence quality and gaps. Surface what the evidence implies for commissioning and portfolio decisions.';
     case 'EVIDENCE_ANALYST':
@@ -74,6 +105,9 @@ function getRoleContext(role) {
 }
 
 // ─── schema ──────────────────────────────────────────────────
+// NOTE: CEO_EXEC role generates a compact CEO schema (see getRoleContext
+// CEO case). The full schema below applies to ORGANISATION_LEAD,
+// EVIDENCE_ANALYST, and COMMUNICATIONS only.
 const SCHEMA = `{
   "evidence_boundary": {
     "scope": "current Zenex evidence estate",
@@ -330,9 +364,12 @@ router.post(
           const system  = buildSystem(req.tenant, req.user, orgTypeContext(req.tenant));
           const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+          const isCEO = req.user?.role === 'CEO_EXEC';
+          const maxTokens = isCEO ? 8000 : 32000;
+
           const message = await client.messages.create({
             model: 'claude-sonnet-5',
-            max_tokens: 32000,
+            max_tokens: maxTokens,
             system,
             messages: [{
               role: 'user',
@@ -408,3 +445,4 @@ router.get(
 );
 
 module.exports = router;
+module.exports.buildSystem = buildSystem;

@@ -6051,3 +6051,126 @@ button.estate-stat-tile {
   }
 
 }
+
+/* Ask Zenex — CEO_EXEC compact view */
+.ceo-ask-result {
+  display: flex;
+  flex-direction: column;
+}
+
+.evidence-status-line {
+  margin: 4px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-muted);
+}
+
+.decision-boundary-section {
+  border-color: rgba(239, 114, 24, 0.35);
+}
+
+.decision-boundary-centrepiece {
+  padding: 28px;
+  background: rgba(239, 114, 24, 0.06);
+  border-width: 1px;
+}
+
+.decision-boundary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.decision-boundary-head .ask-section-title {
+  margin: 0;
+}
+
+.decision-confidence-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.decision-confidence-badge.high {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ECC71;
+}
+
+.decision-confidence-badge.moderate {
+  background: rgba(245, 182, 66, 0.15);
+  color: #F5B642;
+}
+
+.decision-confidence-badge.low {
+  background: rgba(231, 76, 60, 0.15);
+  color: #E74C3C;
+}
+
+.decision-confidence-badge.premature {
+  background: rgba(155, 89, 182, 0.15);
+  color: #9B59B6;
+}
+
+.decision-supported li {
+  color: #2ECC71;
+}
+
+.decision-not-supported li {
+  color: #E74C3C;
+}
+
+.decision-evidence-needed li {
+  color: var(--color-muted);
+}
+
+.key-evidence-item {
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.key-evidence-item:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.next-evidence-step-box {
+  background: rgba(239, 114, 24, 0.1);
+  border-left: 3px solid #EF7218;
+  border-radius: 0 6px 6px 0;
+  padding: 12px 16px;
+  margin-top: 16px;
+  font-size: 13px;
+}
+
+.next-evidence-step-box strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #EF7218;
+}
+
+.next-evidence-step-box p {
+  margin: 0;
+  color: rgba(245, 242, 238, 0.78);
+  line-height: 1.6;
+}
+
+.view-library-link {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--color-muted);
+  text-decoration: none;
+}
+
+.view-library-link:hover {
+  color: var(--color-primary);
+}
