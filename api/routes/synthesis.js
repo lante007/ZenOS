@@ -1,12 +1,27 @@
 'use strict';
 
 const express  = require('express');
+const crypto   = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const db       = require('../services/db');
 const { requireRoles } = require('../middleware/permissions');
 const { orgTypeContext } = require('../services/org-context');
 
 const router = express.Router();
+
+// In-memory async job store for POST /. Deliberately not backed by RDS,
+// same rationale as api/routes/tor.js: jobs are short-lived (a few minutes)
+// and single-process (pm2 runs this app in fork mode, not cluster), so
+// there is no cross-process visibility requirement that would justify a
+// DB round-trip on every poll. Jobs do not survive a pm2 restart.
+const jobs = {};
+const JOB_TTL_MS = 10 * 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - JOB_TTL_MS;
+  for (const [id, job] of Object.entries(jobs)) {
+    if (job.createdAt < cutoff) delete jobs[id];
+  }
+}, 60 * 1000).unref();
 
 // ─── corpus summary ──────────────────────────────────────────
 function buildCorpusSummary(records) {
@@ -254,62 +269,115 @@ function parseSynthesis(parsed, rawText, recordsSearched, method) {
 }
 
 // ─── route ───────────────────────────────────────────────────
+// Async job pattern (matches api/routes/tor.js): the Anthropic call for the
+// full v2.1 schema can take well over CloudFront's origin timeout, so POST
+// returns a jobId in well under a second and the actual generation runs
+// detached from the HTTP response cycle. The frontend polls GET
+// /status/:jobId until status is 'complete' or 'failed'.
 router.post(
   '/',
   requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC', 'COMMUNICATIONS'),
   async (req, res, next) => {
-    const startTime = Date.now();
     try {
       const question = String(req.body.question || '').trim();
       if (!question) return res.status(400).json({ error: 'question is required' });
       if (!process.env.ANTHROPIC_API_KEY)
         return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured' });
 
-      const records   = process.env.DATABASE_URL ? await db.listRecords(req.tenant, {}) : [];
-      const corpus    = buildCorpusSummary(records);
-      const system    = buildSystem(req.tenant, req.user, orgTypeContext(req.tenant));
-      const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const jobId = crypto.randomUUID();
+      const startTime = Date.now();
+      jobs[jobId] = {
+        status: 'pending',
+        result: null,
+        error: null,
+        tenantId: req.tenant?.slug || 'zenex',
+        userId: req.user?.sub || null,
+        createdAt: startTime,
+      };
 
-      const message = await client.messages.create({
-        model: 'claude-sonnet-5',
-        max_tokens: 16000,
-        temperature: 0.2,
-        system,
-        messages: [{
-          role: 'user',
-          content: `${question}\n\nCLASSIFIED CORPUS (${corpus.length} records):\n${JSON.stringify(corpus, null, 2)}`
-        }],
-      });
+      res.status(202).json({ jobId, status: 'pending' });
 
-      const rawText = message.content?.[0]?.text || '';
-      const { parsed, method } = await validateAndRepair(client, rawText, question);
-      const result = parseSynthesis(parsed, rawText, corpus.length, method);
-
-      // Non-blocking usage log
       (async () => {
         try {
-          await db.getPool().query(
-            `INSERT INTO zenex.query_log
-              (tenant_id, user_email, user_role, feature,
-               query_text, response_length, records_cited, response_time_ms)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [
-              req.user?.tenant_id || req.tenant?.slug || 'zenex',
-              req.user?.email    || 'unknown',
-              req.user?.role     || 'unknown',
-              'ASK_ZENEX',
-              question,
-              rawText.length,
-              result.supporting_record_ids?.length || 0,
-              Date.now() - startTime,
-            ]
-          );
-        } catch (logErr) {
-          console.error('query_log insert failed:', logErr.message);
+          jobs[jobId].status = 'processing';
+
+          const records = process.env.DATABASE_URL ? await db.listRecords(req.tenant, {}) : [];
+          const corpus  = buildCorpusSummary(records);
+          const system  = buildSystem(req.tenant, req.user, orgTypeContext(req.tenant));
+          const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+          const message = await client.messages.create({
+            model: 'claude-sonnet-5',
+            max_tokens: 16000,
+            temperature: 0.2,
+            system,
+            messages: [{
+              role: 'user',
+              content: `${question}\n\nCLASSIFIED CORPUS (${corpus.length} records):\n${JSON.stringify(corpus, null, 2)}`
+            }],
+          });
+
+          const rawText = message.content?.[0]?.text || '';
+          const { parsed, method } = await validateAndRepair(client, rawText, question);
+          const result = parseSynthesis(parsed, rawText, corpus.length, method);
+
+          jobs[jobId].status = 'complete';
+          jobs[jobId].result = result;
+
+          // Non-blocking usage log - the job already resolved async of the
+          // HTTP response, so this only needs its own try/catch.
+          try {
+            await db.getPool().query(
+              `INSERT INTO zenex.query_log
+                (tenant_id, user_email, user_role, feature,
+                 query_text, response_length, records_cited, response_time_ms)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [
+                req.user?.tenant_id || req.tenant?.slug || 'zenex',
+                req.user?.email    || 'unknown',
+                req.user?.role     || 'unknown',
+                'ASK_ZENEX',
+                question,
+                rawText.length,
+                result.supporting_record_ids?.length || 0,
+                Date.now() - startTime,
+              ]
+            );
+          } catch (logErr) {
+            console.error('query_log insert failed:', logErr.message);
+          }
+        } catch (err) {
+          console.error(`[synthesis] job ${jobId} failed: ${err.message}`);
+          if (jobs[jobId]) {
+            jobs[jobId].status = 'failed';
+            jobs[jobId].error = err.message;
+          }
         }
       })();
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
-      res.json(result);
+router.get(
+  '/status/:jobId',
+  requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC', 'COMMUNICATIONS'),
+  (req, res, next) => {
+    try {
+      const job = jobs[req.params.jobId];
+      // A jobId alone is not an authorisation boundary: a job belonging to
+      // a different tenant or a different user within the same tenant
+      // returns 404, not 403, so its existence is never confirmed to an
+      // unauthorised caller.
+      if (!job || job.tenantId !== (req.tenant?.slug || 'zenex') || job.userId !== (req.user?.sub || null)) {
+        return res.status(404).json({ status: 'not_found', result: null });
+      }
+
+      const response = { jobId: req.params.jobId, status: job.status };
+      if (job.status === 'complete') response.result = job.result;
+      if (job.status === 'failed') response.error = job.error;
+      return res.json(response);
     } catch (err) {
       next(err);
     }

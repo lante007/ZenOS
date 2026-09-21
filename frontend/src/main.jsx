@@ -3607,17 +3607,34 @@ function AskEvidenceItem({ item }) {
   );
 }
 
+const ASK_ZENEX_LOADING_MESSAGES = [
+  'Searching the evidence estate...',
+  'Analysing evidence...',
+  'Applying the six hard rules...',
+  'Preparing your response...',
+];
+
 function AskZenexPage() {
   const { records } = useLiveRecords();
   const user = currentUser();
   const [question, setQuestion] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState(null);
   const [error, setError] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [supportOpen, setSupportOpen] = useState(true);
   const [estateCount, setEstateCount] = useState(0);
   const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'].includes(user.role);
+  const pollIntervalRef = useRef(null);
+  const pollTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
 
   const supportingRecords = useMemo(() => {
     const ids = result?.supporting_record_ids || [];
@@ -3640,6 +3657,17 @@ function AskZenexPage() {
     };
   }, []);
 
+  function stopPolling() {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+  }
+
   async function submitAsk(prompt = question) {
     const clean = String(prompt || '').trim();
     if (!clean || loading) return;
@@ -3648,17 +3676,54 @@ function AskZenexPage() {
     setError(false);
     setResult(null);
     setSupportOpen(true);
+    stopPolling();
+
+    let msgIndex = 0;
+    setLoadingMessage(ASK_ZENEX_LOADING_MESSAGES[0]);
+
     try {
-      const data = await apiRequest('/api/synthesis', {
+      const { jobId } = await apiRequest('/api/synthesis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: clean }),
       });
-      setResult(data);
+
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          msgIndex = (msgIndex + 1) % ASK_ZENEX_LOADING_MESSAGES.length;
+          setLoadingMessage(ASK_ZENEX_LOADING_MESSAGES[msgIndex]);
+
+          const poll = await apiRequest(`/api/synthesis/status/${jobId}`);
+
+          if (poll.status === 'complete') {
+            stopPolling();
+            setResult(poll.result);
+            setLoading(false);
+            setLoadingMessage(null);
+          } else if (poll.status === 'failed' || poll.status === 'not_found') {
+            stopPolling();
+            setError(true);
+            setLoading(false);
+            setLoadingMessage(null);
+          }
+        } catch {
+          stopPolling();
+          setError(true);
+          setLoading(false);
+          setLoadingMessage(null);
+        }
+      }, 3000);
+
+      pollTimeoutRef.current = setTimeout(() => {
+        stopPolling();
+        setError(true);
+        setLoading(false);
+        setLoadingMessage(null);
+      }, 300000);
     } catch {
       setError(true);
-    } finally {
       setLoading(false);
+      setLoadingMessage(null);
     }
   }
 
@@ -3726,7 +3791,7 @@ function AskZenexPage() {
             <span className="pulse-dot" />
             <span className="pulse-dot" />
             <span className="pulse-dot" />
-            <strong>Searching {searchRecordCount} records...</strong>
+            <strong>{loadingMessage || `Searching ${searchRecordCount} records...`}</strong>
           </section>
         )}
 
