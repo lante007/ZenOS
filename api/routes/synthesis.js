@@ -156,7 +156,7 @@ ${roleContext}
 
 Attribution rule: This organisation is a ${orgType}. ${attributionContext}
 
-SIX HARD RULES — these override everything else:
+TEN HARD RULES — these override everything else:
 
 RULE 1 — SCOPE:
 The scope of every claim must not exceed the scope of the evidence supporting it. Do not generalise from a single programme, intervention arm, province, subgroup, outcome, or time point to a broader intervention class unless multiple sufficiently independent studies justify the generalisation.
@@ -176,6 +176,18 @@ Distinguish explicitly between what the evidence supports Zenex deciding, what i
 RULE 6 — ACTION:
 For decision-oriented questions, provide one specific, evidence-linked next step in recommended_action. Do not use generic advice such as "review the evidence," "conduct more research," or "commission further research." If the evidence genuinely does not support a specific action, set recommended_action to null and state explicitly what uncertainty prevents one.
 
+RULE 7 — MODERATOR LANGUAGE:
+Do not infer that an identified moderator drives, determines or causes outcome differences unless the evidence directly establishes that causal relationship. Where evidence only identifies an association or plausible explanation, use "may contribute to", "is consistent with", or "may help explain" rather than causal verbs.
+
+RULE 8 — EVIDENCE VS INFERENCE:
+In decision-oriented responses, explicitly distinguish evidence-backed conclusions from strategic inference. Use the labels [Evidence-backed] and [Inference] inline where a statement could otherwise be interpreted as an empirical finding. Do not present a strategic premise as an empirical finding unless supported by the evidence estate.
+
+RULE 9 — ACTION BOUNDARY:
+Recommended action must be evidence-linked but must not impose a portfolio restriction, funding condition or sequencing requirement that the evidence does not directly support. Distinguish the evidence-supported next step from any broader strategic inference.
+
+RULE 10 — EXCLUSION REPORTING:
+If relevant records are retrieved but not used in synthesis, report the count in records_excluded and the principal reason in exclusion_reasons. Do not imply that all retrieved evidence contributed equally to the conclusion.
+
 GAP TRIGGER RULES:
 - Fewer than 2 relevant records retrieved → add "INSUFFICIENT_COVERAGE" to gap_triggers_fired.
 - Most recent key evidence more than 3 years old and topic is fast-moving → add "CURRENCY_RISK".
@@ -186,7 +198,9 @@ OUTPUT REQUIREMENTS:
 Return a single, complete, syntactically valid JSON object conforming exactly to the schema below.
 Never truncate, omit, or leave any field structurally incomplete.
 If content must be shortened to fit, shorten prose inside fields — never omit fields or close braces early.
-Do not wrap in markdown code fences. Return raw JSON only.
+Return raw JSON only. No markdown. No code fences. No preamble. No explanation outside the JSON object. Begin your response with the opening brace { and end with the closing brace }. The final characters of your response must be }. Never stop generating before the closing brace.
+
+CRITICAL: The JSON object must be syntactically complete. confidence_summary, sources, gap_triggers_fired and role_framing are mandatory closing fields. Never truncate the JSON before these fields are written. If content must be shortened to preserve output budget, shorten prose inside earlier fields — never omit or truncate later fields. Write concise evidence_basis values (1-2 sentences maximum per claim) to preserve budget for the mandatory closing fields.
 
 SCHEMA:
 ${SCHEMA}`;
@@ -207,7 +221,7 @@ async function validateAndRepair(client, rawText, originalQuestion) {
   try {
     const repair = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8000,
+      max_tokens: 16000,
       temperature: 0,
       system: 'You are a JSON repair tool. Return only valid, complete JSON. No markdown. No explanation.',
       messages: [{
@@ -316,7 +330,7 @@ router.post(
 
           const message = await client.messages.create({
             model: 'claude-sonnet-5',
-            max_tokens: 16000,
+            max_tokens: 32000,
             system,
             messages: [{
               role: 'user',

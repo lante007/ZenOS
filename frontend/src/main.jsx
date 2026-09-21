@@ -3607,20 +3607,13 @@ function AskEvidenceItem({ item }) {
   );
 }
 
-const ASK_ZENEX_LOADING_MESSAGES = [
-  'Searching the evidence estate...',
-  'Analysing evidence...',
-  'Applying the six hard rules...',
-  'Preparing your response...',
-];
-
 function AskZenexPage() {
   const { records } = useLiveRecords();
   const user = currentUser();
   const [question, setQuestion] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [supportOpen, setSupportOpen] = useState(true);
@@ -3628,11 +3621,13 @@ function AskZenexPage() {
   const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'].includes(user.role);
   const pollIntervalRef = useRef(null);
   const pollTimeoutRef = useRef(null);
+  const secondsIntervalRef = useRef(null);
 
   useEffect(() => {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+      if (secondsIntervalRef.current) clearInterval(secondsIntervalRef.current);
     };
   }, []);
 
@@ -3666,6 +3661,11 @@ function AskZenexPage() {
       clearTimeout(pollTimeoutRef.current);
       pollTimeoutRef.current = null;
     }
+    if (secondsIntervalRef.current) {
+      clearInterval(secondsIntervalRef.current);
+      secondsIntervalRef.current = null;
+    }
+    setElapsedSeconds(0);
   }
 
   async function submitAsk(prompt = question) {
@@ -3678,9 +3678,6 @@ function AskZenexPage() {
     setSupportOpen(true);
     stopPolling();
 
-    let msgIndex = 0;
-    setLoadingMessage(ASK_ZENEX_LOADING_MESSAGES[0]);
-
     try {
       const { jobId } = await apiRequest('/api/synthesis', {
         method: 'POST',
@@ -3688,29 +3685,27 @@ function AskZenexPage() {
         body: JSON.stringify({ question: clean }),
       });
 
+      secondsIntervalRef.current = setInterval(() => {
+        setElapsedSeconds(s => s + 1);
+      }, 1000);
+
       pollIntervalRef.current = setInterval(async () => {
         try {
-          msgIndex = (msgIndex + 1) % ASK_ZENEX_LOADING_MESSAGES.length;
-          setLoadingMessage(ASK_ZENEX_LOADING_MESSAGES[msgIndex]);
-
           const poll = await apiRequest(`/api/synthesis/status/${jobId}`);
 
           if (poll.status === 'complete') {
             stopPolling();
             setResult(poll.result);
             setLoading(false);
-            setLoadingMessage(null);
           } else if (poll.status === 'failed' || poll.status === 'not_found') {
             stopPolling();
             setError(true);
             setLoading(false);
-            setLoadingMessage(null);
           }
         } catch {
           stopPolling();
           setError(true);
           setLoading(false);
-          setLoadingMessage(null);
         }
       }, 3000);
 
@@ -3718,12 +3713,11 @@ function AskZenexPage() {
         stopPolling();
         setError(true);
         setLoading(false);
-        setLoadingMessage(null);
       }, 300000);
     } catch {
+      stopPolling();
       setError(true);
       setLoading(false);
-      setLoadingMessage(null);
     }
   }
 
@@ -3787,12 +3781,15 @@ function AskZenexPage() {
         )}
 
         {loading && (
-          <section className="pulse-loading">
-            <span className="pulse-dot" />
-            <span className="pulse-dot" />
-            <span className="pulse-dot" />
-            <strong>{loadingMessage || `Searching ${searchRecordCount} records...`}</strong>
-          </section>
+          <div className="synthesis-loading">
+            <div className="loading-spinner" />
+            <p className="loading-message">
+              Searching the evidence base
+              {elapsedSeconds > 0
+                ? ` · ${elapsedSeconds}s`
+                : '...'}
+            </p>
+          </div>
         )}
 
         {error && (
