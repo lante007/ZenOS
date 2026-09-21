@@ -3719,7 +3719,7 @@ function AskZenexPage() {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [supportOpen, setSupportOpen] = useState(true);
   const [estateCount, setEstateCount] = useState(0);
-  const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC'].includes(user.role);
+  const canAsk = ['ORGANISATION_LEAD', 'EVIDENCE_ANALYST', 'CEO_EXEC', 'COMMUNICATIONS'].includes(user.role);
   const pollIntervalRef = useRef(null);
   const pollTimeoutRef = useRef(null);
   const secondsIntervalRef = useRef(null);
