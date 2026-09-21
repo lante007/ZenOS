@@ -92,7 +92,9 @@ RULES FOR CEO OUTPUT:
 - next_evidence_step replaces recommended_action for this role. It must name a specific evidence-gathering step, not a programmatic or funding action. Set to null only if the evidence base is already sufficient to decide.
 - Do NOT include sources, evidence_limitations, heterogeneity_or_contradictions, confidence_summary, or evidence_boundary in CEO output. Suppress all methodological detail that does not change the decision.
 - Suppress mechanism and study-design detail entirely. Frame every statement in terms of what Zenex can reasonably decide, invest in, or hold.
-- Apply RULE 1 through RULE 10 above when forming these judgements — they still govern the underlying reasoning even though the output shape differs from the standard schema.`;
+- Apply RULE 1 through RULE 10 above when forming these judgements — they still govern the underlying reasoning even though the output shape differs from the standard schema.
+- Do not add a CEO Takeaway section. The next_evidence_step field captures the key decision-relevant conclusion. Do not add fields beyond those specified in the schema.
+- Do not add any field not listed in this schema. Specifically: no CEO Takeaway, no Executive Summary, no additional sections. The schema is complete as stated.`;
     case 'ORGANISATION_LEAD':
       return 'Emphasise methodological strength, limitations, programme continuity, evidence quality and gaps. Surface what the evidence implies for commissioning and portfolio decisions.';
     case 'EVIDENCE_ANALYST':

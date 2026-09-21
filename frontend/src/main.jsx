@@ -2192,11 +2192,14 @@ function CapitalBlock({ lines }) {
 }
 
 function sanitiseDashes(text) {
+  if (!text) return text;
   return text
-    .replace(/—/g, ',')
-    .replace(/–/g, ',')
-    .replace(/---/g, ',')
-    .replace(/ -- /g, ', ');
+    .replace(/\u2014/g, ', ')
+    .replace(/\u2013/g, ', ')
+    .replace(/ --- /g, ', ')
+    .replace(/ -- /g, ', ')
+    .replace(/---/g, ', ')
+    .replace(/--/g, ', ');
 }
 
 function renderSectionBody(body, sIndex, agendaAdded, onAddToAgenda) {
@@ -3581,7 +3584,7 @@ function AskEvidenceItem({ item }) {
   return (
     <article className="ask-evidence-item">
       <div className="ask-evidence-item-head">
-        <p className="ask-evidence-claim">{item?.claim}</p>
+        <p className="ask-evidence-claim">{sanitiseDashes(item?.claim)}</p>
         <span className={`confidence-badge ${String(item?.confidence || '').toLowerCase()}`}>{item?.confidence}</span>
       </div>
       {(item?.evidence_role || item?.causal_design) && (
@@ -3590,7 +3593,7 @@ function AskEvidenceItem({ item }) {
           {item?.causal_design && <span className="ask-causal-design">{item.causal_design}</span>}
         </div>
       )}
-      {item?.evidence_basis && <p className="ask-evidence-basis">{item.evidence_basis}</p>}
+      {item?.evidence_basis && <p className="ask-evidence-basis">{sanitiseDashes(item.evidence_basis)}</p>}
       {item?.population_context && <p className="ask-population-context">{item.population_context}</p>}
       {metaLine && <p className="ask-evidence-meta-line">{metaLine}</p>}
       {qualifications.length > 0 && (
@@ -3609,22 +3612,22 @@ function AskEvidenceItem({ item }) {
 
 function CEOAskResult({ result }) {
   const decisionConfidence = String(result?.decision_boundary?.decision_confidence || '').toLowerCase();
-  const supported = Array.isArray(result?.decision_boundary?.supported) ? result.decision_boundary.supported.filter(Boolean) : [];
-  const notYetSupported = Array.isArray(result?.decision_boundary?.not_yet_supported) ? result.decision_boundary.not_yet_supported.filter(Boolean) : [];
-  const evidenceNeeded = Array.isArray(result?.decision_boundary?.evidence_needed_to_decide) ? result.decision_boundary.evidence_needed_to_decide.filter(Boolean) : [];
+  const supported = Array.isArray(result?.decision_boundary?.supported) ? result.decision_boundary.supported.filter(Boolean).map(sanitiseDashes) : [];
+  const notYetSupported = Array.isArray(result?.decision_boundary?.not_yet_supported) ? result.decision_boundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
+  const evidenceNeeded = Array.isArray(result?.decision_boundary?.evidence_needed_to_decide) ? result.decision_boundary.evidence_needed_to_decide.filter(Boolean).map(sanitiseDashes) : [];
   const keyEvidence = Array.isArray(result?.key_evidence) ? result.key_evidence.slice(0, 3) : [];
-  const whatWeDoNotKnow = Array.isArray(result?.what_we_do_not_know) ? result.what_we_do_not_know.filter(Boolean) : [];
+  const whatWeDoNotKnow = Array.isArray(result?.what_we_do_not_know) ? result.what_we_do_not_know.filter(Boolean).map(sanitiseDashes) : [];
 
   return (
     <section className="ask-results ceo-ask-result">
       {result?.evidence_status_line && (
-        <p className="evidence-status-line">{result.evidence_status_line}</p>
+        <p className="evidence-status-line">{sanitiseDashes(result.evidence_status_line)}</p>
       )}
 
       {result?.bottom_line && (
         <article className="ask-answer-card ask-section">
           <h2 className="ask-section-title">Bottom Line</h2>
-          <p className="ask-bottom-line-text">{result.bottom_line}</p>
+          <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
         </article>
       )}
 
@@ -3665,7 +3668,7 @@ function CEOAskResult({ result }) {
           {keyEvidence.map((item, idx) => (
             <div className="key-evidence-item" key={idx}>
               <div className="ask-evidence-item-head">
-                <p className="ask-evidence-claim">{item?.claim}</p>
+                <p className="ask-evidence-claim">{sanitiseDashes(item?.claim)}</p>
                 <span className={`confidence-badge ${String(item?.confidence || '').toLowerCase()}`}>{item?.confidence}</span>
               </div>
               {item?.record_reference && <p className="ask-source-meta">{item.record_reference}</p>}
@@ -3686,7 +3689,7 @@ function CEOAskResult({ result }) {
       {result?.next_evidence_step && (
         <article className="next-evidence-step-box">
           <strong>Next Evidence Step</strong>
-          <p>{result.next_evidence_step}</p>
+          <p>{sanitiseDashes(result.next_evidence_step)}</p>
         </article>
       )}
 
@@ -3923,7 +3926,7 @@ function AskZenexPage() {
               <>
                 <article className="ask-answer-card ask-section">
                   <h2 className="ask-section-title">Bottom Line</h2>
-                  <p className="ask-bottom-line-text">{result.bottom_line}</p>
+                  <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
                 </article>
 
                 {Array.isArray(result.what_the_evidence_shows) && result.what_the_evidence_shows.length > 0 && (
@@ -3949,7 +3952,7 @@ function AskZenexPage() {
                       {result.evidence_limitations.map((lim, idx) => (
                         <li key={idx}>
                           <div className="ask-limitation-row">
-                            <span>{lim.issue}</span>
+                            <span>{sanitiseDashes(lim.issue)}</span>
                             <span className={`severity-badge ${String(lim.severity || '').toLowerCase()}`}>{lim.severity}</span>
                           </div>
                           {lim.decision_relevance && <p className="ask-decision-relevance">{lim.decision_relevance}</p>}
@@ -3963,7 +3966,7 @@ function AskZenexPage() {
                   <section className="ask-answer-card ask-section">
                     <h2 className="ask-section-title">What We Do Not Know</h2>
                     <ul className="ask-plain-list">
-                      {result.what_we_do_not_know.map((line, idx) => <li key={idx}>{line}</li>)}
+                      {result.what_we_do_not_know.map((line, idx) => <li key={idx}>{sanitiseDashes(line)}</li>)}
                     </ul>
                   </section>
                 )}
@@ -3975,13 +3978,13 @@ function AskZenexPage() {
                       <div>
                         <h3>What is supported</h3>
                         <ul className="ask-plain-list">
-                          {(result.decision_boundary.supported || []).map((line, idx) => <li key={idx}>{line}</li>)}
+                          {(result.decision_boundary.supported || []).map((line, idx) => <li key={idx}>{sanitiseDashes(line)}</li>)}
                         </ul>
                       </div>
                       <div>
                         <h3>What is not yet supported</h3>
                         <ul className="ask-plain-list">
-                          {(result.decision_boundary.not_yet_supported || []).map((line, idx) => <li key={idx}>{line}</li>)}
+                          {(result.decision_boundary.not_yet_supported || []).map((line, idx) => <li key={idx}>{sanitiseDashes(line)}</li>)}
                         </ul>
                       </div>
                     </div>
@@ -3991,14 +3994,14 @@ function AskZenexPage() {
                 {result.why_this_matters_for_zenex && (
                   <section className="ask-answer-card ask-section">
                     <h2 className="ask-section-title">Why This Matters for Zenex</h2>
-                    <p>{result.why_this_matters_for_zenex}</p>
+                    <p>{sanitiseDashes(result.why_this_matters_for_zenex)}</p>
                   </section>
                 )}
 
                 {result.recommended_action && (
                   <article className="ask-recommendation-box">
                     <strong>Recommended Action</strong>
-                    <p>{sanitiseAnswer(result.recommended_action)}</p>
+                    <p>{sanitiseDashes(sanitiseAnswer(result.recommended_action))}</p>
                   </article>
                 )}
 
