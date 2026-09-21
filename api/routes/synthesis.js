@@ -309,7 +309,6 @@ router.post(
           const message = await client.messages.create({
             model: 'claude-sonnet-5',
             max_tokens: 16000,
-            temperature: 0.2,
             system,
             messages: [{
               role: 'user',
