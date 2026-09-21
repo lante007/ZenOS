@@ -67,6 +67,7 @@ function getRoleContext(role) {
   "role_output": "CEO",
   "evidence_status_line": "One short line stating how much evidence underlies this answer and how current it is, e.g. '14 records, 2019-2023, moderate coverage.'",
   "bottom_line": "2-4 sentence executive answer. Lead with what is established and how strongly. Never open with a hedge.",
+  "why_this_matters_for_zenex": "One sentence only. Link this finding to Zenex's current portfolio and Strategy 2030 priorities. Where a named programme is in the Zenex corpus and has a known investment amount (total_cost_rand), reference it: for example Zenex has invested R11.5m in this programme area without endline evidence. Never fabricate figures not in the corpus.",
   "decision_boundary": {
     "decision_confidence": "HIGH | MODERATE | LOW | PREMATURE",
     "supported": [],
@@ -92,6 +93,7 @@ RULES FOR CEO OUTPUT:
 - next_evidence_step replaces recommended_action for this role. It must name a specific evidence-gathering step, not a programmatic or funding action. Set to null only if the evidence base is already sufficient to decide.
 - Do NOT include sources, evidence_limitations, heterogeneity_or_contradictions, confidence_summary, or evidence_boundary in CEO output. Suppress all methodological detail that does not change the decision.
 - Suppress mechanism and study-design detail entirely. Frame every statement in terms of what Zenex can reasonably decide, invest in, or hold.
+- why_this_matters_for_zenex: One sentence. Reference the Zenex investment stake where known. Link to Strategy 2030. Keep it decision-relevant not descriptive.
 - Apply RULE 1 through RULE 10 above when forming these judgements — they still govern the underlying reasoning even though the output shape differs from the standard schema.
 - Do not add a CEO Takeaway section. The next_evidence_step field captures the key decision-relevant conclusion. Do not add fields beyond those specified in the schema.
 - Do not add any field not listed in this schema. Specifically: no CEO Takeaway, no Executive Summary, no additional sections. The schema is complete as stated.`;

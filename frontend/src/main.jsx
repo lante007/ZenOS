@@ -2199,7 +2199,11 @@ function sanitiseDashes(text) {
     .replace(/ --- /g, ', ')
     .replace(/ -- /g, ', ')
     .replace(/---/g, ', ')
-    .replace(/--/g, ', ');
+    .replace(/--/g, ', ')
+    .replace(/ ,/g, ',')
+    .replace(/,\s{2,}/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function renderSectionBody(body, sIndex, agendaAdded, onAddToAgenda) {
@@ -3631,6 +3635,12 @@ function CEOAskResult({ result }) {
         </article>
       )}
 
+      {result?.why_this_matters_for_zenex && (
+        <p className="ceo-zenex-context">
+          {sanitiseDashes(result.why_this_matters_for_zenex)}
+        </p>
+      )}
+
       <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
         <div className="decision-boundary-head">
           <h2 className="ask-section-title">Decision Boundary</h2>
@@ -3893,7 +3903,10 @@ function AskZenexPage() {
 
         {result && result.role_output !== 'CEO' && (
           <section className="ask-results">
-            <GapAlertBanner triggers={result.gap_triggers_fired} />
+            {result.role_output !== 'CEO' &&
+              result.gap_triggers_fired?.length > 0 && (
+                <GapAlertBanner triggers={result.gap_triggers_fired} />
+              )}
 
             <div className="ask-result-meta">
               <div className="ask-result-meta-badges">

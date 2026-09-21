@@ -6067,6 +6067,15 @@ button.estate-stat-tile {
   color: var(--color-muted);
 }
 
+.ceo-zenex-context {
+  font-style: italic;
+  color: rgba(239, 114, 24, 0.85);
+  font-size: 14px;
+  margin: 0 0 20px 0;
+  padding: 0;
+  line-height: 1.5;
+}
+
 .decision-boundary-section {
   border-color: rgba(239, 114, 24, 0.35);
 }
