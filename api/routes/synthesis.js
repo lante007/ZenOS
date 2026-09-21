@@ -23,6 +23,14 @@ setInterval(() => {
   }
 }, 60 * 1000).unref();
 
+// claude-sonnet-5 uses extended thinking by default, which prepends a
+// `thinking` content block before the `text` block. content[0] is not
+// reliably the answer, so find the first text block explicitly.
+function extractText(content) {
+  const block = (content || []).find(b => b.type === 'text');
+  return block?.text || '';
+}
+
 // ─── corpus summary ──────────────────────────────────────────
 function buildCorpusSummary(records) {
   return records.map(r => ({
@@ -207,7 +215,7 @@ async function validateAndRepair(client, rawText, originalQuestion) {
         content: `The following text was supposed to be a JSON object but is malformed or incomplete. Repair it and return valid, complete JSON only:\n\n${rawText.slice(0, 16000)}`
       }]
     });
-    const repairText = repair.content?.[0]?.text || '';
+    const repairText = extractText(repair.content);
     const repairMatch = repairText.match(/\{[\s\S]*\}/);
     if (repairMatch) {
       const parsed = JSON.parse(repairMatch[0]);
@@ -316,7 +324,7 @@ router.post(
             }],
           });
 
-          const rawText = message.content?.[0]?.text || '';
+          const rawText = extractText(message.content);
           const { parsed, method } = await validateAndRepair(client, rawText, question);
           const result = parseSynthesis(parsed, rawText, corpus.length, method);
 
