@@ -3,6 +3,7 @@
 // One-off validation script for Sector Peer persona deployment.
 // Run on the server via SSM: node tests/_sector_peer_validation.js <recordId>
 
+require('dotenv').config();
 const db = require('../api/services/db');
 const { getTenantBySlug } = require('../api/services/tenants');
 const { generateKnowledgeProduct } = require('../src/claude-classifier');
