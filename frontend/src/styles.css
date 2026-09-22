@@ -6288,3 +6288,93 @@ button.estate-stat-tile {
 .capital-view-lines strong {
   color: rgba(245, 242, 238, 0.95);
 }
+
+/* Knowledge Products Phase A refinement — decision chain, evidence
+   quality, decision utility, grouped leadership questions */
+.decision-chain-title {
+  color: #EF7218;
+}
+
+.decision-chain-entry {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.decision-chain-entry:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.decision-chain-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.decision-chain-step p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(245, 242, 238, 0.85);
+}
+
+.decision-chain-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-muted);
+}
+
+.decision-chain-connector {
+  align-self: flex-start;
+  margin: 2px 0 2px 8px;
+  color: rgba(239, 114, 24, 0.6);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.decision-question-highlight {
+  font-style: italic;
+  background: rgba(239, 114, 24, 0.08);
+  border-left: 3px solid #EF7218;
+  border-radius: 0 6px 6px 0;
+  padding: 10px 14px;
+  color: rgba(245, 242, 238, 0.92) !important;
+}
+
+.evidence-quality-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+
+.decision-utility-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 0;
+  font-size: 13px;
+  color: rgba(245, 242, 238, 0.85);
+}
+
+.leadership-question-group {
+  margin-bottom: 16px;
+}
+
+.leadership-question-group:last-child {
+  margin-bottom: 0;
+}
+
+.leadership-question-group h3 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-muted);
+  margin: 0 0 6px;
+}

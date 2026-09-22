@@ -3714,14 +3714,18 @@ function CEOAskResult({ result }) {
 function CEOKnowledgeBrief({ result }) {
   const executiveSignal = result?.executive_signal || {};
   const evidenceConfidence = String(executiveSignal.evidence_confidence || '').toLowerCase();
-  const keyFindings = Array.isArray(result?.key_findings) ? result.key_findings.slice(0, 4) : [];
+  const decisionChain = Array.isArray(result?.decision_chain) ? result.decision_chain : [];
   const strategicRisks = Array.isArray(result?.strategic_risks) ? result.strategic_risks.filter(Boolean).map(sanitiseDashes) : [];
-  const leadershipQuestions = Array.isArray(result?.leadership_questions) ? result.leadership_questions.filter(Boolean).map(sanitiseDashes) : [];
+  const leadershipQuestionGroups = result?.leadership_questions || {};
+  const decisionCriticalQuestions = Array.isArray(leadershipQuestionGroups.decision_critical) ? leadershipQuestionGroups.decision_critical.filter(Boolean).map(sanitiseDashes) : [];
+  const evidenceBuildingQuestions = Array.isArray(leadershipQuestionGroups.evidence_building) ? leadershipQuestionGroups.evidence_building.filter(Boolean).map(sanitiseDashes) : [];
+  const transferabilityQuestions = Array.isArray(leadershipQuestionGroups.transferability) ? leadershipQuestionGroups.transferability.filter(Boolean).map(sanitiseDashes) : [];
   const capitalView = result?.capital_view || {};
   const decisionBoundary = result?.decision_boundary || {};
   const supported = Array.isArray(decisionBoundary.supported) ? decisionBoundary.supported.filter(Boolean).map(sanitiseDashes) : [];
   const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
   const evidenceNeeded = Array.isArray(decisionBoundary.evidence_needed_to_decide) ? decisionBoundary.evidence_needed_to_decide.filter(Boolean).map(sanitiseDashes) : [];
+  const decisionUtility = result?.decision_utility || {};
   const signalLine = [executiveSignal.evidence_confidence, executiveSignal.evidence_stage, executiveSignal.evidence_currency]
     .filter(Boolean)
     .join(' · ');
@@ -3740,6 +3744,71 @@ function CEOKnowledgeBrief({ result }) {
           <h2 className="ask-section-title">Bottom Line</h2>
           <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
         </article>
+      )}
+
+      {decisionChain.length > 0 && (
+        <section className="ask-answer-card ask-section decision-chain-section">
+          <h2 className="ask-section-title decision-chain-title">Decision Chain</h2>
+          {decisionChain.map((entry, idx) => (
+            <div className="decision-chain-entry" key={idx}>
+              <div className="decision-chain-step decision-chain-evidence">
+                <span className="decision-chain-label">Evidence</span>
+                <p>{sanitiseDashes(entry?.evidence)}</p>
+              </div>
+              <div className="decision-chain-connector">↓</div>
+              <div className="decision-chain-step decision-chain-confidence">
+                <span className="decision-chain-label">Confidence</span>
+                {entry?.confidence && (
+                  <span className={`confidence-badge ${String(entry.confidence).toLowerCase()}`}>{entry.confidence}</span>
+                )}
+              </div>
+              <div className="decision-chain-connector">↓</div>
+              <div className="decision-chain-step decision-chain-boundary">
+                <span className="decision-chain-label">Boundary</span>
+                <p>{sanitiseDashes(entry?.boundary)}</p>
+              </div>
+              <div className="decision-chain-connector">↓</div>
+              <div className="decision-chain-step decision-chain-implication">
+                <span className="decision-chain-label">Implication</span>
+                <p>{sanitiseDashes(entry?.implication)}</p>
+              </div>
+              <div className="decision-chain-connector">↓</div>
+              <div className="decision-chain-step decision-chain-question">
+                <span className="decision-chain-label">Decision question</span>
+                <p className="decision-question-highlight">{sanitiseDashes(entry?.decision_question)}</p>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {result?.evidence_quality_note && (
+        <section className="ask-answer-card ask-section evidence-quality-section">
+          <h2 className="ask-section-title">Evidence Quality</h2>
+          <p className="evidence-quality-note">{sanitiseDashes(result.evidence_quality_note)}</p>
+        </section>
+      )}
+
+      {(decisionUtility.for_implementation_design || decisionUtility.for_capital_allocation) && (
+        <section className="ask-answer-card ask-section decision-utility-section">
+          <h2 className="ask-section-title">Decision Utility</h2>
+          {decisionUtility.for_implementation_design && (
+            <p className="decision-utility-row">
+              <span>For implementation design:</span>
+              <span className={`confidence-badge ${String(decisionUtility.for_implementation_design).toLowerCase()}`}>
+                {decisionUtility.for_implementation_design}
+              </span>
+            </p>
+          )}
+          {decisionUtility.for_capital_allocation && (
+            <p className="decision-utility-row">
+              <span>For capital allocation:</span>
+              <span className={`confidence-badge ${String(decisionUtility.for_capital_allocation).toLowerCase()}`}>
+                {decisionUtility.for_capital_allocation}
+              </span>
+            </p>
+          )}
+        </section>
       )}
 
       <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
@@ -3773,24 +3842,6 @@ function CEOKnowledgeBrief({ result }) {
         </div>
       </section>
 
-      {keyFindings.length > 0 && (
-        <section className="ask-answer-card ask-section">
-          <h2 className="ask-section-title">Key Findings</h2>
-          {keyFindings.map((item, idx) => (
-            <div className="key-evidence-item" key={idx}>
-              <div className="ask-evidence-item-head">
-                <p className="ask-evidence-claim">{sanitiseDashes(item?.finding)}</p>
-                {item?.confidence && (
-                  <span className={`confidence-badge ${String(item.confidence).toLowerCase()}`}>{item.confidence}</span>
-                )}
-              </div>
-              {item?.capital_implication && <p className="ask-source-meta">{sanitiseDashes(item.capital_implication)}</p>}
-              {item?.decision_relevance && <p className="ask-source-meta">{sanitiseDashes(item.decision_relevance)}</p>}
-            </div>
-          ))}
-        </section>
-      )}
-
       {strategicRisks.length > 0 && (
         <section className="ask-answer-card ask-section">
           <h2 className="ask-section-title">Strategic Risks</h2>
@@ -3811,12 +3862,33 @@ function CEOKnowledgeBrief({ result }) {
         </section>
       )}
 
-      {leadershipQuestions.length > 0 && (
+      {(decisionCriticalQuestions.length > 0 || evidenceBuildingQuestions.length > 0 || transferabilityQuestions.length > 0) && (
         <section className="ask-answer-card ask-section">
           <h2 className="ask-section-title">Leadership Questions</h2>
-          <ul className="ask-plain-list">
-            {leadershipQuestions.map((line, idx) => <li key={idx}>{line}</li>)}
-          </ul>
+          {decisionCriticalQuestions.length > 0 && (
+            <div className="leadership-question-group">
+              <h3>Decision-critical</h3>
+              <ul className="ask-plain-list">
+                {decisionCriticalQuestions.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          )}
+          {evidenceBuildingQuestions.length > 0 && (
+            <div className="leadership-question-group">
+              <h3>Evidence-building</h3>
+              <ul className="ask-plain-list">
+                {evidenceBuildingQuestions.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          )}
+          {transferabilityQuestions.length > 0 && (
+            <div className="leadership-question-group">
+              <h3>Transferability</h3>
+              <ul className="ask-plain-list">
+                {transferabilityQuestions.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          )}
         </section>
       )}
     </section>

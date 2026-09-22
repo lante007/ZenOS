@@ -543,6 +543,14 @@ Minimise methodological detail unless it materially affects the decision.
 
 Do not frame any programme as ready for scale unless the decision_boundary in the canonical synthesis explicitly supports that interpretation.
 
+DECISION_CHAIN INSTRUCTIONS: Produce one decision_chain entry per materially distinct finding in the canonical synthesis (typically 2 to 4). Do not merge unrelated findings into one chain entry. Each entry must follow the sequence evidence, then confidence, then boundary, then implication, then decision_question, in that order, and each field must be one to two sentences, not a paragraph. The decision_question field must be an actual question ending in a question mark, not a restated recommendation.
+
+LEADERSHIP_QUESTIONS INSTRUCTIONS: Classify each question you generate into exactly one of three groups. decision_critical: questions that must be answered before any capital or scale-up decision. evidence_building: questions about sustainability, mechanism, or further validation that matter but do not block an immediate decision. transferability: questions about whether findings apply beyond the sampled context, such as geography, quintile, or population. Base the classification on whether the question must be resolved before a capital decision, whether it concerns durability or mechanism, or whether it concerns generalising beyond the tested context.
+
+CAPITAL_VIEW INSTRUCTIONS: financial_capital must state what cost or value comparison becomes possible or impossible as a direct consequence of what financial data does or does not exist in this record. Do not merely state that data is missing; state the decision-relevant consequence of that gap. evidence_capital must summarise the evidence base's rigour, data quality, transparency, replicability, and causal identification in one to two sentences, in plain language, not by repeating the EQS score. decision_capital must end with an explicit statement of what this record can and cannot independently justify deciding. This is the anti-promotional rule: never imply that this record alone should trigger a scale-up, continuation, or capital allocation decision unless the decision_boundary explicitly supports that interpretation.
+
+EVIDENCE_QUALITY_NOTE AND DECISION_UTILITY INSTRUCTIONS: evidence_quality_note must state the EQS tier and composite score, and explicitly note that this is a single composite covering rigour, data quality, transparency, replicability, and context relevance, and does NOT mean uniform confidence across every individual finding. decision_utility must be assessed separately for for_implementation_design and for_capital_allocation since they typically differ; a record can be highly useful for informing delivery design while being low utility for a funding decision. Do not add a single merged decision utility field. Do not add a field such as confidence_by_finding since per-finding confidence already lives inside each decision_chain entry; do not duplicate it.
+
 Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
 
 {
@@ -557,14 +565,20 @@ Return a single complete valid JSON object with this exact shape. Begin with { a
     "evidence_health_signal": ""
   },
   "bottom_line": "3-5 sentences",
-  "key_findings": [
+  "decision_chain": [
     {
-      "finding": "",
-      "confidence": "",
-      "capital_implication": "",
-      "decision_relevance": ""
+      "evidence": "One finding, stated plainly.",
+      "confidence": "HIGH | MODERATE | LOW",
+      "boundary": "What this finding does NOT yet establish or does not extend to.",
+      "implication": "What this boundary suggests about the underlying mechanism or programme theory, stated as a possibility not a fact.",
+      "decision_question": "The specific question this finding raises for leadership, phrased as a question."
     }
   ],
+  "evidence_quality_note": "",
+  "decision_utility": {
+    "for_implementation_design": "HIGH | MODERATE | LOW",
+    "for_capital_allocation": "HIGH | MODERATE | LOW"
+  },
   "decision_boundary": {
     "supported": [],
     "not_yet_supported": [],
@@ -576,7 +590,11 @@ Return a single complete valid JSON object with this exact shape. Begin with { a
     "evidence_capital": "",
     "decision_capital": ""
   },
-  "leadership_questions": [],
+  "leadership_questions": {
+    "decision_critical": [],
+    "evidence_building": [],
+    "transferability": []
+  },
   "sources_summary": ""
 }
 
