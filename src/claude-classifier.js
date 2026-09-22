@@ -591,7 +591,24 @@ function isFieldMissing(value) {
   return false;
 }
 
-async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLabel, rawText, client) {
+// Checks whether `value` matches the shape of `expectedShape` (an example
+// object whose keys are the required keys for that field, e.g.
+// { evidence_status: 'string', ... }). Only used for fields that have an
+// entry in fieldShapes; fields without an entry are presence-only (checked
+// by isFieldMissing alone). Does not check value types recursively, only
+// that `value` is a non-array object containing all of expectedShape's keys
+// -- sufficient to catch the observed failure mode (a required object field
+// coming back as a plain string).
+function shapeMismatch(value, expectedShape) {
+  if (!expectedShape) return false;
+  if (typeof value !== 'object' || Array.isArray(value) || value === null) return true;
+  const expectedKeys = Object.keys(expectedShape);
+  const actualKeys = Object.keys(value);
+  const missingKeys = expectedKeys.filter(k => !actualKeys.includes(k));
+  return missingKeys.length > 0;
+}
+
+async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLabel, rawText, client, fieldShapes = {}) {
   const missing = requiredFields.filter(f => isFieldMissing(parsed?.[f]));
 
   if (missing.length === 0) {
@@ -601,11 +618,20 @@ async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLa
   console.warn(`Knowledge Product schema incomplete for ${audienceLabel}: missing [${missing.join(', ')}]. Attempting repair.`);
 
   try {
+    const shapeHints = missing
+      .filter(f => fieldShapes[f])
+      .map(f => `${f} must be an object with this exact shape: ${JSON.stringify(fieldShapes[f])}`)
+      .join('\n');
+
+    const system = `You are a JSON repair tool. The following JSON object is missing required fields: ${missing.join(', ')}.
+${shapeHints ? '\n\nShape requirements for object/array fields:\n' + shapeHints : ''}
+Return the complete corrected JSON object with all missing fields populated based on the content already present in the object, respecting the exact shape given above for any field listed. No markdown, no explanation, raw JSON only.`;
+
     const repair = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 8000,
       temperature: 0,
-      system: `You are a JSON repair tool. The following JSON object is missing required fields: ${missing.join(', ')}. Return the complete corrected JSON object with all missing fields populated based on the content already present in the object. No markdown, no explanation, raw JSON only.`,
+      system,
       messages: [{
         role: 'user',
         content: JSON.stringify(parsed),
@@ -615,7 +641,9 @@ async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLa
     const m = repairText.match(/\{[\s\S]*\}/);
     const repaired = JSON.parse(m[0]);
 
-    const stillMissing = requiredFields.filter(f => isFieldMissing(repaired?.[f]));
+    const stillMissing = requiredFields.filter(f =>
+      isFieldMissing(repaired?.[f]) || shapeMismatch(repaired?.[f], fieldShapes[f])
+    );
 
     if (stillMissing.length === 0) {
       return { valid: true, data: repaired, repaired: true };
@@ -637,6 +665,60 @@ const TRUSTEE_REQUIRED_FIELDS = [
   'material_risks_for_board_attention', 'decision_boundary', 'continuity_and_learning', 'board_consideration',
   'governance_signal',
 ];
+
+// Only fields whose value must be an object/array with specific keys need
+// an entry here; simple string fields are covered by isFieldMissing alone.
+// Used by validateKnowledgeProductSchema's repair path so the repair model
+// knows the exact nested shape to restore, not just that the field is
+// missing (e.g. governance_signal must come back as a 5-key object, not a
+// plain string).
+const CEO_FIELD_SHAPES = {
+  decision_utility: {
+    for_implementation_design: 'string',
+    for_capital_allocation: 'string',
+  },
+  capital_view: {
+    financial_capital: 'string',
+    evidence_capital: 'string',
+    decision_capital: 'string',
+  },
+  decision_boundary: {
+    supported: [],
+    not_yet_supported: [],
+    evidence_needed_to_decide: [],
+  },
+};
+
+const TRUSTEE_FIELD_SHAPES = {
+  evidence_estate_health: {
+    coverage: 'string',
+    quality: 'string',
+    currency: 'string',
+    utilisation: 'string',
+  },
+  capital_accountability: {
+    financial_capital: 'string',
+    evidence_capital: 'string',
+    decision_capital: 'string',
+    accountability_gap: 'string',
+  },
+  decision_boundary: {
+    supported: [],
+    not_yet_supported: [],
+  },
+  continuity_and_learning: {
+    evidence_age: 'string',
+    learning_compounding: 'string',
+    unresolved_legacy_questions: [],
+  },
+  governance_signal: {
+    evidence_status: 'string',
+    financial_accountability: 'string',
+    causal_confidence: 'string',
+    continuity: 'string',
+    primary_board_question: 'string',
+  },
+};
 
 /**
  * CEO persona transformer. Takes the cached canonical synthesis (never the
@@ -751,7 +833,7 @@ ${JSON.stringify(synthesis)}`;
     parsed = JSON.parse(repairMatch[0]);
   }
 
-  const validated = await validateKnowledgeProductSchema(parsed, CEO_REQUIRED_FIELDS, 'CEO', text, client);
+  const validated = await validateKnowledgeProductSchema(parsed, CEO_REQUIRED_FIELDS, 'CEO', text, client, CEO_FIELD_SHAPES);
   if (!validated.valid) {
     // Log loudly, this should never reach a user silently broken.
     console.error(`CEO brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
@@ -868,7 +950,7 @@ ${JSON.stringify(synthesis)}`;
     parsed = JSON.parse(repairMatch[0]);
   }
 
-  const validated = await validateKnowledgeProductSchema(parsed, TRUSTEE_REQUIRED_FIELDS, 'Trustee', text, client);
+  const validated = await validateKnowledgeProductSchema(parsed, TRUSTEE_REQUIRED_FIELDS, 'Trustee', text, client, TRUSTEE_FIELD_SHAPES);
   if (!validated.valid) {
     // Log loudly, this should never reach a user silently broken.
     console.error(`Trustee brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
