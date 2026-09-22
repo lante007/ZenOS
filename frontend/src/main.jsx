@@ -3751,31 +3751,25 @@ function CEOKnowledgeBrief({ result }) {
           <h2 className="ask-section-title decision-chain-title">Decision Chain</h2>
           {decisionChain.map((entry, idx) => (
             <div className="decision-chain-entry" key={idx}>
-              <div className="decision-chain-step decision-chain-evidence">
-                <span className="decision-chain-label">Evidence</span>
-                <p>{sanitiseDashes(entry?.evidence)}</p>
+              <div className="chain-evidence-row">
+                <span className="chain-evidence-text">
+                  {sanitiseDashes(entry.evidence)}
+                </span>
+                <span className={`confidence-pill confidence-${entry.confidence.toLowerCase()}`}>
+                  {entry.confidence}
+                </span>
               </div>
-              <div className="decision-chain-connector">↓</div>
-              <div className="decision-chain-step decision-chain-confidence">
-                <span className="decision-chain-label">Confidence</span>
-                {entry?.confidence && (
-                  <span className={`confidence-badge ${String(entry.confidence).toLowerCase()}`}>{entry.confidence}</span>
-                )}
-              </div>
-              <div className="decision-chain-connector">↓</div>
-              <div className="decision-chain-step decision-chain-boundary">
-                <span className="decision-chain-label">Boundary</span>
-                <p>{sanitiseDashes(entry?.boundary)}</p>
-              </div>
-              <div className="decision-chain-connector">↓</div>
-              <div className="decision-chain-step decision-chain-implication">
-                <span className="decision-chain-label">Implication</span>
-                <p>{sanitiseDashes(entry?.implication)}</p>
-              </div>
-              <div className="decision-chain-connector">↓</div>
-              <div className="decision-chain-step decision-chain-question">
-                <span className="decision-chain-label">Decision question</span>
-                <p className="decision-question-highlight">{sanitiseDashes(entry?.decision_question)}</p>
+              <p className="chain-context-text">
+                {sanitiseDashes(entry.boundary)}
+              </p>
+              <p className="chain-context-text">
+                {sanitiseDashes(entry.implication)}
+              </p>
+              <div className="chain-question-box">
+                <span className="chain-question-label">Decision question</span>
+                <span className="chain-question-text">
+                  {sanitiseDashes(entry.decision_question)}
+                </span>
               </div>
             </div>
           ))}

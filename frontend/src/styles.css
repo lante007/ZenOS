@@ -6298,6 +6298,7 @@ button.estate-stat-tile {
 .decision-chain-entry {
   display: flex;
   flex-direction: column;
+  gap: 8px;
   padding: 16px 0;
   border-top: 1px solid var(--color-border);
 }
@@ -6307,42 +6308,77 @@ button.estate-stat-tile {
   padding-top: 0;
 }
 
-.decision-chain-step {
+.chain-evidence-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.decision-chain-step p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: rgba(245, 242, 238, 0.85);
+.chain-evidence-text {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: rgba(245, 242, 238, 0.95);
 }
 
-.decision-chain-label {
+.confidence-pill {
+  flex-shrink: 0;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.confidence-pill.confidence-high {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+}
+
+.confidence-pill.confidence-moderate {
+  background: rgba(241, 196, 15, 0.15);
+  color: #f1c40f;
+}
+
+.confidence-pill.confidence-low {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+}
+
+.chain-context-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--color-muted);
 }
 
-.decision-chain-connector {
-  align-self: flex-start;
-  margin: 2px 0 2px 8px;
-  color: rgba(239, 114, 24, 0.6);
-  font-size: 14px;
-  line-height: 1;
-}
-
-.decision-question-highlight {
-  font-style: italic;
+.chain-question-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   background: rgba(239, 114, 24, 0.08);
   border-left: 3px solid #EF7218;
   border-radius: 0 6px 6px 0;
   padding: 10px 14px;
-  color: rgba(245, 242, 238, 0.92) !important;
+  margin-top: 4px;
+}
+
+.chain-question-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #EF7218;
+}
+
+.chain-question-text {
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(245, 242, 238, 0.92);
 }
 
 .evidence-quality-note {
