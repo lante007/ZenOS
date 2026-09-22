@@ -609,7 +609,9 @@ function shapeMismatch(value, expectedShape) {
 }
 
 async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLabel, rawText, client, fieldShapes = {}) {
-  const missing = requiredFields.filter(f => isFieldMissing(parsed?.[f]));
+  const missing = requiredFields.filter(f =>
+    isFieldMissing(parsed?.[f]) || shapeMismatch(parsed?.[f], fieldShapes[f])
+  );
 
   if (missing.length === 0) {
     return { valid: true, data: parsed, repaired: false };
