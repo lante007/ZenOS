@@ -4591,6 +4591,216 @@ function CoFunderKnowledgeBrief({ result }) {
   );
 }
 
+function SectorPeerKnowledgeBrief({ result }) {
+  const evidenceSignal = result?.evidence_signal || {};
+  const whatTheEvidenceShows = Array.isArray(result?.what_the_evidence_shows) ? result.what_the_evidence_shows : [];
+  const findings = result?.positive_and_null_or_mixed_findings || {};
+  const positiveFindings = Array.isArray(findings.positive) ? findings.positive.filter(Boolean).map(sanitiseDashes) : [];
+  const nullFindings = Array.isArray(findings.null) ? findings.null.filter(Boolean).map(sanitiseDashes) : [];
+  const mixedFindings = Array.isArray(findings.mixed) ? findings.mixed.filter(Boolean).map(sanitiseDashes) : [];
+  const implementationLessons = Array.isArray(result?.implementation_and_contextual_lessons) ? result.implementation_and_contextual_lessons.filter(Boolean).map(sanitiseDashes) : [];
+  const heterogeneity = Array.isArray(result?.heterogeneity) ? result.heterogeneity.filter(Boolean).map(sanitiseDashes) : [];
+  const limitations = Array.isArray(result?.limitations_and_uncertainties) ? result.limitations_and_uncertainties.filter(Boolean).map(sanitiseDashes) : [];
+  const decisionBoundary = result?.decision_boundary || {};
+  const supported = Array.isArray(decisionBoundary.supported) ? decisionBoundary.supported.filter(Boolean).map(sanitiseDashes) : [];
+  const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
+  const openQuestions = Array.isArray(result?.open_questions_for_the_sector) ? result.open_questions_for_the_sector.filter(Boolean).map(sanitiseDashes) : [];
+  const researchOpportunities = Array.isArray(result?.research_or_replication_opportunities) ? result.research_or_replication_opportunities.filter(Boolean).map(sanitiseDashes) : [];
+  const invitation = result?.invitation_to_further_work ? sanitiseDashes(result.invitation_to_further_work) : '';
+  const invitationLower = invitation.toLowerCase();
+  const invitationIsReal = invitation && !invitationLower.includes('no specific invitation') && !invitationLower.includes('not warranted') && !invitationLower.includes('no invitation');
+
+  return (
+    <section className="ask-results ceo-knowledge-brief">
+      <ExternalUseBadge externalUse={result?.external_use} reviewStatus={result?.review_status} />
+
+      {(evidenceSignal.overall_confidence || evidenceSignal.methodological_strength || evidenceSignal.evidence_currency || evidenceSignal.evidence_stage) && (
+        <section className="ask-answer-card ask-section evidence-estate-section">
+          <h2 className="ask-section-title">Evidence Signal</h2>
+          <div className="evidence-estate-block">
+            {evidenceSignal.overall_confidence && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Overall confidence</span>{sanitiseDashes(evidenceSignal.overall_confidence)}</p>
+            )}
+            {evidenceSignal.methodological_strength && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Methodological strength</span>{sanitiseDashes(evidenceSignal.methodological_strength)}</p>
+            )}
+            {evidenceSignal.evidence_currency && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Currency</span>{sanitiseDashes(evidenceSignal.evidence_currency)}</p>
+            )}
+            {evidenceSignal.evidence_stage && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Stage</span>{sanitiseDashes(evidenceSignal.evidence_stage)}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {result?.bottom_line && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Bottom Line</h2>
+          <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
+        </article>
+      )}
+
+      {whatTheEvidenceShows.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">What the Evidence Shows</h2>
+          {whatTheEvidenceShows.map((entry, idx) => (
+            <div className="decision-chain-entry" key={idx}>
+              <div className="chain-evidence-row">
+                <span className="chain-evidence-text">
+                  {sanitiseDashes(entry?.finding)}
+                </span>
+                {entry?.confidence && (
+                  <span className={`confidence-pill confidence-${String(entry.confidence).toLowerCase()}`}>
+                    {entry.confidence}
+                  </span>
+                )}
+              </div>
+              {(entry?.study_design || entry?.context) && (
+                <div className="ask-evidence-item-tags">
+                  {entry?.study_design && (
+                    <span className="ask-mini-chip">{sanitiseDashes(entry.study_design)}</span>
+                  )}
+                  {entry?.context && (
+                    <span className="ask-mini-chip">{sanitiseDashes(entry.context)}</span>
+                  )}
+                </div>
+              )}
+              {entry?.methodological_notes && (
+                <p className="chain-context-text">
+                  {sanitiseDashes(entry.methodological_notes)}
+                </p>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="ask-answer-card ask-section">
+        <h2 className="ask-section-title">Positive, Null, or Mixed Findings</h2>
+        <div className="ask-decision-boundary">
+          <div>
+            <h3>Positive</h3>
+            {positiveFindings.length > 0 ? (
+              <ul className="ask-plain-list">
+                {positiveFindings.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            ) : (
+              <p className="chain-context-text">None identified in this record.</p>
+            )}
+          </div>
+          <div>
+            <h3>Null</h3>
+            {nullFindings.length > 0 ? (
+              <ul className="ask-plain-list">
+                {nullFindings.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            ) : (
+              <p className="chain-context-text">None identified in this record.</p>
+            )}
+          </div>
+          <div>
+            <h3>Mixed</h3>
+            {mixedFindings.length > 0 ? (
+              <ul className="ask-plain-list">
+                {mixedFindings.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            ) : (
+              <p className="chain-context-text">None identified in this record.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {implementationLessons.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Implementation and Contextual Lessons</h2>
+          <ul className="ask-plain-list">
+            {implementationLessons.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {heterogeneity.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Heterogeneity</h2>
+          <ul className="ask-plain-list">
+            {heterogeneity.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {limitations.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Limitations and Uncertainties</h2>
+          <div className="chain-question-box">
+            <span className="chain-question-label">Foregrounded for this audience</span>
+            <ul className="ask-plain-list">
+              {limitations.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {(supported.length > 0 || notYetSupported.length > 0) && (
+        <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+          <div className="decision-boundary-head">
+            <h2 className="ask-section-title">Decision Boundary</h2>
+          </div>
+          <div className="ask-decision-boundary">
+            <div>
+              <h3>What this supports</h3>
+              <ul className="ask-plain-list decision-supported">
+                {supported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>What it does not yet support</h3>
+              <ul className="ask-plain-list decision-not-supported">
+                {notYetSupported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {openQuestions.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Open Questions for the Sector</h2>
+          <ul className="ask-plain-list">
+            {openQuestions.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {researchOpportunities.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Research or Replication Opportunities</h2>
+          <ul className="ask-plain-list">
+            {researchOpportunities.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {invitation && (
+        <section className="ask-answer-card ask-section">
+          {invitationIsReal ? (
+            <div className="collaboration-box">
+              <span className="collaboration-label">Invitation to Further Work</span>
+              <p className="ask-bottom-line-text">{invitation}</p>
+            </div>
+          ) : (
+            <>
+              <h2 className="ask-section-title">Invitation to Further Work</h2>
+              <p className="chain-context-text">{invitation}</p>
+            </>
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
+
 const CONFIDENCE_LABEL_VARIANTS = {
   'supported by strong evidence': 'strong',
   'supported by emerging evidence': 'emerging',
@@ -6400,6 +6610,7 @@ function KnowledgePage() {
   const isDBENationalStructured = Boolean(briefProduct && briefProduct.audience === 'DBE_National' && typeof briefProduct.bottom_line === 'string');
   const isProvincialHODStructured = Boolean(briefProduct && briefProduct.audience === 'Provincial_HOD' && typeof briefProduct.bottom_line === 'string');
   const isCoFunderStructured = Boolean(briefProduct && briefProduct.audience === 'Co_Funder' && typeof briefProduct.bottom_line === 'string');
+  const isSectorPeerStructured = Boolean(briefProduct && briefProduct.audience === 'Sector_Peer' && typeof briefProduct.bottom_line === 'string');
 
   if (!eligibleRecords.length && !synthesisId) {
     return (
@@ -6689,6 +6900,8 @@ function KnowledgePage() {
               <ProvincialHODKnowledgeBrief result={briefProduct} />
             ) : isCoFunderStructured ? (
               <CoFunderKnowledgeBrief result={briefProduct} />
+            ) : isSectorPeerStructured ? (
+              <SectorPeerKnowledgeBrief result={briefProduct} />
             ) : safeBrief ? (
               <article className="report-card brief-output">
                 <header>

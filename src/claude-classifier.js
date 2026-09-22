@@ -806,6 +806,29 @@ const CO_FUNDER_FIELD_SHAPES = {
   },
 };
 
+const SECTOR_PEER_REQUIRED_FIELDS = [
+  'bottom_line', 'evidence_signal', 'what_the_evidence_shows',
+  'positive_and_null_or_mixed_findings', 'limitations_and_uncertainties', 'decision_boundary',
+];
+
+const SECTOR_PEER_FIELD_SHAPES = {
+  evidence_signal: {
+    overall_confidence: 'string',
+    evidence_currency: 'string',
+    evidence_stage: 'string',
+    methodological_strength: 'string',
+  },
+  positive_and_null_or_mixed_findings: {
+    positive: [],
+    null: [],
+    mixed: [],
+  },
+  decision_boundary: {
+    supported: [],
+    not_yet_supported: [],
+  },
+};
+
 /**
  * CEO persona transformer. Takes the cached canonical synthesis (never the
  * raw record) and reshapes it into the CEO Evidence Brief schema. Does not
@@ -1365,6 +1388,117 @@ ${JSON.stringify(synthesis)}`;
   return validated.data;
 }
 
+async function transformToSectorPeerBrief(synthesis, recordMeta) {
+  const system = `You are transforming an existing, fixed evidence synthesis into a Sector Peer Evidence Brief, shared with a peer organisation, researcher, or practitioner working in the same field.
+
+CRITICAL: You are NOT performing new evidence synthesis. You may only select, prioritise, reword, and contextualise claims already present in the canonical synthesis object below. You may not invent or strengthen any claim.
+
+This brief is fundamentally different in purpose from the other five personas. It does not exist to support a decision. It exists to support learning, replication, and further research by a peer organisation.
+
+Prioritise: methodological transparency, study design, population and context, implementation conditions, heterogeneity, null findings, mixed findings, limitations, evidence gaps, open questions, replication opportunities.
+
+RULE (NO SUPPRESSION, STRICT): Do not suppress inconvenient findings because they weaken a positive narrative. If the canonical synthesis contains a claim with LOW confidence, a null result, or a finding that complicates a simpler positive story, that finding must appear in this brief with the same prominence its confidence level warrants, not minimised or relegated. A Sector Peer brief that reads as more positive than the underlying canonical synthesis warrants has failed its purpose.
+
+Do not position Zenex as the sole authority on this evidence.
+
+RULE (EPISTEMIC PROVENANCE, STRICT): Distinguish explicitly and consistently between: a study finding (what one specific evaluation directly measured), a synthesis across studies (a pattern observed by comparing multiple records), an interpretation (a reasonable reading that goes beyond what any single record states), a hypothesis (a plausible but untested explanation), and an unanswered question (something the evidence genuinely cannot address). Never let language drift between these categories without making the shift explicit.
+
+Make methodological limitations visible, not as a defensive afterthought but as core content this audience specifically needs.
+
+Invite further research, replication, or shared inquiry where the evidence genuinely warrants it, do not invite this generically if the record offers nothing specific to build on.
+
+Apply the same epistemic discipline as the canonical synthesis: preserve confidence levels exactly, associative not causal language unless design supports causation, never convert absence of evidence into evidence of absence, no internal contradiction between sections.
+
+Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
+
+{
+  "audience": "Sector_Peer",
+  "external_use": true,
+  "review_status": "Human review required",
+  "title": "",
+  "date": "",
+  "evidence_signal": {
+    "overall_confidence": "HIGH | MODERATE | LOW | INSUFFICIENT",
+    "evidence_currency": "",
+    "evidence_stage": "",
+    "methodological_strength": ""
+  },
+  "bottom_line": "3-5 sentences, methodologically transparent, no suppression of weak findings.",
+  "what_the_evidence_shows": [
+    {
+      "finding": "",
+      "confidence": "HIGH | MODERATE | LOW",
+      "study_design": "",
+      "context": "",
+      "methodological_notes": ""
+    }
+  ],
+  "positive_and_null_or_mixed_findings": {
+    "positive": [],
+    "null": [],
+    "mixed": []
+  },
+  "implementation_and_contextual_lessons": [],
+  "heterogeneity": [],
+  "limitations_and_uncertainties": [],
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": []
+  },
+  "open_questions_for_the_sector": [],
+  "research_or_replication_opportunities": [],
+  "invitation_to_further_work": "One to two sentences, only if the evidence genuinely warrants an invitation, otherwise state plainly that no specific invitation is warranted by this record alone rather than manufacturing one.",
+  "sources_summary": ""
+}
+
+Do NOT include any field belonging to CEO, Trustee, DBE National, Provincial HOD, or Co-Funder's schemas.
+
+If positive, null, or mixed findings genuinely cannot be populated from this record (for example, no clean null result exists), the null and mixed arrays may legitimately be empty. An empty array is a true statement about this record, not missing data. Do not manufacture a null or mixed finding that does not exist in the canonical synthesis.
+
+CANONICAL SYNTHESIS (source of truth, do not contradict or extend):
+${JSON.stringify(synthesis)}`;
+
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 8000,
+    system,
+    messages: [{
+      role: 'user',
+      content: 'Generate the Sector Peer Evidence Brief.',
+    }],
+  });
+
+  const text = extractText(msg.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  let parsed = null;
+  try {
+    if (!match) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(match[0]);
+  } catch (err) {
+    // One repair attempt via haiku, same convention as the other five
+    // canonical-synthesis-plus-transformer personas.
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 6000,
+      system: 'Return only valid complete JSON. No markdown.',
+      messages: [{
+        role: 'user',
+        content: 'Repair this JSON: ' + text.slice(0, 8000),
+      }],
+    });
+    const repairText = extractText(repair.content);
+    const repairMatch = repairText.match(/\{[\s\S]*\}/);
+    if (!repairMatch) throw new Error(`Sector Peer brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
+    parsed = JSON.parse(repairMatch[0]);
+  }
+
+  const validated = await validateKnowledgeProductSchema(parsed, SECTOR_PEER_REQUIRED_FIELDS, 'Sector_Peer', text, client, SECTOR_PEER_FIELD_SHAPES);
+  if (!validated.valid) {
+    console.error(`Sector Peer brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
+  }
+  return validated.data;
+}
+
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
@@ -1389,6 +1523,10 @@ async function generateKnowledgeProduct({ record, audience, tenant, synthesisCon
   if (audienceKeyUpper === 'CO_FUNDER') {
     const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
     return transformToCoFunderBrief(synthesis, record);
+  }
+  if (audienceKeyUpper === 'SECTOR_PEER') {
+    const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
+    return transformToSectorPeerBrief(synthesis, record);
   }
 
   const audienceDescriptions = {
@@ -1510,5 +1648,6 @@ module.exports = {
   transformToDBENationalBrief,
   transformToProvincialHODBrief,
   transformToCoFunderBrief,
+  transformToSectorPeerBrief,
   validateKnowledgeProductSchema,
 };
