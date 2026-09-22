@@ -4248,6 +4248,167 @@ function DBENationalKnowledgeBrief({ result }) {
   );
 }
 
+function ProvincialHODKnowledgeBrief({ result }) {
+  const provincialSignal = result?.provincial_evidence_signal || {};
+  const keyFindings = Array.isArray(result?.key_findings) ? result.key_findings : [];
+  const implementationConditions = result?.implementation_conditions || {};
+  const provincialVariation = Array.isArray(result?.provincial_variation) ? result.provincial_variation.filter(Boolean).map(sanitiseDashes) : [];
+  const transferabilityRisks = Array.isArray(result?.transferability_risks) ? result.transferability_risks.filter(Boolean).map(sanitiseDashes) : [];
+  const decisionBoundary = result?.decision_boundary || {};
+  const supported = Array.isArray(decisionBoundary.supported) ? decisionBoundary.supported.filter(Boolean).map(sanitiseDashes) : [];
+  const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
+  const evidenceNeededBeforeAdoption = Array.isArray(decisionBoundary.evidence_needed_before_adoption) ? decisionBoundary.evidence_needed_before_adoption.filter(Boolean).map(sanitiseDashes) : [];
+  const adoptionConsiderations = Array.isArray(result?.adoption_or_adaptation_considerations) ? result.adoption_or_adaptation_considerations.filter(Boolean).map(sanitiseDashes) : [];
+
+  return (
+    <section className="ask-results ceo-knowledge-brief">
+      <ExternalUseBadge externalUse={result?.external_use} reviewStatus={result?.review_status} />
+
+      {(provincialSignal.evidence_confidence || provincialSignal.province_coverage || provincialSignal.evidence_currency || provincialSignal.transferability) && (
+        <section className="ask-answer-card ask-section evidence-estate-section">
+          <h2 className="ask-section-title">Provincial Evidence Signal</h2>
+          <div className="evidence-estate-block">
+            {provincialSignal.evidence_confidence && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Confidence</span>{sanitiseDashes(provincialSignal.evidence_confidence)}</p>
+            )}
+            {provincialSignal.province_coverage && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Province</span><span className="province-coverage-value">{sanitiseDashes(provincialSignal.province_coverage)}</span></p>
+            )}
+            {provincialSignal.evidence_currency && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Currency</span>{sanitiseDashes(provincialSignal.evidence_currency)}</p>
+            )}
+            {provincialSignal.transferability && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Transferability</span>{sanitiseDashes(provincialSignal.transferability)}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {result?.bottom_line && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Bottom Line</h2>
+          <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
+        </article>
+      )}
+
+      {keyFindings.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Key Findings</h2>
+          {keyFindings.map((entry, idx) => (
+            <div className="decision-chain-entry" key={idx}>
+              <div className="chain-evidence-row">
+                <span className="chain-evidence-text">
+                  {sanitiseDashes(entry?.finding)}
+                </span>
+                {entry?.confidence && (
+                  <span className={`confidence-pill confidence-${String(entry.confidence).toLowerCase()}`}>
+                    {entry.confidence}
+                  </span>
+                )}
+              </div>
+              {(entry?.province || entry?.context) && (
+                <div className="ask-evidence-item-tags">
+                  {entry?.province && (
+                    <span className="ask-mini-chip">{sanitiseDashes(entry.province)}</span>
+                  )}
+                  {entry?.context && (
+                    <span className="ask-mini-chip">{sanitiseDashes(entry.context)}</span>
+                  )}
+                </div>
+              )}
+              {entry?.provincial_relevance && (
+                <p className="chain-context-text">
+                  {sanitiseDashes(entry.provincial_relevance)}
+                </p>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {(implementationConditions.fidelity || implementationConditions.dosage || implementationConditions.support_requirements || implementationConditions.contextual_conditions) && (
+        <section className="ask-answer-card ask-section evidence-estate-section">
+          <h2 className="ask-section-title">Implementation Conditions</h2>
+          <div className="evidence-estate-block">
+            {implementationConditions.fidelity && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Fidelity</span>{sanitiseDashes(implementationConditions.fidelity)}</p>
+            )}
+            {implementationConditions.dosage && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Dosage</span>{sanitiseDashes(implementationConditions.dosage)}</p>
+            )}
+            {implementationConditions.support_requirements && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Support</span>{sanitiseDashes(implementationConditions.support_requirements)}</p>
+            )}
+            {implementationConditions.contextual_conditions && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Context</span>{sanitiseDashes(implementationConditions.contextual_conditions)}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {provincialVariation.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Provincial Variation</h2>
+          <ul className="ask-plain-list">
+            {provincialVariation.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {transferabilityRisks.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Transferability Risks</h2>
+          <div className="chain-question-box">
+            <span className="chain-question-label">Caution</span>
+            <ul className="ask-plain-list">
+              {transferabilityRisks.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {(supported.length > 0 || notYetSupported.length > 0 || evidenceNeededBeforeAdoption.length > 0) && (
+        <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+          <div className="decision-boundary-head">
+            <h2 className="ask-section-title">Decision Boundary</h2>
+          </div>
+          <div className="ask-decision-boundary">
+            <div>
+              <h3>What this supports</h3>
+              <ul className="ask-plain-list decision-supported">
+                {supported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>What it does not yet support</h3>
+              <ul className="ask-plain-list decision-not-supported">
+                {notYetSupported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Evidence needed before adoption</h3>
+              <ul className="ask-plain-list decision-evidence-needed">
+                {evidenceNeededBeforeAdoption.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {adoptionConsiderations.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <div className="collaboration-box">
+            <span className="collaboration-label">Adoption or Adaptation Considerations</span>
+            <ul className="ask-plain-list">
+              {adoptionConsiderations.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
 const CONFIDENCE_LABEL_VARIANTS = {
   'supported by strong evidence': 'strong',
   'supported by emerging evidence': 'emerging',
@@ -6055,6 +6216,7 @@ function KnowledgePage() {
   const isCEOStructured = Boolean(briefProduct && briefProduct.audience === 'CEO' && typeof briefProduct.bottom_line === 'string');
   const isTrusteeStructured = Boolean(briefProduct && briefProduct.audience === 'Trustee' && typeof briefProduct.bottom_line === 'string');
   const isDBENationalStructured = Boolean(briefProduct && briefProduct.audience === 'DBE_National' && typeof briefProduct.bottom_line === 'string');
+  const isProvincialHODStructured = Boolean(briefProduct && briefProduct.audience === 'Provincial_HOD' && typeof briefProduct.bottom_line === 'string');
 
   if (!eligibleRecords.length && !synthesisId) {
     return (
@@ -6340,6 +6502,8 @@ function KnowledgePage() {
               <TrusteeKnowledgeBrief result={briefProduct} />
             ) : isDBENationalStructured ? (
               <DBENationalKnowledgeBrief result={briefProduct} />
+            ) : isProvincialHODStructured ? (
+              <ProvincialHODKnowledgeBrief result={briefProduct} />
             ) : safeBrief ? (
               <article className="report-card brief-output">
                 <header>

@@ -746,6 +746,32 @@ const DBE_NATIONAL_FIELD_SHAPES = {
   },
 };
 
+const PROVINCIAL_HOD_REQUIRED_FIELDS = [
+  'bottom_line', 'provincial_evidence_signal', 'key_findings',
+  'implementation_conditions', 'provincial_variation', 'transferability_risks',
+  'decision_boundary', 'adoption_or_adaptation_considerations',
+];
+
+const PROVINCIAL_HOD_FIELD_SHAPES = {
+  provincial_evidence_signal: {
+    evidence_confidence: 'string',
+    province_coverage: 'string',
+    evidence_currency: 'string',
+    transferability: 'string',
+  },
+  implementation_conditions: {
+    fidelity: 'string',
+    dosage: 'string',
+    support_requirements: 'string',
+    contextual_conditions: 'string',
+  },
+  decision_boundary: {
+    supported: [],
+    not_yet_supported: [],
+    evidence_needed_before_adoption: [],
+  },
+};
+
 /**
  * CEO persona transformer. Takes the cached canonical synthesis (never the
  * raw record) and reshapes it into the CEO Evidence Brief schema. Does not
@@ -1095,6 +1121,112 @@ ${JSON.stringify(synthesis)}`;
   return validated.data;
 }
 
+async function transformToProvincialHODBrief(synthesis, recordMeta) {
+  const system = `You are transforming an existing, fixed evidence synthesis into a Provincial HOD Evidence Brief, shared with a provincial Head of Department for education.
+
+CRITICAL: You are NOT performing new evidence synthesis. You may only select, prioritise, reword, and contextualise claims already present in the canonical synthesis object below. You may not invent or strengthen any claim.
+
+Prioritise: evidence from the relevant province, evidence from comparable provinces, provincial heterogeneity, implementation fidelity, dosage, delivery conditions, teacher support, contextual factors, adaptation requirements, transferability.
+
+Clearly identify where evidence is concentrated geographically.
+
+RULE (NO CROSS-PROVINCE ASSUMPTION, STRICT): Never assume that evidence demonstrated in one province automatically transfers to another. If the canonical synthesis's provinces field shows this evidence comes from a different province than the one an HOD reading this brief might be in, this must be stated explicitly, not implied or glossed over. Findings from Western Cape schools do not establish anything about KwaZulu-Natal or Limpopo schools without independent evidence from those contexts. This is the same discipline as the SCOPE rule applied to CEO/Trustee/DBE National, but the specific failure mode to guard against here is geographic transfer, not causal or temporal overreach.
+
+Do not use national political framing unless directly relevant to the evidence question.
+
+Do not expose internal funder metrics (Zenex-internal cost figures, portfolio allocation detail) unless specifically relevant to the adoption/adaptation decision.
+
+RULE (NON-OPPOSITIONAL STANCE): Same as DBE National, this is shared evidence for a government partner, not a Zenex recommendation to itself. Maintain a collaborative tone throughout.
+
+Apply the same epistemic discipline as the canonical synthesis: preserve confidence levels exactly, associative not causal language unless design supports causation, never convert absence of evidence into evidence of absence, no internal contradiction between sections.
+
+Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
+
+{
+  "audience": "Provincial_HOD",
+  "external_use": true,
+  "review_status": "Human review required",
+  "title": "",
+  "date": "",
+  "provincial_evidence_signal": {
+    "evidence_confidence": "HIGH | MODERATE | LOW | INSUFFICIENT",
+    "province_coverage": "Which province(s) this evidence actually comes from, stated plainly.",
+    "evidence_currency": "",
+    "transferability": "One to two sentences on whether and how this evidence applies beyond the tested province."
+  },
+  "bottom_line": "3-5 sentences, collaborative, geography-explicit.",
+  "key_findings": [
+    {
+      "finding": "",
+      "confidence": "HIGH | MODERATE | LOW",
+      "province": "The specific province this finding was demonstrated in.",
+      "context": "District, quintile, or other contextual detail relevant to adoption decisions.",
+      "provincial_relevance": "What this means for a province considering adoption, stated without assuming transfer."
+    }
+  ],
+  "implementation_conditions": {
+    "fidelity": "",
+    "dosage": "",
+    "support_requirements": "",
+    "contextual_conditions": ""
+  },
+  "provincial_variation": [],
+  "transferability_risks": [],
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": [],
+    "evidence_needed_before_adoption": []
+  },
+  "adoption_or_adaptation_considerations": [],
+  "sources_summary": ""
+}
+
+Do NOT include any CEO-only, Trustee-only, or DBE-National-only fields (decision_chain, capital_view, leadership_questions, evidence_estate_health, capital_accountability, governance_signal, system_signal, scalability_and_transferability, policy_relevant_gaps, possible_collaboration_or_evidence_sharing).
+
+CANONICAL SYNTHESIS (source of truth, do not contradict or extend):
+${JSON.stringify(synthesis)}`;
+
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 8000,
+    system,
+    messages: [{
+      role: 'user',
+      content: 'Generate the Provincial HOD Evidence Brief.',
+    }],
+  });
+
+  const text = extractText(msg.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  let parsed = null;
+  try {
+    if (!match) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(match[0]);
+  } catch (err) {
+    // One repair attempt via haiku, same convention as the other three
+    // canonical-synthesis-plus-transformer personas.
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 6000,
+      system: 'Return only valid complete JSON. No markdown.',
+      messages: [{
+        role: 'user',
+        content: 'Repair this JSON: ' + text.slice(0, 8000),
+      }],
+    });
+    const repairText = extractText(repair.content);
+    const repairMatch = repairText.match(/\{[\s\S]*\}/);
+    if (!repairMatch) throw new Error(`Provincial HOD brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
+    parsed = JSON.parse(repairMatch[0]);
+  }
+
+  const validated = await validateKnowledgeProductSchema(parsed, PROVINCIAL_HOD_REQUIRED_FIELDS, 'Provincial_HOD', text, client, PROVINCIAL_HOD_FIELD_SHAPES);
+  if (!validated.valid) {
+    console.error(`Provincial HOD brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
+  }
+  return validated.data;
+}
+
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
@@ -1111,6 +1243,10 @@ async function generateKnowledgeProduct({ record, audience, tenant, synthesisCon
   if (audienceKeyUpper === 'DBE_NATIONAL') {
     const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
     return transformToDBENationalBrief(synthesis, record);
+  }
+  if (audienceKeyUpper === 'PROVINCIAL_HOD') {
+    const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
+    return transformToProvincialHODBrief(synthesis, record);
   }
 
   const audienceDescriptions = {
@@ -1230,5 +1366,6 @@ module.exports = {
   transformToCEOBrief,
   transformToTrusteeBrief,
   transformToDBENationalBrief,
+  transformToProvincialHODBrief,
   validateKnowledgeProductSchema,
 };

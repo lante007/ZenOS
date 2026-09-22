@@ -6475,6 +6475,12 @@ button.estate-stat-tile {
   vertical-align: top;
 }
 
+.province-coverage-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(245, 242, 238, 0.95);
+}
+
 .accountability-gap-line {
   margin: 10px 0 0;
   padding: 8px 14px;
