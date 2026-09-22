@@ -107,8 +107,11 @@ Do not introduce findings not present in this synthesis.`;
       tenant: req.tenant,
       synthesisContext,
     });
+    const isStructuredProduct = typeof claudeResponse === 'object' && claudeResponse !== null;
     const generatedAt = new Date().toISOString();
-    const wordCount = claudeResponse.split(/\s+/).filter(Boolean).length;
+    const wordCount = isStructuredProduct
+      ? JSON.stringify(claudeResponse).split(/\s+/).filter(Boolean).length
+      : claudeResponse.split(/\s+/).filter(Boolean).length;
     const programmeName = synthesisId
       ? sourceRecords.map(r => r.programme_name).join(' + ')
       : record.programme_name;
@@ -117,7 +120,7 @@ Do not introduce findings not present in this synthesis.`;
       tenant_id: req.tenant.slug,
       record_id: recordId || null,
       audience: audience.db,
-      content: claudeResponse,
+      content: isStructuredProduct ? JSON.stringify(claudeResponse) : claudeResponse,
       word_count: wordCount,
       model_used: 'claude-sonnet-4-6',
       generated_by: req.user.sub || req.user.email,
@@ -135,7 +138,7 @@ Do not introduce findings not present in this synthesis.`;
           ? synthesis.record_ids
           : [recordId],
         audience: audience.db,
-        brief_content: claudeResponse,
+        brief_content: isStructuredProduct ? JSON.stringify(claudeResponse) : claudeResponse,
         generated_at: new Date(generatedAt),
         model_used: 'claude-sonnet-4-6',
         word_count: wordCount,
@@ -148,6 +151,30 @@ Do not introduce findings not present in this synthesis.`;
       data: product,
       metadata: { tenant: req.tenant.slug, record_id: recordId || '', synthesis_id: synthesisId || '' },
     });
+
+    if (isStructuredProduct) {
+      // CEO (Phase A). Response shape change is CEO-only: the structured
+      // synthesis-derived object is spread at the top level rather than
+      // nested under `brief`. external_use is hardcoded false here,
+      // deterministically, not read from anything the model could
+      // influence, per spec.
+      res.json({
+        success: true,
+        audience: audience.db,
+        synthesis_id: synthesisId || null,
+        record_id: recordId || null,
+        source_record_count: synthesisId ? sourceRecords.length : 1,
+        programme_name: programmeName,
+        ...claudeResponse,
+        external_use: false,
+        generated_at: generatedAt,
+        model: 'claude-sonnet-4-6',
+        word_count: wordCount,
+        provenance_id: provenance?.id || null,
+        provenance_record_id: provenance?.id || null,
+      });
+      return;
+    }
 
     res.json({
       success: true,

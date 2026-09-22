@@ -6250,3 +6250,41 @@ button.estate-stat-tile {
 .comms-do-not-claim-list li {
   color: #E74C3C;
 }
+
+/* Knowledge Products Phase A — CEO persona structured brief */
+.ceo-knowledge-brief {
+  display: flex;
+  flex-direction: column;
+}
+
+.internal-use-badge {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  margin-bottom: 12px;
+  background: rgba(245, 242, 238, 0.1);
+  color: var(--color-muted);
+}
+
+.capital-view-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.capital-view-lines p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(245, 242, 238, 0.85);
+}
+
+.capital-view-lines strong {
+  color: rgba(245, 242, 238, 0.95);
+}

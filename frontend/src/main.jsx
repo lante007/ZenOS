@@ -3708,6 +3708,121 @@ function CEOAskResult({ result }) {
   );
 }
 
+// Knowledge Products Phase A — CEO persona. Renders the structured
+// canonical-synthesis-derived CEO Evidence Brief (never the legacy
+// flat-text brief string used by the other five audiences).
+function CEOKnowledgeBrief({ result }) {
+  const executiveSignal = result?.executive_signal || {};
+  const evidenceConfidence = String(executiveSignal.evidence_confidence || '').toLowerCase();
+  const keyFindings = Array.isArray(result?.key_findings) ? result.key_findings.slice(0, 4) : [];
+  const strategicRisks = Array.isArray(result?.strategic_risks) ? result.strategic_risks.filter(Boolean).map(sanitiseDashes) : [];
+  const leadershipQuestions = Array.isArray(result?.leadership_questions) ? result.leadership_questions.filter(Boolean).map(sanitiseDashes) : [];
+  const capitalView = result?.capital_view || {};
+  const decisionBoundary = result?.decision_boundary || {};
+  const supported = Array.isArray(decisionBoundary.supported) ? decisionBoundary.supported.filter(Boolean).map(sanitiseDashes) : [];
+  const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
+  const evidenceNeeded = Array.isArray(decisionBoundary.evidence_needed_to_decide) ? decisionBoundary.evidence_needed_to_decide.filter(Boolean).map(sanitiseDashes) : [];
+  const signalLine = [executiveSignal.evidence_confidence, executiveSignal.evidence_stage, executiveSignal.evidence_currency]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <section className="ask-results ceo-knowledge-brief">
+      <span className="internal-use-badge">Internal use</span>
+
+      {signalLine && <p className="evidence-status-line">{signalLine}</p>}
+      {executiveSignal.evidence_health_signal && (
+        <p className="evidence-status-line">{sanitiseDashes(executiveSignal.evidence_health_signal)}</p>
+      )}
+
+      {result?.bottom_line && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Bottom Line</h2>
+          <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
+        </article>
+      )}
+
+      <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+        <div className="decision-boundary-head">
+          <h2 className="ask-section-title">Decision Boundary</h2>
+          {executiveSignal.evidence_confidence && (
+            <span className={`decision-confidence-badge ${evidenceConfidence}`}>
+              {executiveSignal.evidence_confidence}
+            </span>
+          )}
+        </div>
+        <div className="ask-decision-boundary">
+          <div>
+            <h3>What this supports</h3>
+            <ul className="ask-plain-list decision-supported">
+              {supported.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h3>What it does not yet support</h3>
+            <ul className="ask-plain-list decision-not-supported">
+              {notYetSupported.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h3>Evidence needed to decide</h3>
+            <ul className="ask-plain-list decision-evidence-needed">
+              {evidenceNeeded.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {keyFindings.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Key Findings</h2>
+          {keyFindings.map((item, idx) => (
+            <div className="key-evidence-item" key={idx}>
+              <div className="ask-evidence-item-head">
+                <p className="ask-evidence-claim">{sanitiseDashes(item?.finding)}</p>
+                {item?.confidence && (
+                  <span className={`confidence-badge ${String(item.confidence).toLowerCase()}`}>{item.confidence}</span>
+                )}
+              </div>
+              {item?.capital_implication && <p className="ask-source-meta">{sanitiseDashes(item.capital_implication)}</p>}
+              {item?.decision_relevance && <p className="ask-source-meta">{sanitiseDashes(item.decision_relevance)}</p>}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {strategicRisks.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Strategic Risks</h2>
+          <ul className="ask-plain-list">
+            {strategicRisks.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {(capitalView.financial_capital || capitalView.evidence_capital || capitalView.decision_capital) && (
+        <section className="ask-answer-card ask-section capital-view-section">
+          <h2 className="ask-section-title">Capital View</h2>
+          <div className="capital-view-lines">
+            {capitalView.financial_capital && <p><strong>Financial:</strong> {sanitiseDashes(capitalView.financial_capital)}</p>}
+            {capitalView.evidence_capital && <p><strong>Evidence:</strong> {sanitiseDashes(capitalView.evidence_capital)}</p>}
+            {capitalView.decision_capital && <p><strong>Decision:</strong> {sanitiseDashes(capitalView.decision_capital)}</p>}
+          </div>
+        </section>
+      )}
+
+      {leadershipQuestions.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Leadership Questions</h2>
+          <ul className="ask-plain-list">
+            {leadershipQuestions.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+    </section>
+  );
+}
+
 const CONFIDENCE_LABEL_VARIANTS = {
   'supported by strong evidence': 'strong',
   'supported by emerging evidence': 'emerging',
@@ -5512,6 +5627,7 @@ function KnowledgePage() {
     ? (briefProduct?.programme_name || synthesis?.title || 'Strategic synthesis')
     : selectedRecord?.programme_name;
   const safeBrief = briefContent(brief);
+  const isCEOStructured = Boolean(briefProduct && briefProduct.audience === 'CEO' && typeof briefProduct.bottom_line === 'string');
 
   if (!eligibleRecords.length && !synthesisId) {
     return (
@@ -5791,6 +5907,8 @@ function KnowledgePage() {
                   Try again
                 </button>
               </div>
+            ) : isCEOStructured ? (
+              <CEOKnowledgeBrief result={briefProduct} />
             ) : safeBrief ? (
               <article className="report-card brief-output">
                 <header>

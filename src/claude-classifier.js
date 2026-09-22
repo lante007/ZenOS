@@ -8,8 +8,18 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { getPool } = require('../api/services/db');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// claude-sonnet-5 uses extended thinking by default, which prepends a
+// `thinking` content block before the `text` block. content[0] is not
+// reliably the answer, so find the first text block explicitly.
+// (Same convention as api/routes/synthesis.js.)
+function extractText(content) {
+  const block = (content || []).find(b => b.type === 'text');
+  return block?.text || '';
+}
 
 // Retained for backward compatibility with callers still using the legacy
 // five-way pathway (eqs-scorer.js has its own independent implementation).
@@ -385,10 +395,240 @@ function mergeClassification(pass1, pass2, flags) {
   return merged;
 }
 
+// ─── Knowledge Products Phase A: canonical synthesis + CEO transformer ──
+// Two-stage architecture: record → canonical evidence synthesis (once,
+// cached, keyed to record_version) → persona transformer reads the cached
+// synthesis and reshapes it, never re-deriving evidence. Only the CEO
+// persona is wired to this new path in Phase A; the other five audiences
+// remain on the legacy single-prompt flat-text path in
+// generateKnowledgeProduct() below until Phase B/C.
+
+const CANONICAL_SYNTHESIS_SYSTEM_PROMPT = `You are performing the canonical evidence synthesis for a single Zenex evaluation record. This synthesis will be reused by six different audience-specific knowledge products. It must be the single source of truth for what this record shows. No persona-specific framing yet.
+
+HARD RULES (apply all of these to this single-record synthesis):
+
+RULE 1 SCOPE: The scope of every claim must not exceed the scope of the evidence in this record. Do not generalise beyond what this specific evaluation tested.
+
+RULE 2 CAUSALITY: Do not use necessary, sufficient, required, drives, active ingredient, or equivalent causal language unless the study design directly supports it. Use associated with, linked to, consistent with, may contribute to for associative, observational, qualitative, pre-post, or quasi-experimental evidence.
+
+RULE 3 HETEROGENEITY: Differing results within this record (by subgroup, geography, timepoint) are heterogeneity, not contradiction, unless genuinely incompatible. Explain plausible moderators.
+
+RULE 5 DECISION BOUNDARY: Distinguish what this evidence supports deciding from what it does not yet support, and what additional evidence would reduce uncertainty.
+
+RULE 6 ACTION: Do not manufacture a next step if the evidence does not support one.
+
+RULE 12: Never present absence of evidence as evidence of absence.
+
+RULE 13: Never convert association into causation.
+
+Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
+
+{
+  "record_id": "",
+  "programme_name": "",
+  "evidence_boundary": {
+    "scope": "",
+    "evidence_stage": "baseline | midline | endline | follow-up | longitudinal | unknown",
+    "evidence_currency": "year and age assessment",
+    "study_design": "",
+    "population_context": ""
+  },
+  "claims": [
+    {
+      "claim": "",
+      "confidence": "HIGH | MODERATE | LOW | INSUFFICIENT",
+      "evidence_basis": "",
+      "qualifications": [],
+      "capital_implication": ""
+    }
+  ],
+  "heterogeneity": [],
+  "limitations": [
+    {
+      "issue": "",
+      "severity": "HIGH | MODERATE | LOW",
+      "decision_relevance": ""
+    }
+  ],
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": [],
+    "evidence_needed": []
+  },
+  "transferability": {
+    "demonstrated_in": [],
+    "uncertain_for": []
+  },
+  "implementation_conditions": {
+    "fidelity": "",
+    "dosage": "",
+    "support_requirements": "",
+    "contextual_factors": ""
+  },
+  "cost_and_value": {
+    "known": [],
+    "unknown": []
+  },
+  "open_questions": [],
+  "financial_capital": null,
+  "evidence_capital_note": ""
+}`;
+
+/**
+ * Canonical evidence synthesis for a single record. Runs ONCE per record
+ * (cached in zenex.canonical_synthesis, keyed to tenant + record + the
+ * record's updated_at/created_at version so a re-classification
+ * invalidates the cache). This is NOT persona-shaped; it is the raw
+ * material every audience transformer reads from.
+ */
+async function generateCanonicalSynthesis(record, tenantId) {
+  const pool = getPool();
+  if (!pool) throw new Error('DATABASE_URL not configured: cannot read/write canonical_synthesis cache');
+
+  const recordVersion = record.updated_at || record.created_at;
+
+  const cached = await pool.query(
+    `SELECT synthesis FROM zenex.canonical_synthesis
+     WHERE tenant_id=$1 AND record_id=$2 AND record_version=$3`,
+    [tenantId, record.id, recordVersion]
+  );
+  if (cached.rowCount > 0) {
+    return cached.rows[0].synthesis;
+  }
+
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 8000,
+    system: CANONICAL_SYNTHESIS_SYSTEM_PROMPT,
+    messages: [{
+      role: 'user',
+      content: `Record: ${JSON.stringify(record)}`,
+    }],
+  });
+
+  const text = extractText(msg.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error(`Canonical synthesis: no JSON object found in Claude response. Raw: ${text.substring(0, 200)}`);
+  const synthesis = JSON.parse(match[0]);
+
+  await pool.query(
+    `INSERT INTO zenex.canonical_synthesis (tenant_id, record_id, record_version, synthesis)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (tenant_id, record_id, record_version)
+     DO UPDATE SET synthesis = EXCLUDED.synthesis`,
+    [tenantId, record.id, recordVersion, JSON.stringify(synthesis)]
+  );
+
+  return synthesis;
+}
+
+/**
+ * CEO persona transformer. Takes the cached canonical synthesis (never the
+ * raw record) and reshapes it into the CEO Evidence Brief schema. Does not
+ * re-read the source document or re-derive evidence; may only select,
+ * prioritise, reword, and contextualise what is already in `synthesis`.
+ */
+async function transformToCEOBrief(synthesis, recordMeta) {
+  const system = `You are transforming an existing, fixed evidence synthesis into a CEO Evidence Brief for Zenex leadership.
+
+CRITICAL: You are NOT performing new evidence synthesis. You are NOT permitted to introduce claims, confidence levels, or findings that are not already present in the canonical synthesis object below. You may select, prioritise, reword, and contextualise. You may not invent or strengthen.
+
+Your purpose is to make the decision boundary visible, not to make the decision for the CEO.
+
+Prioritise: portfolio implications, evidence confidence, capital implications, material risks, evidence gaps, sequencing considerations, uncertainty that could materially change a decision.
+
+Do not prescribe that the CEO should fund, scale, pause, exit or commission something. Instead, identify decision options or questions the evidence now legitimately surfaces for leadership consideration.
+
+Minimise methodological detail unless it materially affects the decision.
+
+Do not frame any programme as ready for scale unless the decision_boundary in the canonical synthesis explicitly supports that interpretation.
+
+Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
+
+{
+  "audience": "CEO",
+  "external_use": false,
+  "title": "",
+  "date": "",
+  "executive_signal": {
+    "evidence_confidence": "HIGH | MODERATE | LOW | INSUFFICIENT",
+    "evidence_currency": "",
+    "evidence_stage": "",
+    "evidence_health_signal": ""
+  },
+  "bottom_line": "3-5 sentences",
+  "key_findings": [
+    {
+      "finding": "",
+      "confidence": "",
+      "capital_implication": "",
+      "decision_relevance": ""
+    }
+  ],
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": [],
+    "evidence_needed_to_decide": []
+  },
+  "strategic_risks": [],
+  "capital_view": {
+    "financial_capital": "",
+    "evidence_capital": "",
+    "decision_capital": ""
+  },
+  "leadership_questions": [],
+  "sources_summary": ""
+}
+
+CANONICAL SYNTHESIS (source of truth, do not contradict or extend):
+${JSON.stringify(synthesis)}`;
+
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 6000,
+    system,
+    messages: [{
+      role: 'user',
+      content: 'Generate the CEO Evidence Brief.',
+    }],
+  });
+
+  const text = extractText(msg.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  let parsed = null;
+  try {
+    if (!match) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(match[0]);
+  } catch (err) {
+    // One repair attempt via haiku, same convention as
+    // api/routes/synthesis.js validateAndRepair().
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 6000,
+      system: 'Return only valid complete JSON. No markdown.',
+      messages: [{
+        role: 'user',
+        content: 'Repair this JSON: ' + text.slice(0, 8000),
+      }],
+    });
+    const repairText = extractText(repair.content);
+    const repairMatch = repairText.match(/\{[\s\S]*\}/);
+    if (!repairMatch) throw new Error(`CEO brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
+    parsed = JSON.parse(repairMatch[0]);
+  }
+  return parsed;
+}
+
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
 async function generateKnowledgeProduct({ record, audience, tenant, synthesisContext = '' }) {
+  const audienceKeyUpper = String(audience || '').toUpperCase();
+  if (audienceKeyUpper === 'CEO') {
+    const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
+    return transformToCEOBrief(synthesis, record);
+  }
+
   const audienceDescriptions = {
     TRUSTEE: 'A board trustee focused on governance, fiduciary responsibility, portfolio value, and institutional accountability. Needs plain language, quantified returns, and clear risk framing.',
     CEO: 'The Foundation CEO focused on strategic portfolio decisions, organisational positioning, and evidence-based leadership. Needs portfolio-level insight and next-action clarity.',
@@ -502,4 +742,6 @@ module.exports = {
   validateClassification,
   mergeClassification,
   generateKnowledgeProduct,
+  generateCanonicalSynthesis,
+  transformToCEOBrief,
 };
