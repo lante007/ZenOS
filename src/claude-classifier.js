@@ -530,6 +530,74 @@ async function generateCanonicalSynthesis(record, tenantId) {
 }
 
 /**
+ * Shared structural validator for Knowledge Product transformer output.
+ * Modelled on api/routes/synthesis.js's validateAndRepair pattern, but
+ * generalised across personas: takes a parsed (syntactically valid) JSON
+ * object and a list of required top-level fields for that audience's
+ * schema, and confirms none of them are missing, null, or empty. This is
+ * a distinct failure mode from raw JSON parse failure (malformed JSON
+ * syntax) -- that is handled separately, inside each transformer, before
+ * this validator ever runs. This validator catches syntactically valid
+ * JSON that is nonetheless structurally incomplete (e.g. the model
+ * silently dropped a required field), which would otherwise reach the
+ * frontend looking superficially fine but missing content.
+ *
+ * One repair attempt via haiku, same convention as the existing raw-JSON
+ * repair fallback already inside each transformer.
+ */
+async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLabel, rawText, client) {
+  const missing = requiredFields.filter(f => {
+    const v = parsed?.[f];
+    if (v === undefined || v === null) return true;
+    if (Array.isArray(v) && v.length === 0) return true;
+    if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) return true;
+    return false;
+  });
+
+  if (missing.length === 0) {
+    return { valid: true, data: parsed, repaired: false };
+  }
+
+  console.warn(`Knowledge Product schema incomplete for ${audienceLabel}: missing [${missing.join(', ')}]. Attempting repair.`);
+
+  try {
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 8000,
+      temperature: 0,
+      system: `You are a JSON repair tool. The following JSON object is missing required fields: ${missing.join(', ')}. Return the complete corrected JSON object with all missing fields populated based on the content already present in the object. No markdown, no explanation, raw JSON only.`,
+      messages: [{
+        role: 'user',
+        content: JSON.stringify(parsed),
+      }],
+    });
+    const repairText = (repair.content || []).find(b => b.type === 'text')?.text || '';
+    const m = repairText.match(/\{[\s\S]*\}/);
+    const repaired = JSON.parse(m[0]);
+
+    const stillMissing = requiredFields.filter(f => repaired?.[f] === undefined || repaired?.[f] === null);
+
+    if (stillMissing.length === 0) {
+      return { valid: true, data: repaired, repaired: true };
+    }
+
+    return { valid: false, data: repaired, repaired: true, stillMissing };
+  } catch (e) {
+    return { valid: false, data: parsed, repaired: false, error: e.message };
+  }
+}
+
+const CEO_REQUIRED_FIELDS = [
+  'bottom_line', 'decision_chain', 'evidence_quality_note', 'decision_utility',
+  'decision_boundary', 'strategic_risks', 'capital_view', 'leadership_questions',
+];
+
+const TRUSTEE_REQUIRED_FIELDS = [
+  'bottom_line', 'evidence_estate_health', 'capital_accountability', 'key_institutional_findings',
+  'material_risks_for_board_attention', 'decision_boundary', 'continuity_and_learning', 'board_consideration',
+];
+
+/**
  * CEO persona transformer. Takes the cached canonical synthesis (never the
  * raw record) and reshapes it into the CEO Evidence Brief schema. Does not
  * re-read the source document or re-derive evidence; may only select,
@@ -641,7 +709,13 @@ ${JSON.stringify(synthesis)}`;
     if (!repairMatch) throw new Error(`CEO brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
     parsed = JSON.parse(repairMatch[0]);
   }
-  return parsed;
+
+  const validated = await validateKnowledgeProductSchema(parsed, CEO_REQUIRED_FIELDS, 'CEO', text, client);
+  if (!validated.valid) {
+    // Log loudly, this should never reach a user silently broken.
+    console.error(`CEO brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
+  }
+  return validated.data;
 }
 
 /**
@@ -743,7 +817,13 @@ ${JSON.stringify(synthesis)}`;
     if (!repairMatch) throw new Error(`Trustee brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
     parsed = JSON.parse(repairMatch[0]);
   }
-  return parsed;
+
+  const validated = await validateKnowledgeProductSchema(parsed, TRUSTEE_REQUIRED_FIELDS, 'Trustee', text, client);
+  if (!validated.valid) {
+    // Log loudly, this should never reach a user silently broken.
+    console.error(`Trustee brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
+  }
+  return validated.data;
 }
 
 /**
@@ -876,4 +956,5 @@ module.exports = {
   generateCanonicalSynthesis,
   transformToCEOBrief,
   transformToTrusteeBrief,
+  validateKnowledgeProductSchema,
 };
