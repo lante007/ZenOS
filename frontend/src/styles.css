@@ -6495,3 +6495,65 @@ button.estate-stat-tile {
   color: var(--color-muted);
   margin: 4px 0 6px;
 }
+
+/* Governance Signal — final "30-second synthesis" closer for the Trustee
+   brief: a compact 2x2 dashboard-stat grid plus a single, more prominent
+   primary board question, styled to read distinctly from the earlier
+   board-consideration box since this is the last thing a Trustee reads. */
+.governance-signal-block h3 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-muted);
+  margin: 0 0 12px;
+}
+
+.governance-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 20px;
+  margin-bottom: 16px;
+}
+
+.gov-signal-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
+
+.gov-signal-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(245, 242, 238, 0.95);
+}
+
+.governance-primary-question {
+  padding: 14px 16px;
+  border-left: 3px solid #EF7218;
+  background: rgba(239, 114, 24, 0.08);
+  border-radius: 4px;
+}
+
+.gov-question-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #EF7218;
+  margin-bottom: 4px;
+}
+
+.gov-question-text {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: rgba(245, 242, 238, 0.95);
+}

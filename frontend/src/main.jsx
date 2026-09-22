@@ -3899,6 +3899,7 @@ function TrusteeKnowledgeBrief({ result }) {
   const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
   const continuityAndLearning = result?.continuity_and_learning || {};
   const unresolvedLegacyQuestions = Array.isArray(continuityAndLearning.unresolved_legacy_questions) ? continuityAndLearning.unresolved_legacy_questions.filter(Boolean).map(sanitiseDashes) : [];
+  const governanceSignal = result?.governance_signal || {};
 
   return (
     <section className="ask-results ceo-knowledge-brief">
@@ -4029,6 +4030,38 @@ function TrusteeKnowledgeBrief({ result }) {
             <span className="chain-question-text">
               {sanitiseDashes(result.board_consideration)}
             </span>
+          </div>
+        </section>
+      )}
+
+      {(governanceSignal.evidence_status || governanceSignal.financial_accountability || governanceSignal.causal_confidence || governanceSignal.continuity || governanceSignal.primary_board_question) && (
+        <section className="ask-answer-card ask-section">
+          <div className="governance-signal-block">
+            <h3>Governance Signal</h3>
+            <div className="governance-signal-grid">
+              <div>
+                <span className="gov-signal-label">Evidence status</span>
+                <span className="gov-signal-value">{sanitiseDashes(governanceSignal.evidence_status)}</span>
+              </div>
+              <div>
+                <span className="gov-signal-label">Financial accountability</span>
+                <span className="gov-signal-value">{sanitiseDashes(governanceSignal.financial_accountability)}</span>
+              </div>
+              <div>
+                <span className="gov-signal-label">Causal confidence</span>
+                <span className="gov-signal-value">{sanitiseDashes(governanceSignal.causal_confidence)}</span>
+              </div>
+              <div>
+                <span className="gov-signal-label">Continuity</span>
+                <span className="gov-signal-value">{sanitiseDashes(governanceSignal.continuity)}</span>
+              </div>
+            </div>
+            {governanceSignal.primary_board_question && (
+              <div className="governance-primary-question">
+                <span className="gov-question-label">Primary Board question</span>
+                <span className="gov-question-text">{sanitiseDashes(governanceSignal.primary_board_question)}</span>
+              </div>
+            )}
           </div>
         </section>
       )}

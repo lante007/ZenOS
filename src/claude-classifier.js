@@ -545,14 +545,16 @@ async function generateCanonicalSynthesis(record, tenantId) {
  * One repair attempt via haiku, same convention as the existing raw-JSON
  * repair fallback already inside each transformer.
  */
+function isFieldMissing(value) {
+  if (value === undefined || value === null) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) return true;
+  return false;
+}
+
 async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLabel, rawText, client) {
-  const missing = requiredFields.filter(f => {
-    const v = parsed?.[f];
-    if (v === undefined || v === null) return true;
-    if (Array.isArray(v) && v.length === 0) return true;
-    if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) return true;
-    return false;
-  });
+  const missing = requiredFields.filter(f => isFieldMissing(parsed?.[f]));
 
   if (missing.length === 0) {
     return { valid: true, data: parsed, repaired: false };
@@ -575,7 +577,7 @@ async function validateKnowledgeProductSchema(parsed, requiredFields, audienceLa
     const m = repairText.match(/\{[\s\S]*\}/);
     const repaired = JSON.parse(m[0]);
 
-    const stillMissing = requiredFields.filter(f => repaired?.[f] === undefined || repaired?.[f] === null);
+    const stillMissing = requiredFields.filter(f => isFieldMissing(repaired?.[f]));
 
     if (stillMissing.length === 0) {
       return { valid: true, data: repaired, repaired: true };
@@ -595,6 +597,7 @@ const CEO_REQUIRED_FIELDS = [
 const TRUSTEE_REQUIRED_FIELDS = [
   'bottom_line', 'evidence_estate_health', 'capital_accountability', 'key_institutional_findings',
   'material_risks_for_board_attention', 'decision_boundary', 'continuity_and_learning', 'board_consideration',
+  'governance_signal',
 ];
 
 /**
@@ -779,8 +782,17 @@ Return a single complete valid JSON object with this exact shape. Begin with { a
     "unresolved_legacy_questions": []
   },
   "board_consideration": "One to two sentences. The specific thing the Board should note, ask, or request, phrased as an oversight matter not an operational recommendation.",
+  "governance_signal": {
+    "evidence_status": "One to three words, e.g. Current / Aging / Dated / Incomplete, drawn from evidence_currency_detail's currency_band already in the canonical synthesis, do not invent a new assessment.",
+    "financial_accountability": "One to three words, e.g. Complete / Partial / Incomplete, based on whether capital_accountability's financial_capital field indicates cost data exists or is missing.",
+    "causal_confidence": "One to three words, e.g. Strong / Limited / Insufficient, based on whether the canonical synthesis claims include a comparison/control group design.",
+    "continuity": "One to three words, e.g. Confirmed / Unconfirmed / Unknown, based on continuity_and_learning's learning_compounding field.",
+    "primary_board_question": "The single most important question this record raises for Board oversight, phrased as a question. This should usually align with or sharpen board_consideration, not introduce an unrelated concern."
+  },
   "sources_summary": ""
 }
+
+GOVERNANCE_SIGNAL INSTRUCTIONS: This field must be derived entirely from content already present elsewhere in this same brief (evidence_estate_health, capital_accountability, key_institutional_findings, continuity_and_learning). Do not introduce any new assessment, finding, or claim not already stated elsewhere in the output. This is a compressed restatement for board scanning, not new analysis.
 
 CANONICAL SYNTHESIS (source of truth, do not contradict or extend):
 ${JSON.stringify(synthesis)}`;
