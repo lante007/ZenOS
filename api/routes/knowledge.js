@@ -153,11 +153,14 @@ Do not introduce findings not present in this synthesis.`;
     });
 
     if (isStructuredProduct) {
-      // CEO (Phase A). Response shape change is CEO-only: the structured
-      // synthesis-derived object is spread at the top level rather than
-      // nested under `brief`. external_use is hardcoded false here,
-      // deterministically, not read from anything the model could
-      // influence, per spec.
+      // CEO (Phase A) and Trustee (Phase B). Response shape change applies
+      // to any canonical-synthesis-plus-transformer audience: the
+      // structured synthesis-derived object is spread at the top level
+      // rather than nested under `brief`. external_use is hardcoded false
+      // here, deterministically, not read from anything the model could
+      // influence, per spec. DBE National/Provincial HOD/Co-Funder/Sector
+      // Peer remain on the legacy flat-text path below (claudeResponse is
+      // a string for those audiences, so isStructuredProduct is false).
       res.json({
         success: true,
         audience: audience.db,

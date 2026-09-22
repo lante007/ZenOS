@@ -6414,3 +6414,84 @@ button.estate-stat-tile {
   color: var(--color-muted);
   margin: 0 0 6px;
 }
+
+/* Knowledge Products Phase B — Trustee persona: evidence estate health,
+   capital accountability's accountability gap, continuity and learning */
+.evidence-estate-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.evidence-estate-row {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(245, 242, 238, 0.85);
+}
+
+.evidence-estate-label {
+  display: inline-block;
+  min-width: 90px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-muted);
+  margin-right: 8px;
+  vertical-align: top;
+}
+
+.accountability-gap-line {
+  margin: 10px 0 0;
+  padding: 8px 14px;
+  border-left: 2px solid #EF7218;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(245, 242, 238, 0.9);
+}
+
+.accountability-gap-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #EF7218;
+  margin-bottom: 2px;
+}
+
+.continuity-learning-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.continuity-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(245, 242, 238, 0.85);
+}
+
+.continuity-label {
+  display: inline-block;
+  min-width: 140px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-muted);
+  margin-right: 8px;
+  vertical-align: top;
+}
+
+.continuity-legacy-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-muted);
+  margin: 4px 0 6px;
+}

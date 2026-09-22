@@ -421,6 +421,8 @@ RULE 12: Never present absence of evidence as evidence of absence.
 
 RULE 13: Never convert association into causation.
 
+EVIDENCE_CURRENCY_DETAIL INSTRUCTIONS: In addition to the free-text evidence_currency assessment inside evidence_boundary, provide a structured currency signal. years_since_evidence is the number of whole years between the evidence's collection/endline date and today, or null if genuinely undeterminable from the record. currency_band is CURRENT for evidence less than roughly 2 years old, AGING for roughly 2 to 5 years old, and DATED for older than roughly 5 years or where programme/context has materially changed since. newer_evidence_exists is true only if the record itself references a more recent evaluation or data collection round, false if it explicitly does not, and unknown if the record gives no basis to determine this either way. Do not guess; use unknown rather than fabricate a determination the record does not support.
+
 Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
 
 {
@@ -432,6 +434,11 @@ Return a single complete valid JSON object with this exact shape. Begin with { a
     "evidence_currency": "year and age assessment",
     "study_design": "",
     "population_context": ""
+  },
+  "evidence_currency_detail": {
+    "years_since_evidence": null,
+    "currency_band": "CURRENT | AGING | DATED",
+    "newer_evidence_exists": "true | false | unknown"
   },
   "claims": [
     {
@@ -638,6 +645,108 @@ ${JSON.stringify(synthesis)}`;
 }
 
 /**
+ * Trustee persona transformer. Takes the cached canonical synthesis (never
+ * the raw record) and reshapes it into the Trustee Evidence Brief schema.
+ * Does not re-read the source document or re-derive evidence; may only
+ * select, prioritise, reword, and contextualise what is already in
+ * `synthesis`. Governance framing, not operational framing: this is the
+ * Board's oversight lens, distinct from the CEO's decision lens.
+ */
+async function transformToTrusteeBrief(synthesis, recordMeta) {
+  const system = `You are transforming an existing, fixed evidence synthesis into a Trustee Evidence Brief for the Zenex Board.
+
+CRITICAL: You are NOT performing new evidence synthesis. You may only select, prioritise, reword, and contextualise claims already present in the canonical synthesis object below. You may not invent or strengthen any claim.
+
+Focus on: Evidence Estate Health, capital accountability, institutional learning, continuity, ageing evidence, major evidence gaps, material strategic risks, whether learning is accumulating and being utilised.
+
+Surface issues requiring Board awareness, oversight, or endorsement. Do not descend into operational recommendations, that is the CEO's domain, not the Board's.
+
+Connect the record to the long-term stewardship question: is Zenex converting financial capital into evidence capital and, ultimately, decision capital?
+
+Do not imply an evidence gap represents programme failure unless the evidence supports that conclusion.
+
+Apply the same epistemic discipline as the canonical synthesis: preserve confidence levels exactly, use associative not causal language unless the study design supports causation, never convert absence of evidence into evidence of absence.
+
+Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
+
+{
+  "audience": "Trustee",
+  "external_use": false,
+  "title": "",
+  "date": "",
+  "evidence_estate_health": {
+    "coverage": "One to two sentences on how this record fits the broader evidence estate coverage question.",
+    "quality": "EQS tier and composite, in context.",
+    "currency": "How old is this evidence, and does that matter for the question the record addresses.",
+    "utilisation": "Is this the kind of evidence that gets used in decisions, or does it risk sitting unused."
+  },
+  "capital_accountability": {
+    "financial_capital": "",
+    "evidence_capital": "",
+    "decision_capital": "",
+    "accountability_gap": "What stewardship question this record's gaps raise for the Board specifically, distinct from an operational gap."
+  },
+  "bottom_line": "3-5 sentences, governance framing not operational framing.",
+  "key_institutional_findings": [
+    {
+      "finding": "",
+      "confidence": "HIGH | MODERATE | LOW",
+      "governance_relevance": "Why this matters for Board oversight specifically, not why it matters for programme decisions."
+    }
+  ],
+  "material_risks_for_board_attention": [],
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": []
+  },
+  "continuity_and_learning": {
+    "evidence_age": "",
+    "learning_compounding": "Is this record part of a growing, connected evidence base, or an isolated data point.",
+    "unresolved_legacy_questions": []
+  },
+  "board_consideration": "One to two sentences. The specific thing the Board should note, ask, or request, phrased as an oversight matter not an operational recommendation.",
+  "sources_summary": ""
+}
+
+CANONICAL SYNTHESIS (source of truth, do not contradict or extend):
+${JSON.stringify(synthesis)}`;
+
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 8000,
+    system,
+    messages: [{
+      role: 'user',
+      content: 'Generate the Trustee Evidence Brief.',
+    }],
+  });
+
+  const text = extractText(msg.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  let parsed = null;
+  try {
+    if (!match) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(match[0]);
+  } catch (err) {
+    // One repair attempt via haiku, same convention as transformToCEOBrief.
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 6000,
+      system: 'Return only valid complete JSON. No markdown.',
+      messages: [{
+        role: 'user',
+        content: 'Repair this JSON: ' + text.slice(0, 8000),
+      }],
+    });
+    const repairText = extractText(repair.content);
+    const repairMatch = repairText.match(/\{[\s\S]*\}/);
+    if (!repairMatch) throw new Error(`Trustee brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
+    parsed = JSON.parse(repairMatch[0]);
+  }
+  return parsed;
+}
+
+/**
  * Generate an audience-calibrated knowledge product from a classified record
  */
 async function generateKnowledgeProduct({ record, audience, tenant, synthesisContext = '' }) {
@@ -645,6 +754,10 @@ async function generateKnowledgeProduct({ record, audience, tenant, synthesisCon
   if (audienceKeyUpper === 'CEO') {
     const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
     return transformToCEOBrief(synthesis, record);
+  }
+  if (audienceKeyUpper === 'TRUSTEE') {
+    const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
+    return transformToTrusteeBrief(synthesis, record);
   }
 
   const audienceDescriptions = {
@@ -762,4 +875,5 @@ module.exports = {
   generateKnowledgeProduct,
   generateCanonicalSynthesis,
   transformToCEOBrief,
+  transformToTrusteeBrief,
 };

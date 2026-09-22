@@ -3889,6 +3889,153 @@ function CEOKnowledgeBrief({ result }) {
   );
 }
 
+function TrusteeKnowledgeBrief({ result }) {
+  const evidenceEstateHealth = result?.evidence_estate_health || {};
+  const capitalAccountability = result?.capital_accountability || {};
+  const keyInstitutionalFindings = Array.isArray(result?.key_institutional_findings) ? result.key_institutional_findings : [];
+  const materialRisks = Array.isArray(result?.material_risks_for_board_attention) ? result.material_risks_for_board_attention.filter(Boolean).map(sanitiseDashes) : [];
+  const decisionBoundary = result?.decision_boundary || {};
+  const supported = Array.isArray(decisionBoundary.supported) ? decisionBoundary.supported.filter(Boolean).map(sanitiseDashes) : [];
+  const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
+  const continuityAndLearning = result?.continuity_and_learning || {};
+  const unresolvedLegacyQuestions = Array.isArray(continuityAndLearning.unresolved_legacy_questions) ? continuityAndLearning.unresolved_legacy_questions.filter(Boolean).map(sanitiseDashes) : [];
+
+  return (
+    <section className="ask-results ceo-knowledge-brief">
+      <span className="internal-use-badge">Internal use</span>
+
+      {(evidenceEstateHealth.coverage || evidenceEstateHealth.quality || evidenceEstateHealth.currency || evidenceEstateHealth.utilisation) && (
+        <section className="ask-answer-card ask-section evidence-estate-section">
+          <h2 className="ask-section-title">Evidence Estate Health</h2>
+          <div className="evidence-estate-block">
+            {evidenceEstateHealth.coverage && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Coverage</span>{sanitiseDashes(evidenceEstateHealth.coverage)}</p>
+            )}
+            {evidenceEstateHealth.quality && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Quality</span>{sanitiseDashes(evidenceEstateHealth.quality)}</p>
+            )}
+            {evidenceEstateHealth.currency && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Currency</span>{sanitiseDashes(evidenceEstateHealth.currency)}</p>
+            )}
+            {evidenceEstateHealth.utilisation && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Utilisation</span>{sanitiseDashes(evidenceEstateHealth.utilisation)}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {result?.bottom_line && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Bottom Line</h2>
+          <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
+        </article>
+      )}
+
+      {(capitalAccountability.financial_capital || capitalAccountability.evidence_capital || capitalAccountability.decision_capital || capitalAccountability.accountability_gap) && (
+        <section className="ask-answer-card ask-section capital-view-section">
+          <h2 className="ask-section-title">Capital Accountability</h2>
+          <div className="capital-view-lines">
+            {capitalAccountability.financial_capital && <p><strong>Financial:</strong> {sanitiseDashes(capitalAccountability.financial_capital)}</p>}
+            {capitalAccountability.evidence_capital && <p><strong>Evidence:</strong> {sanitiseDashes(capitalAccountability.evidence_capital)}</p>}
+            {capitalAccountability.decision_capital && <p><strong>Decision:</strong> {sanitiseDashes(capitalAccountability.decision_capital)}</p>}
+          </div>
+          {capitalAccountability.accountability_gap && (
+            <p className="accountability-gap-line">
+              <span className="accountability-gap-label">Accountability gap</span>
+              {sanitiseDashes(capitalAccountability.accountability_gap)}
+            </p>
+          )}
+        </section>
+      )}
+
+      {keyInstitutionalFindings.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Key Institutional Findings</h2>
+          {keyInstitutionalFindings.map((entry, idx) => (
+            <div className="decision-chain-entry" key={idx}>
+              <div className="chain-evidence-row">
+                <span className="chain-evidence-text">
+                  {sanitiseDashes(entry?.finding)}
+                </span>
+                {entry?.confidence && (
+                  <span className={`confidence-pill confidence-${String(entry.confidence).toLowerCase()}`}>
+                    {entry.confidence}
+                  </span>
+                )}
+              </div>
+              <p className="chain-context-text">
+                {sanitiseDashes(entry?.governance_relevance)}
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {materialRisks.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Material Risks for Board Attention</h2>
+          <ul className="ask-plain-list">
+            {materialRisks.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+        <div className="decision-boundary-head">
+          <h2 className="ask-section-title">Decision Boundary</h2>
+        </div>
+        <div className="ask-decision-boundary">
+          <div>
+            <h3>What this supports</h3>
+            <ul className="ask-plain-list decision-supported">
+              {supported.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h3>What it does not yet support</h3>
+            <ul className="ask-plain-list decision-not-supported">
+              {notYetSupported.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {(continuityAndLearning.evidence_age || continuityAndLearning.learning_compounding || unresolvedLegacyQuestions.length > 0) && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Continuity and Learning</h2>
+          <div className="continuity-learning-block">
+            {continuityAndLearning.evidence_age && (
+              <p className="continuity-line"><span className="continuity-label">Evidence age</span>{sanitiseDashes(continuityAndLearning.evidence_age)}</p>
+            )}
+            {continuityAndLearning.learning_compounding && (
+              <p className="continuity-line"><span className="continuity-label">Learning compounding</span>{sanitiseDashes(continuityAndLearning.learning_compounding)}</p>
+            )}
+          </div>
+          {unresolvedLegacyQuestions.length > 0 && (
+            <>
+              <h3 className="continuity-legacy-title">Unresolved legacy questions</h3>
+              <ul className="ask-plain-list">
+                {unresolvedLegacyQuestions.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
+
+      {result?.board_consideration && (
+        <section className="ask-answer-card ask-section">
+          <div className="chain-question-box">
+            <span className="chain-question-label">Board Consideration</span>
+            <span className="chain-question-text">
+              {sanitiseDashes(result.board_consideration)}
+            </span>
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
 const CONFIDENCE_LABEL_VARIANTS = {
   'supported by strong evidence': 'strong',
   'supported by emerging evidence': 'emerging',
@@ -5694,6 +5841,7 @@ function KnowledgePage() {
     : selectedRecord?.programme_name;
   const safeBrief = briefContent(brief);
   const isCEOStructured = Boolean(briefProduct && briefProduct.audience === 'CEO' && typeof briefProduct.bottom_line === 'string');
+  const isTrusteeStructured = Boolean(briefProduct && briefProduct.audience === 'Trustee' && typeof briefProduct.bottom_line === 'string');
 
   if (!eligibleRecords.length && !synthesisId) {
     return (
@@ -5975,6 +6123,8 @@ function KnowledgePage() {
               </div>
             ) : isCEOStructured ? (
               <CEOKnowledgeBrief result={briefProduct} />
+            ) : isTrusteeStructured ? (
+              <TrusteeKnowledgeBrief result={briefProduct} />
             ) : safeBrief ? (
               <article className="report-card brief-output">
                 <header>
