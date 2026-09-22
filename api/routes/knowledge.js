@@ -25,7 +25,7 @@ const AUDIENCE_MAP = {
 // principle CEO/Trustee's hardcoded false already followed -- this is just
 // that same principle extended to more than one fixed value now that DBE
 // National (Phase C) is the first external_use: true persona.
-const EXTERNAL_USE_AUDIENCES = ['DBE_NATIONAL', 'PROVINCIAL_HOD'];
+const EXTERNAL_USE_AUDIENCES = ['DBE_NATIONAL', 'PROVINCIAL_HOD', 'CO_FUNDER'];
 
 function normalizeAudience(audience) {
   const key = String(audience || '').toUpperCase().replace(/[\s-]+/g, '_');
@@ -162,15 +162,15 @@ Do not introduce findings not present in this synthesis.`;
     });
 
     if (isStructuredProduct) {
-      // CEO (Phase A), Trustee (Phase B), DBE National + Provincial HOD
-      // (Phase C). Response shape change applies to any
+      // CEO (Phase A), Trustee (Phase B), DBE National + Provincial HOD +
+      // Co-Funder (Phase C). Response shape change applies to any
       // canonical-synthesis-plus-transformer audience: the structured
       // synthesis-derived object is spread at the top level rather than
       // nested under `brief`. external_use is resolved from
       // EXTERNAL_USE_AUDIENCES above, deterministically, not read from
-      // anything the model could influence, per spec. Co-Funder/Sector Peer
-      // remain on the legacy flat-text path below (claudeResponse is a
-      // string for those audiences, so isStructuredProduct is false).
+      // anything the model could influence, per spec. Sector Peer remains
+      // on the legacy flat-text path below (claudeResponse is a string for
+      // that audience, so isStructuredProduct is false).
       res.json({
         success: true,
         audience: audience.db,

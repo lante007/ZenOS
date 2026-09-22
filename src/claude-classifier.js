@@ -772,6 +772,40 @@ const PROVINCIAL_HOD_FIELD_SHAPES = {
   },
 };
 
+const CO_FUNDER_REQUIRED_FIELDS = [
+  'bottom_line', 'evidence_signal', 'evidence_strength', 'cost_and_value_evidence',
+  'additionality', 'decision_boundary', 'joint_learning_or_commissioning_options',
+];
+
+const CO_FUNDER_FIELD_SHAPES = {
+  evidence_signal: {
+    strength: 'string',
+    confidence: 'string',
+    currency: 'string',
+    evidence_stage: 'string',
+  },
+  evidence_strength: {
+    strongest_support: [],
+    mixed_or_limited_evidence: [],
+    important_unknowns: [],
+  },
+  cost_and_value_evidence: {
+    known: [],
+    unknown: [],
+    evidence_needed: [],
+  },
+  additionality: {
+    potential: 'string',
+    evidence: 'string',
+    uncertainty: 'string',
+  },
+  decision_boundary: {
+    supported: [],
+    not_yet_supported: [],
+    evidence_needed: [],
+  },
+};
+
 /**
  * CEO persona transformer. Takes the cached canonical synthesis (never the
  * raw record) and reshapes it into the CEO Evidence Brief schema. Does not
@@ -1227,6 +1261,110 @@ ${JSON.stringify(synthesis)}`;
   return validated.data;
 }
 
+async function transformToCoFunderBrief(synthesis, recordMeta) {
+  const system = `You are transforming an existing, fixed evidence synthesis into a Co-Funder Evidence Brief, shared with a potential or existing co-funder or investment partner.
+
+CRITICAL: You are NOT performing new evidence synthesis. You may only select, prioritise, reword, and contextualise claims already present in the canonical synthesis object below. You may not invent or strengthen any claim.
+
+Do not sell a programme, model, or investment opportunity. Present: evidence strength, methodological confidence, remaining uncertainty, evidence currency, cost/value information where available, additionality, implementation risks, evidence gaps, opportunities for joint learning.
+
+Be especially explicit about what is NOT known.
+
+RULE (NO COST-EFFECTIVENESS INFERENCE, STRICT): Do not infer cost-effectiveness from impact evidence alone. Impact evidence and cost evidence are separate questions. If the canonical synthesis's cost_and_value.known list is empty or sparse, state plainly that cost-effectiveness cannot currently be assessed, do not construct an implied cost-effectiveness case by juxtaposing strong impact language next to weak or absent cost data, that juxtaposition itself is a form of unsupported inference.
+
+RULE (NO PERSUASIVE INVESTMENT LANGUAGE, STRICT): Do not describe a model as ready for scale or co-investment unless the canonical synthesis's decision_boundary.supported explicitly contains that claim. Do not use language such as "compelling opportunity," "strong case for investment," "proven returns," or equivalent promotional framing. This brief's job is to let a funder assess where further investment could generate additional programme value, additional evidence value, or additional learning value, without presuming that further investment is warranted. State uncertainty as clearly as you would to a research peer, not as softly as you would to a prospect.
+
+Where cost or value data is unavailable, say so plainly rather than filling the gap with impact narrative.
+
+Apply the same epistemic discipline as the canonical synthesis: preserve confidence levels exactly, associative not causal language unless design supports causation, never convert absence of evidence into evidence of absence, no internal contradiction between sections.
+
+Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
+
+{
+  "audience": "Co_Funder",
+  "external_use": true,
+  "review_status": "Human review required",
+  "title": "",
+  "date": "",
+  "evidence_signal": {
+    "strength": "HIGH | MODERATE | LOW | INSUFFICIENT",
+    "confidence": "",
+    "currency": "",
+    "evidence_stage": ""
+  },
+  "bottom_line": "3-5 sentences, no promotional language, explicit about what is and is not known.",
+  "evidence_strength": {
+    "strongest_support": [],
+    "mixed_or_limited_evidence": [],
+    "important_unknowns": []
+  },
+  "models_or_approaches_with_strongest_support": [],
+  "uncertainty_and_risk": [],
+  "cost_and_value_evidence": {
+    "known": [],
+    "unknown": [],
+    "evidence_needed": []
+  },
+  "additionality": {
+    "potential": "What additional value further investment or evidence could plausibly create, stated as a genuine open question not a pitch.",
+    "evidence": "What in the canonical synthesis actually supports this potential, if anything.",
+    "uncertainty": "What remains genuinely unknown about additionality."
+  },
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": [],
+    "evidence_needed": []
+  },
+  "joint_learning_or_commissioning_options": [],
+  "sources_summary": ""
+}
+
+Do NOT include any field belonging to CEO, Trustee, DBE National, or Provincial HOD's schemas.
+
+CANONICAL SYNTHESIS (source of truth, do not contradict or extend):
+${JSON.stringify(synthesis)}`;
+
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 8000,
+    system,
+    messages: [{
+      role: 'user',
+      content: 'Generate the Co-Funder Evidence Brief.',
+    }],
+  });
+
+  const text = extractText(msg.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  let parsed = null;
+  try {
+    if (!match) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(match[0]);
+  } catch (err) {
+    // One repair attempt via haiku, same convention as the other four
+    // canonical-synthesis-plus-transformer personas.
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 6000,
+      system: 'Return only valid complete JSON. No markdown.',
+      messages: [{
+        role: 'user',
+        content: 'Repair this JSON: ' + text.slice(0, 8000),
+      }],
+    });
+    const repairText = extractText(repair.content);
+    const repairMatch = repairText.match(/\{[\s\S]*\}/);
+    if (!repairMatch) throw new Error(`Co-Funder brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
+    parsed = JSON.parse(repairMatch[0]);
+  }
+
+  const validated = await validateKnowledgeProductSchema(parsed, CO_FUNDER_REQUIRED_FIELDS, 'Co_Funder', text, client, CO_FUNDER_FIELD_SHAPES);
+  if (!validated.valid) {
+    console.error(`Co-Funder brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
+  }
+  return validated.data;
+}
+
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
@@ -1247,6 +1385,10 @@ async function generateKnowledgeProduct({ record, audience, tenant, synthesisCon
   if (audienceKeyUpper === 'PROVINCIAL_HOD') {
     const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
     return transformToProvincialHODBrief(synthesis, record);
+  }
+  if (audienceKeyUpper === 'CO_FUNDER') {
+    const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
+    return transformToCoFunderBrief(synthesis, record);
   }
 
   const audienceDescriptions = {
@@ -1367,5 +1509,6 @@ module.exports = {
   transformToTrusteeBrief,
   transformToDBENationalBrief,
   transformToProvincialHODBrief,
+  transformToCoFunderBrief,
   validateKnowledgeProductSchema,
 };

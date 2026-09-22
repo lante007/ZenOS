@@ -4409,6 +4409,188 @@ function ProvincialHODKnowledgeBrief({ result }) {
   );
 }
 
+function CoFunderKnowledgeBrief({ result }) {
+  const evidenceSignal = result?.evidence_signal || {};
+  const evidenceStrength = result?.evidence_strength || {};
+  const strongestSupport = Array.isArray(evidenceStrength.strongest_support) ? evidenceStrength.strongest_support.filter(Boolean).map(sanitiseDashes) : [];
+  const mixedOrLimited = Array.isArray(evidenceStrength.mixed_or_limited_evidence) ? evidenceStrength.mixed_or_limited_evidence.filter(Boolean).map(sanitiseDashes) : [];
+  const importantUnknowns = Array.isArray(evidenceStrength.important_unknowns) ? evidenceStrength.important_unknowns.filter(Boolean).map(sanitiseDashes) : [];
+  const modelsWithSupport = Array.isArray(result?.models_or_approaches_with_strongest_support) ? result.models_or_approaches_with_strongest_support.filter(Boolean).map(sanitiseDashes) : [];
+  const uncertaintyAndRisk = Array.isArray(result?.uncertainty_and_risk) ? result.uncertainty_and_risk.filter(Boolean).map(sanitiseDashes) : [];
+  const costAndValue = result?.cost_and_value_evidence || {};
+  const costKnown = Array.isArray(costAndValue.known) ? costAndValue.known.filter(Boolean).map(sanitiseDashes) : [];
+  const costUnknown = Array.isArray(costAndValue.unknown) ? costAndValue.unknown.filter(Boolean).map(sanitiseDashes) : [];
+  const costEvidenceNeeded = Array.isArray(costAndValue.evidence_needed) ? costAndValue.evidence_needed.filter(Boolean).map(sanitiseDashes) : [];
+  const additionality = result?.additionality || {};
+  const decisionBoundary = result?.decision_boundary || {};
+  const supported = Array.isArray(decisionBoundary.supported) ? decisionBoundary.supported.filter(Boolean).map(sanitiseDashes) : [];
+  const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
+  const evidenceNeeded = Array.isArray(decisionBoundary.evidence_needed) ? decisionBoundary.evidence_needed.filter(Boolean).map(sanitiseDashes) : [];
+  const jointLearningOptions = Array.isArray(result?.joint_learning_or_commissioning_options) ? result.joint_learning_or_commissioning_options.filter(Boolean).map(sanitiseDashes) : [];
+
+  return (
+    <section className="ask-results ceo-knowledge-brief">
+      <ExternalUseBadge externalUse={result?.external_use} reviewStatus={result?.review_status} />
+
+      {(evidenceSignal.strength || evidenceSignal.confidence || evidenceSignal.currency || evidenceSignal.evidence_stage) && (
+        <section className="ask-answer-card ask-section evidence-estate-section">
+          <h2 className="ask-section-title">Evidence Signal</h2>
+          <div className="evidence-estate-block">
+            {evidenceSignal.strength && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Strength</span>{sanitiseDashes(evidenceSignal.strength)}</p>
+            )}
+            {evidenceSignal.confidence && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Confidence</span>{sanitiseDashes(evidenceSignal.confidence)}</p>
+            )}
+            {evidenceSignal.currency && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Currency</span>{sanitiseDashes(evidenceSignal.currency)}</p>
+            )}
+            {evidenceSignal.evidence_stage && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Stage</span>{sanitiseDashes(evidenceSignal.evidence_stage)}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {result?.bottom_line && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Bottom Line</h2>
+          <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
+        </article>
+      )}
+
+      {(strongestSupport.length > 0 || mixedOrLimited.length > 0 || importantUnknowns.length > 0) && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Evidence Strength</h2>
+          <div className="ask-decision-boundary">
+            <div>
+              <h3>Strongest support</h3>
+              <ul className="ask-plain-list">
+                {strongestSupport.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Mixed or limited evidence</h3>
+              <ul className="ask-plain-list">
+                {mixedOrLimited.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Important unknowns</h3>
+              <ul className="ask-plain-list">
+                {importantUnknowns.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {modelsWithSupport.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Models or Approaches with Strongest Support</h2>
+          <ul className="ask-plain-list">
+            {modelsWithSupport.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {uncertaintyAndRisk.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Uncertainty and Risk</h2>
+          <div className="chain-question-box">
+            <span className="chain-question-label">Caution</span>
+            <ul className="ask-plain-list">
+              {uncertaintyAndRisk.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {(costKnown.length > 0 || costUnknown.length > 0 || costEvidenceNeeded.length > 0) && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Cost and Value Evidence</h2>
+          <div className="ask-decision-boundary">
+            <div>
+              <h3>Known</h3>
+              <ul className="ask-plain-list">
+                {costKnown.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Unknown</h3>
+              <ul className="ask-plain-list">
+                {costUnknown.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Evidence needed</h3>
+              <ul className="ask-plain-list">
+                {costEvidenceNeeded.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {(additionality.potential || additionality.evidence || additionality.uncertainty) && (
+        <section className="ask-answer-card ask-section evidence-estate-section">
+          <h2 className="ask-section-title">Additionality</h2>
+          <div className="evidence-estate-block">
+            {additionality.potential && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Potential</span>{sanitiseDashes(additionality.potential)}</p>
+            )}
+            {additionality.evidence && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Evidence</span>{sanitiseDashes(additionality.evidence)}</p>
+            )}
+            {additionality.uncertainty && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Uncertainty</span>{sanitiseDashes(additionality.uncertainty)}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {(supported.length > 0 || notYetSupported.length > 0 || evidenceNeeded.length > 0) && (
+        <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+          <div className="decision-boundary-head">
+            <h2 className="ask-section-title">Decision Boundary</h2>
+          </div>
+          <div className="ask-decision-boundary">
+            <div>
+              <h3>What this supports</h3>
+              <ul className="ask-plain-list decision-supported">
+                {supported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>What it does not yet support</h3>
+              <ul className="ask-plain-list decision-not-supported">
+                {notYetSupported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Evidence needed</h3>
+              <ul className="ask-plain-list decision-evidence-needed">
+                {evidenceNeeded.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {jointLearningOptions.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <div className="collaboration-box">
+            <span className="collaboration-label">Joint Learning or Commissioning Options</span>
+            <ul className="ask-plain-list">
+              {jointLearningOptions.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
 const CONFIDENCE_LABEL_VARIANTS = {
   'supported by strong evidence': 'strong',
   'supported by emerging evidence': 'emerging',
@@ -6217,6 +6399,7 @@ function KnowledgePage() {
   const isTrusteeStructured = Boolean(briefProduct && briefProduct.audience === 'Trustee' && typeof briefProduct.bottom_line === 'string');
   const isDBENationalStructured = Boolean(briefProduct && briefProduct.audience === 'DBE_National' && typeof briefProduct.bottom_line === 'string');
   const isProvincialHODStructured = Boolean(briefProduct && briefProduct.audience === 'Provincial_HOD' && typeof briefProduct.bottom_line === 'string');
+  const isCoFunderStructured = Boolean(briefProduct && briefProduct.audience === 'Co_Funder' && typeof briefProduct.bottom_line === 'string');
 
   if (!eligibleRecords.length && !synthesisId) {
     return (
@@ -6504,6 +6687,8 @@ function KnowledgePage() {
               <DBENationalKnowledgeBrief result={briefProduct} />
             ) : isProvincialHODStructured ? (
               <ProvincialHODKnowledgeBrief result={briefProduct} />
+            ) : isCoFunderStructured ? (
+              <CoFunderKnowledgeBrief result={briefProduct} />
             ) : safeBrief ? (
               <article className="report-card brief-output">
                 <header>
