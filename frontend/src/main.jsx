@@ -3889,6 +3889,28 @@ function CEOKnowledgeBrief({ result }) {
   );
 }
 
+/**
+ * Generic external/internal-use badge for Knowledge Products. Reads
+ * external_use and review_status directly off the brief result rather
+ * than being persona-hardcoded, so it can be reused unchanged by
+ * Provincial HOD, Co-Funder, and Sector Peer once those personas also
+ * move to the canonical-synthesis-plus-transformer path. DBE National
+ * (Phase C) is the first persona to use the external_use: true branch;
+ * amber/orange styling is a workflow-status signal (human review
+ * required before external release), not an error state, hence
+ * deliberately distinct from the red error styling used elsewhere.
+ */
+function ExternalUseBadge({ externalUse, reviewStatus }) {
+  if (externalUse) {
+    return (
+      <span className="external-use-badge">
+        External use: {String(reviewStatus || 'Human review required').toUpperCase()}
+      </span>
+    );
+  }
+  return <span className="internal-use-badge">Internal use</span>;
+}
+
 function TrusteeKnowledgeBrief({ result }) {
   const evidenceEstateHealth = result?.evidence_estate_health || {};
   const capitalAccountability = result?.capital_accountability || {};
@@ -4062,6 +4084,163 @@ function TrusteeKnowledgeBrief({ result }) {
                 <span className="gov-question-text">{sanitiseDashes(governanceSignal.primary_board_question)}</span>
               </div>
             )}
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
+function DBENationalKnowledgeBrief({ result }) {
+  const systemSignal = result?.system_signal || {};
+  const whatTheEvidenceShows = Array.isArray(result?.what_the_evidence_shows) ? result.what_the_evidence_shows : [];
+  const implementationConditions = Array.isArray(result?.implementation_conditions) ? result.implementation_conditions.filter(Boolean).map(sanitiseDashes) : [];
+  const scalabilityAndTransferability = result?.scalability_and_transferability || {};
+  const demonstrated = Array.isArray(scalabilityAndTransferability.demonstrated) ? scalabilityAndTransferability.demonstrated.filter(Boolean).map(sanitiseDashes) : [];
+  const uncertain = Array.isArray(scalabilityAndTransferability.uncertain) ? scalabilityAndTransferability.uncertain.filter(Boolean).map(sanitiseDashes) : [];
+  const evidenceNeeded = Array.isArray(scalabilityAndTransferability.evidence_needed) ? scalabilityAndTransferability.evidence_needed.filter(Boolean).map(sanitiseDashes) : [];
+  const policyRelevantGaps = Array.isArray(result?.policy_relevant_gaps) ? result.policy_relevant_gaps.filter(Boolean).map(sanitiseDashes) : [];
+  const decisionBoundary = result?.decision_boundary || {};
+  const supported = Array.isArray(decisionBoundary.supported) ? decisionBoundary.supported.filter(Boolean).map(sanitiseDashes) : [];
+  const notYetSupported = Array.isArray(decisionBoundary.not_yet_supported) ? decisionBoundary.not_yet_supported.filter(Boolean).map(sanitiseDashes) : [];
+  const collaboration = Array.isArray(result?.possible_collaboration_or_evidence_sharing) ? result.possible_collaboration_or_evidence_sharing.filter(Boolean).map(sanitiseDashes) : [];
+
+  return (
+    <section className="ask-results ceo-knowledge-brief">
+      <ExternalUseBadge externalUse={result?.external_use} reviewStatus={result?.review_status} />
+
+      {(systemSignal.evidence_confidence || systemSignal.evidence_currency || systemSignal.evidence_stage || systemSignal.transferability) && (
+        <section className="ask-answer-card ask-section evidence-estate-section">
+          <h2 className="ask-section-title">System Signal</h2>
+          <div className="evidence-estate-block">
+            {systemSignal.evidence_confidence && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Confidence</span>{sanitiseDashes(systemSignal.evidence_confidence)}</p>
+            )}
+            {systemSignal.evidence_currency && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Currency</span>{sanitiseDashes(systemSignal.evidence_currency)}</p>
+            )}
+            {systemSignal.evidence_stage && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Stage</span>{sanitiseDashes(systemSignal.evidence_stage)}</p>
+            )}
+            {systemSignal.transferability && (
+              <p className="evidence-estate-row"><span className="evidence-estate-label">Transferability</span>{sanitiseDashes(systemSignal.transferability)}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {result?.bottom_line && (
+        <article className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Bottom Line</h2>
+          <p className="ask-bottom-line-text">{sanitiseDashes(result.bottom_line)}</p>
+        </article>
+      )}
+
+      {whatTheEvidenceShows.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">What the Evidence Shows</h2>
+          {whatTheEvidenceShows.map((entry, idx) => (
+            <div className="decision-chain-entry" key={idx}>
+              <div className="chain-evidence-row">
+                <span className="chain-evidence-text">
+                  {sanitiseDashes(entry?.finding)}
+                </span>
+                {entry?.confidence && (
+                  <span className={`confidence-pill confidence-${String(entry.confidence).toLowerCase()}`}>
+                    {entry.confidence}
+                  </span>
+                )}
+              </div>
+              {entry?.context_tested && (
+                <p className="chain-context-text">
+                  {sanitiseDashes(entry.context_tested)}
+                </p>
+              )}
+              {entry?.system_relevance && (
+                <p className="chain-context-text">
+                  {sanitiseDashes(entry.system_relevance)}
+                </p>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {implementationConditions.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Implementation Conditions</h2>
+          <ul className="ask-plain-list">
+            {implementationConditions.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {(demonstrated.length > 0 || uncertain.length > 0 || evidenceNeeded.length > 0) && (
+        <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+          <div className="decision-boundary-head">
+            <h2 className="ask-section-title">Scalability and Transferability</h2>
+          </div>
+          <div className="ask-decision-boundary">
+            <div>
+              <h3>Demonstrated</h3>
+              <ul className="ask-plain-list decision-supported">
+                {demonstrated.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Uncertain</h3>
+              <ul className="ask-plain-list decision-not-supported">
+                {uncertain.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>Evidence needed</h3>
+              <ul className="ask-plain-list decision-evidence-needed">
+                {evidenceNeeded.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {policyRelevantGaps.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <h2 className="ask-section-title">Policy-Relevant Gaps</h2>
+          <ul className="ask-plain-list">
+            {policyRelevantGaps.map((line, idx) => <li key={idx}>{line}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {(supported.length > 0 || notYetSupported.length > 0) && (
+        <section className="ask-answer-card ask-section decision-boundary-section decision-boundary-centrepiece">
+          <div className="decision-boundary-head">
+            <h2 className="ask-section-title">Decision Boundary</h2>
+          </div>
+          <div className="ask-decision-boundary">
+            <div>
+              <h3>What this supports</h3>
+              <ul className="ask-plain-list decision-supported">
+                {supported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h3>What it does not yet support</h3>
+              <ul className="ask-plain-list decision-not-supported">
+                {notYetSupported.map((line, idx) => <li key={idx}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {collaboration.length > 0 && (
+        <section className="ask-answer-card ask-section">
+          <div className="collaboration-box">
+            <span className="collaboration-label">Possible Collaboration or Evidence Sharing</span>
+            <ul className="ask-plain-list">
+              {collaboration.map((line, idx) => <li key={idx}>{line}</li>)}
+            </ul>
           </div>
         </section>
       )}
@@ -5875,6 +6054,7 @@ function KnowledgePage() {
   const safeBrief = briefContent(brief);
   const isCEOStructured = Boolean(briefProduct && briefProduct.audience === 'CEO' && typeof briefProduct.bottom_line === 'string');
   const isTrusteeStructured = Boolean(briefProduct && briefProduct.audience === 'Trustee' && typeof briefProduct.bottom_line === 'string');
+  const isDBENationalStructured = Boolean(briefProduct && briefProduct.audience === 'DBE_National' && typeof briefProduct.bottom_line === 'string');
 
   if (!eligibleRecords.length && !synthesisId) {
     return (
@@ -6158,6 +6338,8 @@ function KnowledgePage() {
               <CEOKnowledgeBrief result={briefProduct} />
             ) : isTrusteeStructured ? (
               <TrusteeKnowledgeBrief result={briefProduct} />
+            ) : isDBENationalStructured ? (
+              <DBENationalKnowledgeBrief result={briefProduct} />
             ) : safeBrief ? (
               <article className="report-card brief-output">
                 <header>

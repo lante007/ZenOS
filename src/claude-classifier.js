@@ -722,6 +722,30 @@ const TRUSTEE_FIELD_SHAPES = {
   },
 };
 
+const DBE_NATIONAL_REQUIRED_FIELDS = [
+  'bottom_line', 'system_signal', 'what_the_evidence_shows',
+  'scalability_and_transferability', 'policy_relevant_gaps', 'decision_boundary',
+  'possible_collaboration_or_evidence_sharing',
+];
+
+const DBE_NATIONAL_FIELD_SHAPES = {
+  system_signal: {
+    evidence_confidence: 'string',
+    evidence_currency: 'string',
+    evidence_stage: 'string',
+    transferability: 'string',
+  },
+  scalability_and_transferability: {
+    demonstrated: [],
+    uncertain: [],
+    evidence_needed: [],
+  },
+  decision_boundary: {
+    supported: [],
+    not_yet_supported: [],
+  },
+};
+
 /**
  * CEO persona transformer. Takes the cached canonical synthesis (never the
  * raw record) and reshapes it into the CEO Evidence Brief schema. Does not
@@ -961,6 +985,117 @@ ${JSON.stringify(synthesis)}`;
 }
 
 /**
+ * DBE National persona transformer (Phase C). Takes the cached canonical
+ * synthesis (never the raw record) and reshapes it into the DBE National
+ * Knowledge Product schema. Does not re-read the source document or
+ * re-derive evidence; may only select, prioritise, reword, and
+ * contextualise what is already in `synthesis`. This is the first
+ * external_use: true persona: a shared-evidence brief for a policy
+ * partner (Department of Basic Education, national level), not an
+ * internal Zenex decision document, hence the strict scope/transferability
+ * and non-oppositional stance rules below.
+ */
+async function transformToDBENationalBrief(synthesis, recordMeta) {
+  const system = `You are transforming an existing, fixed evidence synthesis into a DBE National Evidence Brief, shared with the Department of Basic Education at national level.
+
+CRITICAL: You are NOT performing new evidence synthesis. You may only select, prioritise, reword, and contextualise claims already present in the canonical synthesis object below. You may not invent or strengthen any claim.
+
+Frame evidence in terms of: system improvement, national relevance, scalability, implementation conditions, transferability, curriculum and learning priorities, teacher support, mother-tongue based bilingual education where relevant, learning backlogs where relevant, evidence gaps relevant to national policy.
+
+Prioritise evidence demonstrated in South African public-school contexts.
+
+RULE (SCOPE, STRICT): Clearly distinguish evidence demonstrated in the specific setting tested from evidence demonstrated at broader or national scale. Do not recommend, endorse, or imply national adoption, scaling, or integration into any national programme or framework unless the canonical synthesis's decision_boundary explicitly supports that interpretation for transferability beyond the tested context. A study conducted in a small number of schools in one province, with no comparison group, cannot on its own justify language such as "warrants integration into the national framework" or "should be adopted at scale." If the evidence does not support a national-scale claim, say so plainly rather than softening it into advocacy language.
+
+RULE (NON-OPPOSITIONAL STANCE): Do not introduce internal Zenex portfolio politics, internal funding considerations, or organisational strategy unless explicitly relevant to the shared evidence question. Do not present Zenex's interpretation as government policy. Maintain a collaborative and non-oppositional stance throughout, this brief is shared evidence for a policy partner, not a recommendation Zenex is making to itself.
+
+Apply the same epistemic discipline as the canonical synthesis: preserve confidence levels exactly, use associative not causal language unless the study design supports causation, never convert absence of evidence into evidence of absence, never let two sections of the same brief contradict each other, if you state a limitation in one section it must be honoured consistently in every other section, particularly between the evidence findings and any decision-relevant framing later in the brief.
+
+Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
+
+{
+  "audience": "DBE_National",
+  "external_use": true,
+  "review_status": "Human review required",
+  "title": "",
+  "date": "",
+  "system_signal": {
+    "evidence_confidence": "HIGH | MODERATE | LOW | INSUFFICIENT",
+    "evidence_currency": "",
+    "evidence_stage": "",
+    "transferability": "One to two sentences, plain statement of what is and is not yet demonstrated beyond the tested context."
+  },
+  "bottom_line": "3-5 sentences, collaborative framing, no advocacy language.",
+  "what_the_evidence_shows": [
+    {
+      "finding": "",
+      "confidence": "HIGH | MODERATE | LOW",
+      "context_tested": "Exactly where and with whom this was demonstrated.",
+      "system_relevance": "Why this matters for the national system, stated without implying the finding is already proven at that scale."
+    }
+  ],
+  "implementation_conditions": [],
+  "scalability_and_transferability": {
+    "demonstrated": [],
+    "uncertain": [],
+    "evidence_needed": []
+  },
+  "policy_relevant_gaps": [],
+  "decision_boundary": {
+    "supported": [],
+    "not_yet_supported": []
+  },
+  "possible_collaboration_or_evidence_sharing": [],
+  "sources_summary": ""
+}
+
+Do NOT include: decision_chain, evidence_quality_note, decision_utility, strategic_risks, capital_view, leadership_questions (all CEO-only), evidence_estate_health, capital_accountability, key_institutional_findings, material_risks_for_board_attention, continuity_and_learning, governance_signal, board_consideration (all Trustee-only).
+
+CANONICAL SYNTHESIS (source of truth, do not contradict or extend):
+${JSON.stringify(synthesis)}`;
+
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 8000,
+    system,
+    messages: [{
+      role: 'user',
+      content: 'Generate the DBE National Evidence Brief.',
+    }],
+  });
+
+  const text = extractText(msg.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  let parsed = null;
+  try {
+    if (!match) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(match[0]);
+  } catch (err) {
+    // One repair attempt via haiku, same convention as transformToCEOBrief
+    // and transformToTrusteeBrief.
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 6000,
+      system: 'Return only valid complete JSON. No markdown.',
+      messages: [{
+        role: 'user',
+        content: 'Repair this JSON: ' + text.slice(0, 8000),
+      }],
+    });
+    const repairText = extractText(repair.content);
+    const repairMatch = repairText.match(/\{[\s\S]*\}/);
+    if (!repairMatch) throw new Error(`DBE National brief JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
+    parsed = JSON.parse(repairMatch[0]);
+  }
+
+  const validated = await validateKnowledgeProductSchema(parsed, DBE_NATIONAL_REQUIRED_FIELDS, 'DBE_National', text, client, DBE_NATIONAL_FIELD_SHAPES);
+  if (!validated.valid) {
+    // Log loudly, this should never reach a user silently broken.
+    console.error(`DBE National brief validation FAILED for record ${recordMeta.id} after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
+  }
+  return validated.data;
+}
+
+/**
  * Generate an audience-calibrated knowledge product from a classified record
  */
 async function generateKnowledgeProduct({ record, audience, tenant, synthesisContext = '' }) {
@@ -972,6 +1107,10 @@ async function generateKnowledgeProduct({ record, audience, tenant, synthesisCon
   if (audienceKeyUpper === 'TRUSTEE') {
     const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
     return transformToTrusteeBrief(synthesis, record);
+  }
+  if (audienceKeyUpper === 'DBE_NATIONAL') {
+    const synthesis = await generateCanonicalSynthesis(record, tenant.slug);
+    return transformToDBENationalBrief(synthesis, record);
   }
 
   const audienceDescriptions = {
@@ -1090,5 +1229,6 @@ module.exports = {
   generateCanonicalSynthesis,
   transformToCEOBrief,
   transformToTrusteeBrief,
+  transformToDBENationalBrief,
   validateKnowledgeProductSchema,
 };

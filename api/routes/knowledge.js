@@ -18,6 +18,15 @@ const AUDIENCE_MAP = {
   SECTOR_PEER: 'Sector Peer',
 };
 
+// Deterministic, audience-keyed external_use lookup for the structured
+// (canonical-synthesis-plus-transformer) response path below. Kept as an
+// explicit list here rather than reading external_use back off
+// claudeResponse, same "not read from anything the model could influence"
+// principle CEO/Trustee's hardcoded false already followed -- this is just
+// that same principle extended to more than one fixed value now that DBE
+// National (Phase C) is the first external_use: true persona.
+const EXTERNAL_USE_AUDIENCES = ['DBE_NATIONAL'];
+
 function normalizeAudience(audience) {
   const key = String(audience || '').toUpperCase().replace(/[\s-]+/g, '_');
   return AUDIENCE_MAP[key] ? { db: key, ai: AUDIENCE_MAP[key] } : null;
@@ -153,14 +162,15 @@ Do not introduce findings not present in this synthesis.`;
     });
 
     if (isStructuredProduct) {
-      // CEO (Phase A) and Trustee (Phase B). Response shape change applies
-      // to any canonical-synthesis-plus-transformer audience: the
-      // structured synthesis-derived object is spread at the top level
-      // rather than nested under `brief`. external_use is hardcoded false
-      // here, deterministically, not read from anything the model could
-      // influence, per spec. DBE National/Provincial HOD/Co-Funder/Sector
-      // Peer remain on the legacy flat-text path below (claudeResponse is
-      // a string for those audiences, so isStructuredProduct is false).
+      // CEO (Phase A), Trustee (Phase B), DBE National (Phase C). Response
+      // shape change applies to any canonical-synthesis-plus-transformer
+      // audience: the structured synthesis-derived object is spread at the
+      // top level rather than nested under `brief`. external_use is
+      // resolved from EXTERNAL_USE_AUDIENCES above, deterministically, not
+      // read from anything the model could influence, per spec. Provincial
+      // HOD/Co-Funder/Sector Peer remain on the legacy flat-text path below
+      // (claudeResponse is a string for those audiences, so
+      // isStructuredProduct is false).
       res.json({
         success: true,
         audience: audience.db,
@@ -169,7 +179,7 @@ Do not introduce findings not present in this synthesis.`;
         source_record_count: synthesisId ? sourceRecords.length : 1,
         programme_name: programmeName,
         ...claudeResponse,
-        external_use: false,
+        external_use: EXTERNAL_USE_AUDIENCES.includes(audience.db),
         generated_at: generatedAt,
         model: 'claude-sonnet-4-6',
         word_count: wordCount,
