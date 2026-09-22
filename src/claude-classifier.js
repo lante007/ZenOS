@@ -421,6 +421,8 @@ RULE 12: Never present absence of evidence as evidence of absence.
 
 RULE 13: Never convert association into causation.
 
+Do not cite internal scoring weights, formula components, or numeric fields you cannot explain in plain language. If a number's meaning is not self-evident from context, omit it rather than state it.
+
 EVIDENCE_CURRENCY_DETAIL INSTRUCTIONS: In addition to the free-text evidence_currency assessment inside evidence_boundary, provide a structured currency signal. years_since_evidence is the number of whole years between the evidence's collection/endline date and today, or null if genuinely undeterminable from the record. currency_band is CURRENT for evidence less than roughly 2 years old, AGING for roughly 2 to 5 years old, and DATED for older than roughly 5 years or where programme/context has materially changed since. newer_evidence_exists is true only if the record itself references a more recent evaluation or data collection round, false if it explicitly does not, and unknown if the record gives no basis to determine this either way. Do not guess; use unknown rather than fabricate a determination the record does not support.
 
 Return a single complete valid JSON object with this exact shape. Begin with { and end with }. No markdown, no preamble.
@@ -503,13 +505,49 @@ async function generateCanonicalSynthesis(record, tenantId) {
     return cached.rows[0].synthesis;
   }
 
+  // Explicit allowlist of evidence-content fields only. Excludes internal
+  // EQS scoring/weight fields (policy_relevance_weight, policy_relevance_score,
+  // half_life_weight, dim_* rigour/quality dimension scores, etc) that exist
+  // on the raw record but are formula components, not evidence content --
+  // passing them here previously let the model cite them in prose (e.g.
+  // "policy alignment (0.80)") without any instruction on how to interpret
+  // or explain them. Superset of synthesis.js's buildCorpusSummary allowlist
+  // (adds total_cost_rand, sample_size_learners, comparison_group, which
+  // Knowledge Products' capital_accountability/decision_boundary sections
+  // require but Ask Zenex's cross-corpus summary does not).
+  const canonicalSynthesisInput = {
+    id: record.id,
+    programme_name: record.programme_name,
+    document_type: record.document_type,
+    evaluation_subtype: record.evaluation_subtype,
+    key_finding_1: record.key_finding_1,
+    key_finding_2: record.key_finding_2,
+    key_finding_3: record.key_finding_3,
+    eqs_composite: record.eqs_composite,
+    eqs_tier: record.eqs_tier,
+    phase: record.phase,
+    provinces: record.provinces,
+    year: record.year,
+    methodology_description: record.methodology_description,
+    evidence_gap_1: record.evidence_gap_1,
+    effect_size_composite: record.effect_size_composite,
+    effect_direction: record.effect_direction,
+    implementing_organisation_name: record.implementing_organisation_name,
+    responsible_pm: record.responsible_pm,
+    baseline_available: record.baseline_available,
+    endline_available: record.endline_available,
+    total_cost_rand: record.total_cost_rand,
+    sample_size_learners: record.sample_size_learners,
+    comparison_group: record.comparison_group,
+  };
+
   const msg = await client.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 8000,
     system: CANONICAL_SYNTHESIS_SYSTEM_PROMPT,
     messages: [{
       role: 'user',
-      content: `Record: ${JSON.stringify(record)}`,
+      content: `Record: ${JSON.stringify(canonicalSynthesisInput)}`,
     }],
   });
 
