@@ -603,7 +603,7 @@ ${JSON.stringify(synthesis)}`;
 
   const msg = await client.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: 6000,
+    max_tokens: 8000,
     system,
     messages: [{
       role: 'user',
