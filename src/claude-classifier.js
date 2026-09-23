@@ -1499,6 +1499,138 @@ ${JSON.stringify(synthesis)}`;
   return validated.data;
 }
 
+const STRATEGIC_SYNTHESIS_REQUIRED_FIELDS = [
+  'findings', 'evidence_gaps', 'leverage_points',
+];
+
+// cross_patterns is deliberately excluded from the required list: the
+// frontend already treats it as optional (SynthesisePage only renders the
+// Cross-document Patterns section when the array is non-empty), and
+// forcing it to be non-empty would incentivise the model to manufacture a
+// pattern across records that do not actually share one, which is exactly
+// the fabrication risk this rebuild exists to close.
+//
+// Top-level fields here are all arrays, not objects, so no fieldShapes
+// entries apply (shapeMismatch treats any array value against a defined
+// shape as an automatic mismatch) -- same convention as every other
+// persona's FIELD_SHAPES, which only ever shape-check nested object
+// fields, never the top-level arrays themselves.
+const STRATEGIC_SYNTHESIS_FIELD_SHAPES = {};
+
+/**
+ * Strategic Synthesis cross-record transformer. Takes the cached canonical
+ * syntheses for each selected record (never raw records, never full
+ * document text) and reshapes them into cross-document findings, evidence
+ * gaps, leverage points, and cross patterns. Does not re-read source
+ * documents or re-derive individual-record evidence; may only select,
+ * compare, and contextualise what is already in each canonical synthesis.
+ */
+async function transformToStrategicSynthesis(canonicalSyntheses, recordMetas) {
+  const system = `You are producing a Strategic Synthesis across ${canonicalSyntheses.length} evaluation records, synthesising patterns, gaps, and strategic leverage points across records that have each already been through canonical evidence synthesis.
+
+CRITICAL: You are NOT performing new evidence synthesis at the individual-record level, that has already happened. Each canonical synthesis object below is the disciplined, verified summary of one evaluation. Your job is to find patterns, gaps, and strategic implications ACROSS these already-synthesised objects. You may not invent or strengthen any individual-record claim beyond what its canonical synthesis states.
+
+CRITICAL, SOURCE DISCIPLINE, STRICT: You must not introduce any external knowledge not present in the canonical synthesis objects provided. This includes but is not limited to: named policy frameworks, dated policy documents, government planning cycles, legislative timelines, named events or meetings (e.g. any named lekgotla, conference, or convening), or any other real-world fact about South African education policy, government, or planning processes that is not explicitly stated in the canonical synthesis objects themselves. If a cross-document pattern would be strengthened by referencing a policy context, and that policy context is not present in the provided synthesis objects, you must either omit the reference entirely or explicitly flag it as external context requiring independent verification before use, phrased exactly as: "This would benefit from being checked against [topic] separately, this is not drawn from the evidence records themselves." Findings and leverage points must be traceable to the provided canonical synthesis objects and their record IDs, nothing else.
+
+RULE 1 SCOPE: Do not generalise findings beyond what the specific combination of selected records supports. A pattern across 2 records is a pattern across 2 records, not a portfolio-wide or sector-wide claim, unless explicitly qualified as such.
+
+RULE 2 CAUSALITY: No "drives", "causes", "necessary", "active ingredient", or equivalent unless directly supported by at least one canonical synthesis's own evidence_boundary.study_design indicating an RCT or quasi-experimental design behind that specific claim.
+
+RULE 3 HETEROGENEITY vs CONTRADICTION: Two records showing different results under different contexts (different provinces, populations, designs) are heterogeneity, explain the plausible moderator. Reserve "contradiction" for genuinely incompatible claims about the same proposition under comparable conditions.
+
+RULE 4 INDEPENDENCE: Before treating two records as corroborating each other, check whether they share the same implementing organisation, programme, sample, or underlying study using each canonical synthesis's evidence_boundary.study_design and evidence_boundary.population_context fields. If records are not independent, say so explicitly rather than treating convergence as stronger evidence than it is.
+
+RULE (NO SUPPRESSION, STRICT): Do not omit or soften a finding from any selected record's canonical synthesis because it complicates a cleaner cross-document narrative. If two records disagree, or if one record's findings are weak, that must appear with the same prominence its confidence level in its own canonical synthesis warrants.
+
+UK English throughout. No contractions. No em dashes or en dashes.
+
+Return a single complete valid JSON object. Begin with { and end with }. No markdown, no preamble, no explanation outside the JSON:
+
+{
+  "findings": [
+    {
+      "finding": "",
+      "confidence": "HIGH | MODERATE | LOW",
+      "study_type": "derived from the relevant record's evidence_boundary.study_design",
+      "source_record_ids": [],
+      "corroborated": false,
+      "contested": false,
+      "contradiction_note": null
+    }
+  ],
+  "evidence_gaps": [
+    {
+      "gap": "",
+      "policy_relevance": "Only populate if explicitly present in a canonical synthesis object's own content, for example its decision_boundary.evidence_needed or open_questions. Otherwise use null, or the exact external-verification-needed flag sentence specified above. Never fabricate a named policy, framework, or event.",
+      "urgency": "HIGH | MEDIUM | LOW",
+      "commissioning_opportunity": false
+    }
+  ],
+  "leverage_points": [
+    {
+      "action": "",
+      "rationale": "",
+      "urgency": "HIGH | MEDIUM | LOW",
+      "expected_influence": ""
+    }
+  ],
+  "cross_patterns": [
+    {
+      "pattern": "",
+      "records_involved": [],
+      "implication": ""
+    }
+  ]
+}
+
+Maximum 3 findings, 3 evidence gaps, 3 leverage points, and 3 cross patterns. Keep each string value under 35 words. If fewer than 3 genuine cross-document patterns exist across these specific records, return fewer, or an empty cross_patterns array. Do not manufacture a pattern to fill the array.
+
+Every finding, gap, leverage point and cross pattern must cite its source_record_ids / records_involved using the record_id values from the canonical synthesis objects below, e.g. [ADEI-ZF-001].
+
+CANONICAL SYNTHESES (source of truth, one per selected record, do not contradict or extend beyond what each states):
+${JSON.stringify(canonicalSyntheses)}`;
+
+  const message = await client.messages.create({
+    model: 'claude-sonnet-5',
+    max_tokens: 8000,
+    system,
+    messages: [{
+      role: 'user',
+      content: `Generate the Strategic Synthesis across these ${canonicalSyntheses.length} already-synthesised records.`,
+    }],
+  });
+
+  const text = extractText(message.content);
+  const match = text.match(/\{[\s\S]*\}/);
+  let parsed = null;
+  try {
+    if (!match) throw new Error('No JSON object found in response');
+    parsed = JSON.parse(match[0]);
+  } catch (err) {
+    // One repair attempt via haiku, same convention as the other
+    // canonical-synthesis-plus-transformer personas.
+    const repair = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 6000,
+      system: 'Return only valid complete JSON. No markdown.',
+      messages: [{
+        role: 'user',
+        content: 'Repair this JSON: ' + text.slice(0, 8000),
+      }],
+    });
+    const repairText = extractText(repair.content);
+    const repairMatch = repairText.match(/\{[\s\S]*\}/);
+    if (!repairMatch) throw new Error(`Strategic Synthesis JSON repair failed. Raw: ${repairText.substring(0, 200)}`);
+    parsed = JSON.parse(repairMatch[0]);
+  }
+
+  const validated = await validateKnowledgeProductSchema(parsed, STRATEGIC_SYNTHESIS_REQUIRED_FIELDS, 'Strategic_Synthesis', text, client, STRATEGIC_SYNTHESIS_FIELD_SHAPES);
+  if (!validated.valid) {
+    console.error(`Strategic Synthesis validation FAILED for records [${recordMetas.map(r => r.id).join(', ')}] after repair attempt. Missing: ${validated.stillMissing?.join(', ')}`);
+  }
+  return validated.data;
+}
+
 /**
  * Generate an audience-calibrated knowledge product from a classified record
  */
@@ -1649,5 +1781,6 @@ module.exports = {
   transformToProvincialHODBrief,
   transformToCoFunderBrief,
   transformToSectorPeerBrief,
+  transformToStrategicSynthesis,
   validateKnowledgeProductSchema,
 };
