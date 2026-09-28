@@ -21,6 +21,8 @@ function gatherRules(maxRounds) {
 RETRIEVAL DISCIPLINE
 Plan before you retrieve. In your first turn, request every retrieval you can
 foresee needing, batched into that one turn so the calls run in parallel.
+If more than 6 items are relevant, call list_programmes or a broader
+corpus_search first rather than one get_programme_evidence call per item.
 Prefer get_programme_evidence and list_programmes over many narrow
 corpus_search calls. Do not repeat a search you have already run: equivalent
 repeats are rejected and waste a round. As soon as the retrieved evidence is
@@ -158,13 +160,28 @@ async function runSpecialistAgent({ role, question, systemPrompt, userContext })
     for (; rounds < cfg.max_tool_rounds && toolSpecs.length > 0; rounds += 1) {
       const resp = await client.messages.create({
         model: cfg.model,
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: gatherSystem,
         tools: toolSpecs,
         messages,
       });
       addUsage(usage, resp.usage);
       messages.push({ role: 'assistant', content: resp.content });
+      if (resp.stop_reason === 'max_tokens') {
+        const orphaned = resp.content.filter(b => b.type === 'tool_use');
+        if (orphaned.length > 0) {
+          messages.push({
+            role: 'user',
+            content: orphaned.map(b => ({
+              type: 'tool_result',
+              tool_use_id: b.id,
+              content: 'Tool call incomplete: response truncated before this call could be executed. Do not repeat it verbatim; if still needed, request it again narrower or alone.',
+              is_error: true,
+            })),
+          });
+        }
+        break;
+      }
       if (resp.stop_reason !== 'tool_use') break;
 
       const blocks = resp.content.filter(b => b.type === 'tool_use');
