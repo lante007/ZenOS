@@ -551,6 +551,191 @@ router.get('/completeness',
   }
 );
 
+// Tier A/B/C completeness model, built alongside (not replacing) the flat
+// 18-field /completeness endpoint above so both can be compared side by
+// side before deciding whether the flat score gets replaced.
+//
+// Tier A - core identity, scored per row across all active records.
+// Tier B - programme linkage, scored per programme family (a fact stated
+//   once anywhere in the family counts for the whole family), so a
+//   family isn't penalised for a fact living on a sibling document.
+// Tier C - evaluation design, gated by document_type: broadly-applicable
+//   fields count for Impact + Process records, two additional fields
+//   count for Impact-only records; Research Study / Literature Review /
+//   Annual Report records are excluded from Tier C entirely (not
+//   counted as failing, simply not applicable).
+//
+// The "pending external confirmation" count is reported alongside the
+// three scores as its own bucket and is never added into any tier's
+// filled/total cell counts.
+const TIER_A_FIELDS = ['id', 'programme_name', 'year', 'document_type', 'provinces', 'phase', 'record_status'];
+
+const TIER_B_FIELDS = [
+  'methodology_description',
+  'limitations',
+  'baseline_year',
+  'endline_year',
+  'commissioning_standards_met',
+  'intervention_type',
+  'implementation_period',
+  'policy_alignment',
+  'total_cost_rand',
+];
+
+const TIER_C_BROAD_FIELDS = ['baseline_available', 'endline_available', 'comparison_group', 'null_findings_reported', 'sample_size_schools'];
+const TIER_C_IMPACT_ONLY_FIELDS = ['sample_size_learners', 'effect_size_composite'];
+const TIER_C_APPLICABLE_TYPES = new Set(['Impact Evaluation', 'Process Evaluation']);
+const TIER_C_EXCLUDED_TYPES = new Set(['Research Study', 'Literature Review', 'Annual Report']);
+
+function isEmptyCell(value) {
+  if (value === null || value === undefined || value === '') return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  return false;
+}
+
+function pctOf(filled, total) {
+  return total > 0 ? Math.round((filled / total) * 100) : 0;
+}
+
+router.get('/completeness-tiered',
+  requireRoles(
+    'ORGANISATION_LEAD',
+    'EVIDENCE_ANALYST',
+    'COMMUNICATIONS',
+    'CEO_EXEC'
+  ),
+  async (req, res, next) => {
+    try {
+      const pool = getPool();
+      if (!pool) return res.status(503).json({ error: 'Database is not configured' });
+
+      const schema = req.tenant.db_schema || req.tenant.slug || 'zenex';
+      assertSchema(schema);
+      const tenantId = req.tenant.slug;
+
+      const allFields = Array.from(new Set([
+        ...TIER_A_FIELDS,
+        'programme_family_id',
+        ...TIER_B_FIELDS,
+        ...TIER_C_BROAD_FIELDS,
+        ...TIER_C_IMPACT_ONLY_FIELDS,
+        'validation_flags',
+      ]));
+
+      const records = await pool.query(`
+        SELECT ${allFields.join(', ')}
+        FROM ${schema}.intelligence_records
+        WHERE tenant_id = $1
+          AND record_status = 'ACTIVE'
+      `, [tenantId]);
+
+      const rows = records.rows;
+
+      // Tier A - row level.
+      let filledA = 0;
+      for (const row of rows) {
+        for (const field of TIER_A_FIELDS) {
+          if (!isEmptyCell(row[field])) filledA += 1;
+        }
+      }
+      const totalA = rows.length * TIER_A_FIELDS.length;
+
+      // Tier B - family level. A field counts as filled for the family if
+      // any member document has it filled.
+      const families = new Map();
+      for (const row of rows) {
+        const familyKey = row.programme_family_id || row.id;
+        if (!families.has(familyKey)) families.set(familyKey, []);
+        families.get(familyKey).push(row);
+      }
+      let filledB = 0;
+      for (const members of families.values()) {
+        for (const field of TIER_B_FIELDS) {
+          if (members.some(m => !isEmptyCell(m[field]))) filledB += 1;
+        }
+      }
+      const totalFamilies = families.size;
+      const totalB = totalFamilies * TIER_B_FIELDS.length;
+
+      // Tier C - document-type gated, row level.
+      let filledC = 0;
+      let totalC = 0;
+      for (const row of rows) {
+        if (TIER_C_EXCLUDED_TYPES.has(row.document_type)) continue;
+        if (!TIER_C_APPLICABLE_TYPES.has(row.document_type)) continue;
+
+        for (const field of TIER_C_BROAD_FIELDS) {
+          totalC += 1;
+          if (!isEmptyCell(row[field])) filledC += 1;
+        }
+        if (row.document_type === 'Impact Evaluation') {
+          for (const field of TIER_C_IMPACT_ONLY_FIELDS) {
+            totalC += 1;
+            if (!isEmptyCell(row[field])) filledC += 1;
+          }
+        }
+      }
+
+      const coreCompleteness = pctOf(filledA, totalA);
+      const foundationCompleteness = pctOf(filledA + filledB, totalA + totalB);
+      const evaluationQualityCompleteness = pctOf(filledA + filledB + filledC, totalA + totalB + totalC);
+
+      // Fourth bucket - reported separately, never folded into the three
+      // scores above. A record is "pending external confirmation" if it
+      // carries a MANUAL_REVIEW_NOTE validation_flags entry whose message
+      // contains pending/awaiting/unresolved language (this week's Optimy
+      // write pass), distinct from confirmed/resolved or no-data notes.
+      const pendingIds = [];
+      for (const row of rows) {
+        let flags = row.validation_flags || [];
+        if (typeof flags === 'string') {
+          try { flags = JSON.parse(flags || '[]'); } catch { flags = []; }
+        }
+        if (!Array.isArray(flags)) continue;
+        const isPending = flags.some(flag => {
+          if (flag.rule !== 'MANUAL_REVIEW_NOTE') return false;
+          const msg = (flag.message || '').toLowerCase();
+          return msg.includes('pending') || msg.includes('awaiting') || msg.includes('unresolved');
+        });
+        if (isPending) pendingIds.push(row.id);
+      }
+
+      return res.json({
+        core_completeness: {
+          label: 'Core completeness (Tier A only)',
+          pct: coreCompleteness,
+          filled_cells: filledA,
+          total_cells: totalA,
+          scope: `${rows.length} records x ${TIER_A_FIELDS.length} fields`,
+        },
+        foundation_completeness: {
+          label: 'Foundation completeness (Tier A + B)',
+          pct: foundationCompleteness,
+          filled_cells: filledA + filledB,
+          total_cells: totalA + totalB,
+          scope: `${rows.length} records x ${TIER_A_FIELDS.length} fields, plus ${totalFamilies} families x ${TIER_B_FIELDS.length} fields`,
+        },
+        evaluation_quality_completeness: {
+          label: 'Evaluation quality completeness (Tier A + B + applicable C)',
+          pct: evaluationQualityCompleteness,
+          filled_cells: filledA + filledB + filledC,
+          total_cells: totalA + totalB + totalC,
+          scope: `adds Tier C cells for Impact/Process records only (${totalC} applicable cells)`,
+        },
+        pending_external_confirmation: {
+          label: 'Pending external confirmation (not folded into any score above)',
+          count: pendingIds.length,
+          record_ids: pendingIds,
+        },
+        total_active_records: rows.length,
+        total_families: totalFamilies,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 const GAP_AREA_WEIGHTS = {
   'Early Grade Literacy and Numeracy': 10,
   'Early Grade Numeracy': 9,

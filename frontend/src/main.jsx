@@ -96,6 +96,8 @@ const adeiExportFields = [
   { key: 'record_status' },
   // Financial
   { key: 'total_cost_rand' },
+  { key: 'cost_data_present' },
+  { key: 'cost_data_source' },
   { key: 'responsible_pm' },
   { key: 'grantee_organisation', source: 'implementing_organisation_name' },
   { key: 'optimy_project_id' },
@@ -131,6 +133,8 @@ const adeiExportFields = [
   { key: 'limitations' },
   { key: 'equity_considerations' },
   { key: 'replication_conditions' },
+  { key: 'evidence_gap_1' },
+  { key: 'evidence_gap_2' },
   // Policy and strategy
   { key: 'policy_alignment' },
   { key: 'nls_alignment', type: 'boolean' },
@@ -151,6 +155,7 @@ const adeiExportFields = [
   { key: 'board_citable', type: 'boolean' },
   { key: 'half_life_rating' },
   { key: 'extraction_quality' },
+  { key: 'classification_confidence', type: 'json' },
 ];
 
 const FALLBACK_RECORDS_EMPTY = [];
@@ -2329,6 +2334,7 @@ function formatCsvFieldValue(record, field) {
   if (raw == null) return '';
   if (field.type === 'array') return Array.isArray(raw) ? raw.join(', ') : String(raw);
   if (field.type === 'boolean') return raw === true ? 'Yes' : raw === false ? 'No' : '';
+  if (field.type === 'json') return typeof raw === 'string' ? raw : JSON.stringify(raw);
   return String(raw);
 }
 
