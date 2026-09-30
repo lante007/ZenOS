@@ -1336,6 +1336,7 @@ function DashboardPage() {
   const [priorityInfoOpen, setPriorityInfoOpen] = useState(false);
   const [workspaceExtra, setWorkspaceExtra] = useState({ corpus: 0, financial: 0 });
   const [completenessData, setCompletenessData] = useState(null);
+  const [tieredCompletenessData, setTieredCompletenessData] = useState(null);
   const [gaps, setGaps] = useState([]);
   const [gapsLoading, setGapsLoading] = useState(true);
   const [totalGapsIdentified, setTotalGapsIdentified] = useState(0);
@@ -1469,10 +1470,12 @@ function DashboardPage() {
     let cancelled = false;
     Promise.all([
       apiRequest('/api/stats/completeness').catch(() => null),
+      apiRequest('/api/stats/completeness-tiered').catch(() => null),
       apiRequest('/api/financial/unconfirmed').catch(() => null),
-    ]).then(([completeness, financial]) => {
+    ]).then(([completeness, tiered, financial]) => {
       if (cancelled) return;
       setCompletenessData(completeness);
+      setTieredCompletenessData(tiered);
       setWorkspaceExtra({
         corpus: completeness ? (completeness.critical_gaps_count || 0) + (completeness.financial_gaps_count || 0) : 0,
         financial: financial ? (financial.count || 0) : 0,
@@ -1935,19 +1938,22 @@ function DashboardPage() {
               <div className="completeness-banner-left">
                 <h3>Data Completeness</h3>
                 <strong className="completeness-pct">
-                  {completenessData ? `${completenessData.overall_completeness_pct ?? completenessData.completeness_score ?? 0}%` : '...'}
+                  {tieredCompletenessData ? `${tieredCompletenessData.evaluation_quality_completeness?.pct ?? 0}%` : '...'}
                 </strong>
+                <p className="completeness-caption">
+                  Reflects family-level deduplication and excludes fields not applicable to this document type.
+                </p>
               </div>
               <div className="completeness-bar-track" aria-hidden="true">
                 <div
                   className="completeness-bar-fill"
-                  style={{ width: `${completenessData?.overall_completeness_pct ?? completenessData?.completeness_score ?? 0}%` }}
+                  style={{ width: `${tieredCompletenessData?.evaluation_quality_completeness?.pct ?? 0}%` }}
                 />
               </div>
               <div className="completeness-banner-right">
                 <p className="completeness-detail">
                   {completenessData
-                    ? `${completenessData.critical_gaps_count ?? 0} of ${completenessData.total_active_records ?? 0} records have critical missing fields`
+                    ? `${completenessData.critical_gaps_count ?? 0} of ${completenessData.total_active_records ?? 0} records still need one or more workspace fields completed`
                     : 'Checking corpus completeness...'}
                 </p>
                 {user.role === 'CEO_EXEC' ? (
