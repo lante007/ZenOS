@@ -579,7 +579,36 @@ async function resolveQueueItem(tenant, id, value, reviewerId, isOverride) {
       WHERE tenant_id = $4 AND id = $5
       RETURNING *
     `, [value, reviewerId || null, isOverride === true, tenant.slug, id]);
-    return res.rows[0] || null;
+
+    const resolved = res.rows[0] || null;
+    if (!resolved || !resolved.record_id) return resolved;
+
+    // Promotion: a PENDING_REVIEW record has no reviewable path to ACTIVE
+    // other than clearing every queue_items flag raised against it. Once
+    // the item just resolved above was its last outstanding flag, promote
+    // it in the same transaction so the queue resolve and the status flip
+    // can never partially apply. The WHERE record_status = 'PENDING_REVIEW'
+    // guard makes this a no-op (and never touches ACTIVE records) if the
+    // record was already active or in some other state.
+    const remaining = await client.query(`
+      SELECT COUNT(*)::int AS unresolved
+      FROM queue_items
+      WHERE tenant_id = $1 AND record_id = $2 AND resolved_at IS NULL
+    `, [tenant.slug, resolved.record_id]);
+
+    if (remaining.rows[0].unresolved === 0) {
+      const promoted = await client.query(`
+        UPDATE intelligence_records
+        SET record_status = 'ACTIVE', updated_at = NOW()
+        WHERE tenant_id = $1 AND id = $2 AND record_status = 'PENDING_REVIEW'
+        RETURNING id, record_status
+      `, [tenant.slug, resolved.record_id]);
+      resolved.record_promoted = promoted.rows.length > 0;
+    } else {
+      resolved.record_promoted = false;
+    }
+
+    return resolved;
   });
 }
 
