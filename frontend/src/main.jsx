@@ -55,21 +55,23 @@ const knowledgeAudiences = [
   { id: 'SECTOR_PEER', label: 'Sector Peer', focus: 'Practice learning and replication conditions' },
 ];
 
-// Honest, time-based progress messaging for the 20-40s classification wait.
-// The frontend cannot observe real backend phase transitions, so these are
-// realistic delays (not fake per-360ms steps) that approximate the actual
-// pipeline. The bar never reaches 100% from a timer - only the API
-// resolving (success or error) advances past pct 90. See uploadAndClassify.
+// Stage labels shown while classification runs. The backend exposes no
+// discrete phase signal (only pending/complete/failed), so these labels
+// cannot map to real backend phase transitions - but the index into this
+// array now advances one step per real 3s poll tick against
+// /api/classify/status/:jobId (see uploadAndClassify), not a fixed
+// setTimeout guess. It freezes wherever real polling left it on error or
+// timeout, and the panel explicitly flags that rather than continuing to
+// cycle these labels. See the pipeline-panel render below.
 const CLASSIFY_PHASES = [
-  { label: 'Extracting text...', subtext: '', delay: 3000, pct: 25 },
-  { label: 'Analysing document structure...', subtext: '', delay: 8000, pct: 50 },
+  { label: 'Extracting text...', subtext: '', pct: 25 },
+  { label: 'Analysing document structure...', subtext: '', pct: 50 },
   {
     label: 'Running methodological analysis...',
     subtext: 'This may take up to 30 seconds for detailed evaluations.',
-    delay: 15000,
     pct: 75,
   },
-  { label: 'Calculating evidence quality score and saving record...', subtext: '', delay: 35000, pct: 90 },
+  { label: 'Calculating evidence quality score and saving record...', subtext: '', pct: 90 },
 ];
 
 function formatEqsTier(tier) {
@@ -5353,9 +5355,7 @@ function ClassifyPage() {
 
       setUploadProgress(100);
       setUploadPhase('classifying');
-      classifyTimersRef.current = CLASSIFY_PHASES.map((phase, index) =>
-        window.setTimeout(() => setClassifyPhaseIdx(index), phase.delay)
-      );
+      setClassifyPhaseIdx(0);
 
       const submission = await apiRequest('/api/classify/process', {
         method: 'POST',
@@ -5373,19 +5373,24 @@ function ClassifyPage() {
 
       // Extraction runs in the background on the API (60-120s for large
       // PDFs, which exceeds CloudFront's origin read timeout if awaited
-      // synchronously) - poll for the result instead. CLASSIFY_PHASES above
-      // keeps driving the visible phase labels; this loop only decides
-      // when the job has actually finished.
+      // synchronously) - poll for the result instead. The backend exposes
+      // no discrete phase signal, so classifyPhaseIdx advances one step per
+      // real poll tick (i.e. it reflects elapsed polling, not a guessed
+      // fixed timeline) and freezes the moment the loop stops for any
+      // reason - it never advances further than the real polling did.
       const pollToken = { cancelled: false };
       classifyPollRef.current = pollToken;
       const pollStart = Date.now();
       const POLL_INTERVAL_MS = 3000;
       const POLL_TIMEOUT_MS = 180000;
       let status = null;
+      let pollTick = 0;
 
       while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
         await new Promise(resolve => window.setTimeout(resolve, POLL_INTERVAL_MS));
         if (pollToken.cancelled) return null;
+        pollTick += 1;
+        setClassifyPhaseIdx(Math.min(pollTick, CLASSIFY_PHASES.length - 1));
         status = await apiRequest(`/api/classify/status/${submission.jobId}`);
         if (status.status === 'complete' || status.status === 'failed') break;
         status = null;
@@ -5488,6 +5493,7 @@ function ClassifyPage() {
 
   const isComplete = uploadPhase === 'complete';
   const isRunning = ['requesting', 'uploading', 'classifying'].includes(uploadPhase);
+  const pipelineFailed = uploadPhase === 'error';
   const canStart = driveFileId.trim() || (selectedFile && ['idle', 'error', 'duplicate', 'needs_ocr'].includes(uploadPhase));
   const currentClassifyPhase = classifyPhaseIdx >= 0 ? CLASSIFY_PHASES[classifyPhaseIdx] : null;
   const recordId = classifiedRecord?.id || classifiedRecord?.record_id || classifiedRecord?.adei_record_id || '';
@@ -5679,20 +5685,34 @@ function ClassifyPage() {
 
             <div className="pipeline-list">
               {CLASSIFY_PHASES.map((phase, index) => {
-                const complete = classifyPhaseIdx > index || isComplete;
-                const active = classifyPhaseIdx === index && !isComplete;
+                const complete = isComplete || classifyPhaseIdx > index;
+                const failedHere = pipelineFailed && !isComplete && classifyPhaseIdx === index;
+                const active = !isComplete && !pipelineFailed && classifyPhaseIdx === index;
                 return (
-                  <div className={`pipeline-step ${complete ? 'complete' : ''} ${active ? 'active' : ''}`} key={phase.label}>
-                    <div>{complete ? <CheckCircle2 size={16} /> : <span>{index + 1}</span>}</div>
+                  <div
+                    className={`pipeline-step ${complete ? 'complete' : ''} ${active ? 'active' : ''} ${failedHere ? 'failed' : ''}`}
+                    key={phase.label}
+                  >
+                    <div>
+                      {complete ? <CheckCircle2 size={16} /> : failedHere ? <AlertTriangle size={16} /> : <span>{index + 1}</span>}
+                    </div>
                     <p>{phase.label}</p>
                   </div>
                 );
               })}
             </div>
 
-            <div className="pipeline-result">
+            <div className={`pipeline-result${pipelineFailed ? ' pipeline-result-failed' : ''}`}>
               <p className="eyebrow">Pipeline state</p>
-              <strong>{isComplete ? 'Record ready for Evidence Library' : isRunning ? 'Classification running' : 'Waiting for document'}</strong>
+              <strong>
+                {isComplete
+                  ? 'Classification complete'
+                  : pipelineFailed
+                  ? 'Classification did not complete'
+                  : isRunning
+                  ? 'Classification running'
+                  : 'Waiting for document'}
+              </strong>
               <span>{classificationResult || (isComplete ? 'Expert queue and EQS outputs are prepared for review.' : 'Progress updates will stream here from the live API.')}</span>
             </div>
 

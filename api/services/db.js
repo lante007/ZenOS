@@ -335,19 +335,24 @@ async function confirmSynthesis(tenant, id, userId) {
   });
 }
 
-async function insertIngestionJob(tenant, documentId, usage, status = 'COMPLETE') {
+async function insertIngestionJob(tenant, documentId, usage, status = 'COMPLETE', errorMessage = null) {
   return withTenant(tenant, async client => {
+    const pipelineStep = status === 'FAILED' ? null : 8;
+    const stepDetail = status === 'FAILED' ? 'Classification failed' : 'Classification completed';
     await client.query(`
       INSERT INTO ingestion_jobs (
-        tenant_id, document_id, status, pipeline_step, step_detail,
+        tenant_id, document_id, status, pipeline_step, step_detail, error_message,
         claude_input_tokens, claude_output_tokens, claude_input_words,
         claude_output_words, claude_latency_ms,
         started_at, completed_at
-      ) VALUES ($1,$2,$3,8,'Classification completed',$4,$5,$6,$7,$8,NOW(),NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())
     `, [
       tenant.slug,
       documentId || null,
       status,
+      pipelineStep,
+      stepDetail,
+      errorMessage,
       usage?.input_tokens || null,
       usage?.output_tokens || null,
       usage?.input_words || null,
@@ -878,6 +883,7 @@ module.exports = {
   listSyntheses,
   confirmSynthesis,
   createRecord,
+  insertIngestionJob,
   listQueue,
   resolveQueueItem,
   createKnowledgeProduct,

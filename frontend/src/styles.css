@@ -3006,11 +3006,27 @@ button.estate-stat-tile {
   color: #6EC98A;
 }
 
+.pipeline-step.failed {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.08);
+  color: #ffffff;
+}
+
+.pipeline-step.failed > div {
+  border-color: rgba(220, 38, 38, 0.5);
+  color: #DC2626;
+}
+
 .pipeline-result {
   margin-top: 18px;
   padding: 18px;
   border: 1px solid rgba(239, 114, 24, 0.2);
   background: rgba(239, 114, 24, 0.08);
+}
+
+.pipeline-result-failed {
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.08);
 }
 
 .pipeline-result strong,

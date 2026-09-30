@@ -237,6 +237,18 @@ router.post('/process', requireRoles('ORGANISATION_LEAD', 'EVIDENCE_ANALYST'), a
         classifyJobs[jobId].error = message;
         classifyJobs[jobId].code = err.code || null;
         classifyJobs[jobId].existingRecordId = err.existingDocument?.record_id || null;
+
+        try {
+          await db.insertIngestionJob(
+            tenant,
+            err.existingDocument?.id || null,
+            null,
+            'FAILED',
+            err.code ? `${err.code}: ${err.message}` : err.message
+          );
+        } catch (logErr) {
+          console.error(`[classify] failed to write ingestion_jobs FAILED row for job ${jobId}: ${logErr.message}`);
+        }
       }
     })();
   } catch (err) {
