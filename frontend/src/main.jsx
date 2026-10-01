@@ -1953,18 +1953,34 @@ function DashboardPage() {
                 />
               </div>
               <div className="completeness-banner-right">
-                <p className="completeness-detail">
-                  {completenessData
-                    ? `${completenessData.critical_gaps_count ?? 0} of ${completenessData.total_active_records ?? 0} records still need one or more workspace fields completed`
-                    : 'Checking corpus completeness...'}
-                </p>
-                {user.role === 'CEO_EXEC' ? (
-                  <p className="completeness-detail-note">Evidence gaps are being reviewed by the research team.</p>
-                ) : canAccess('workspace') ? (
-                  <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
-                    Complete in Workspace →
-                  </a>
-                ) : null}
+                {completenessData ? (
+                  <>
+                    {(completenessData.awaiting_review_count ?? 0) > 0 && (
+                      <div className="completeness-detail-row">
+                        <p className="completeness-detail">
+                          {completenessData.awaiting_review_count} record{completenessData.awaiting_review_count === 1 ? '' : 's'} awaiting review
+                        </p>
+                        {user.role === 'CEO_EXEC' ? (
+                          <p className="completeness-detail-note">Evidence gaps are being reviewed by the research team.</p>
+                        ) : canAccess('workspace') ? (
+                          <a className="teal-link" href="/queue" onClick={(event) => { event.preventDefault(); navigate('/queue'); }}>
+                            Complete in Workspace →
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
+                    {(completenessData.missing_source_data_count ?? 0) > 0 && (
+                      <div className="completeness-detail-row">
+                        <p className="completeness-detail">
+                          {completenessData.missing_source_data_count} record{completenessData.missing_source_data_count === 1 ? '' : 's'} missing source data
+                        </p>
+                        <p className="completeness-detail-note">Not resolvable via review — the source document did not report this field.</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="completeness-detail">Checking corpus completeness...</p>
+                )}
               </div>
             </div>
 

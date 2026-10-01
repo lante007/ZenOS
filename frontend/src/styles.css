@@ -1946,6 +1946,10 @@ button.estate-stat-tile {
   font-weight: 700;
 }
 
+.completeness-detail-row + .completeness-detail-row {
+  margin-top: 10px;
+}
+
 .completeness-banner-right .teal-link {
   display: block;
   margin-top: 4px;

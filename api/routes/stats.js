@@ -489,6 +489,16 @@ router.get('/completeness',
           AND record_status = 'ACTIVE'
       `, [tenantId]);
 
+      const awaitingReview = await pool.query(`
+        SELECT DISTINCT qi.record_id
+        FROM ${schema}.queue_items qi
+        JOIN ${schema}.intelligence_records ir ON ir.id = qi.record_id
+        WHERE qi.tenant_id = $1
+          AND qi.resolved_at IS NULL
+          AND ir.record_status != 'SOFT_DELETED'
+      `, [tenantId]);
+      const awaitingReviewIds = new Set(awaitingReview.rows.map(r => r.record_id));
+
       let filledCells = 0;
       const totalCells = records.rows.length * ALL_WORKSPACE_FIELDS.length;
       const criticalGaps = [];
@@ -534,6 +544,9 @@ router.get('/completeness',
       const incompleteRecordCount = incompleteRecordIds.size;
       const fullyCompleteCount = records.rows.length - incompleteRecordCount;
 
+      const criticalGapsAwaitingReview = criticalGaps.filter(g => awaitingReviewIds.has(g.record_id));
+      const missingSourceDataCount = criticalGaps.length - criticalGapsAwaitingReview.length;
+
       return res.json({
         completeness_score: completenessScore,
         overall_completeness_pct: completenessScore,
@@ -544,6 +557,8 @@ router.get('/completeness',
         financial_gaps_count: financialGaps.length,
         critical_gaps: criticalGaps.slice(0, 50),
         financial_gaps: financialGaps.slice(0, 50),
+        awaiting_review_count: awaitingReviewIds.size,
+        missing_source_data_count: missingSourceDataCount,
       });
     } catch (err) {
       next(err);
