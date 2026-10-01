@@ -57,7 +57,16 @@ aws ssm get-command-invocation \
 
 ## Smoke test
 
-`ZENEX_TEST_PASSWORD` must be set in your shell/secrets manager beforehand — do not hardcode the password in this file or in commit history.
+`ZENEX_TEST_PASSWORD` is stored in SSM Parameter Store at `/zenex/test-password` (SecureString, us-east-1). Retrieve it before running the smoke test — do not hardcode the password in this file or in commit history:
+
+```
+export ZENEX_TEST_PASSWORD=$(aws ssm get-parameter \
+  --name "/zenex/test-password" \
+  --with-decryption \
+  --region us-east-1 \
+  --query 'Parameter.Value' \
+  --output text)
+```
 
 ```
 TOKEN=$(aws cognito-idp initiate-auth \
