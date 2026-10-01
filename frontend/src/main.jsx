@@ -1974,7 +1974,6 @@ function DashboardPage() {
                         <p className="completeness-detail">
                           {completenessData.missing_source_data_count} record{completenessData.missing_source_data_count === 1 ? '' : 's'} missing source data
                         </p>
-                        <p className="completeness-detail-note">Not resolvable via review — the source document did not report this field.</p>
                       </div>
                     )}
                   </>
