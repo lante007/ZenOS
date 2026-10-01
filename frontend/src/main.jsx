@@ -6194,6 +6194,7 @@ function WorkspacePage() {
   const [overrideValues, setOverrideValues] = useState({});
   const [completeness, setCompleteness] = useState(null);
   const [completenessLoading, setCompletenessLoading] = useState(true);
+  const [tieredCompleteness, setTieredCompleteness] = useState(null);
   const [financial, setFinancial] = useState(null);
   const [financialLoading, setFinancialLoading] = useState(true);
   const { alerts, loading: alertsLoading, markRead } = useAlerts();
@@ -6226,6 +6227,20 @@ function WorkspacePage() {
       })
       .finally(() => {
         if (!cancelled) setCompletenessLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/stats/completeness-tiered')
+      .then(data => {
+        if (!cancelled) setTieredCompleteness(data);
+      })
+      .catch(() => {
+        if (!cancelled) setTieredCompleteness(null);
       });
     return () => {
       cancelled = true;
@@ -6331,7 +6346,7 @@ function WorkspacePage() {
   const corpusActions = completeness ? completeness.critical_gaps_count + completeness.financial_gaps_count : 0;
   const financialActions = financial ? financial.count : 0;
   const totalActions = corpusActions + queueItems.length + financialActions;
-  const completenessScore = completeness?.completeness_score ?? 0;
+  const completenessScore = tieredCompleteness?.evaluation_quality_completeness?.pct ?? 0;
 
   return (
     <AppShell active="queue" queueBadge={totalActions}>
